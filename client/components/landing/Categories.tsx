@@ -1,0 +1,125 @@
+"use client";
+
+import { useState } from "react";
+import { categories, type Category } from "@/lib/content";
+import { Reveal } from "@/components/ui/Reveal";
+import { Section, SectionHeading } from "@/components/ui/Section";
+
+const filters: { label: string; match: (category: Category) => boolean }[] = [
+  { label: "All", match: () => true },
+  { label: "Projects", match: (category) => !category.isPoster },
+  { label: "Posters", match: (category) => category.isPoster },
+  { label: "Open to schools", match: (category) => category.openToSchools },
+];
+
+export function Categories() {
+  const [activeFilter, setActiveFilter] = useState(filters[0].label);
+  const { match } = filters.find((filter) => filter.label === activeFilter) ?? filters[0];
+
+  return (
+    <Section id="categories" className="bg-surface">
+      <SectionHeading
+        eyebrow="Eight categories"
+        title="Pick the category that fits your idea"
+        description="Each team registers for exactly one category. Sub-topics are guidelines, and new ideas are always welcome."
+      />
+
+      <div role="tablist" aria-label="Filter categories" className="mb-10 flex flex-wrap justify-center gap-2">
+        {filters.map((filter) => {
+          const isActive = filter.label === activeFilter;
+          return (
+            <button
+              key={filter.label}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveFilter(filter.label)}
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                isActive
+                  ? "bg-navy-900 text-white shadow-lg shadow-navy-900/20"
+                  : "bg-white text-navy-800 ring-1 ring-line hover:ring-navy-800/30"
+              }`}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {categories.map((category, index) => {
+          const isMatch = match(category);
+          return (
+            <Reveal
+              as="li"
+              key={category.number}
+              delay={(index % 4) * 80}
+              className={isMatch ? "" : "hidden"}
+            >
+              <CategoryCard category={category} />
+            </Reveal>
+          );
+        })}
+      </ul>
+    </Section>
+  );
+}
+
+function CategoryCard({ category }: { category: Category }) {
+  return (
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-3xl border border-line bg-white p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-24px_rgb(11_22_51/0.35)]">
+      {/* Accent bar that grows on hover */}
+      <span
+        className={`absolute inset-x-0 top-0 h-1 origin-left scale-x-0 transition-transform duration-500 group-hover:scale-x-100 ${
+          category.isPoster ? "bg-accent-500" : "bg-brand-500"
+        }`}
+        aria-hidden="true"
+      />
+
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <span className="font-display text-5xl font-bold leading-none text-navy-900/10 transition-colors group-hover:text-brand-500/30">
+          {String(category.number).padStart(2, "0")}
+        </span>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <Tag tone={category.isPoster ? "accent" : "brand"}>
+            {category.isPoster ? "Poster" : "Project"}
+          </Tag>
+          {category.openToSchools && <Tag tone="navy">Schools</Tag>}
+          {category.firstYearOnly && <Tag tone="navy">First year</Tag>}
+        </div>
+      </div>
+
+      <p className="text-xs font-bold uppercase tracking-widest text-muted">Category {category.number}</p>
+      <h3 className="mt-1 font-display text-xl font-bold leading-snug text-ink">{category.title}</h3>
+      <p className="mt-2 text-sm text-muted">{category.summary}</p>
+
+      <ul className="mt-5 space-y-2 border-t border-line pt-5">
+        {category.topics.map((topic) => (
+          <li key={topic} className="flex gap-2 text-sm text-navy-800">
+            <span
+              className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
+                category.isPoster ? "bg-accent-500" : "bg-brand-500"
+              }`}
+              aria-hidden="true"
+            />
+            {topic}
+          </li>
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+const tagTones = {
+  brand: "bg-brand-50 text-brand-700",
+  accent: "bg-accent-50 text-accent-600",
+  navy: "bg-navy-900 text-white",
+};
+
+function Tag({ tone, children }: { tone: keyof typeof tagTones; children: React.ReactNode }) {
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tagTones[tone]}`}>
+      {children}
+    </span>
+  );
+}

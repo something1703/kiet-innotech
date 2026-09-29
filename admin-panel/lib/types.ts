@@ -1,0 +1,95 @@
+/**
+ * Data shapes shared by the student portal and the API layer.
+ * These mirror the JSON the FastAPI backend returns (snake_case is converted in lib/api/live.ts).
+ */
+
+export type ParticipantType = "kiet" | "college" | "school";
+
+export type Profile = {
+  userId: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  participantType: ParticipantType;
+  /** College or school name. Always "KIET Deemed to be University" for KIET students. */
+  institution: string;
+  city: string;
+  /** KIET department, e.g. "CSE(AIML)". Null for other colleges and schools. */
+  department: string | null;
+  /** Course for college students ("B.Tech"), "School" for school students. */
+  course: string;
+  /** Year of study (1 to 5) for college students, class (6 to 12) for school students. */
+  year: number;
+  /** University roll number for KIET, enrolment number for other colleges, optional for schools. */
+  rollNumber: string;
+  createdAt: string;
+};
+
+export type ProfileInput = Omit<Profile, "userId" | "email" | "createdAt">;
+
+export type TeamStatus = "draft" | "submitted" | "withdrawn" | "disqualified";
+
+/** KIET teams go through the department round; other colleges and schools go straight to the finale. */
+export type TeamRoute = "department" | "finale";
+
+export type TeamResult = "pending" | "finalist" | "not_selected";
+
+export type TeamMember = {
+  userId: string;
+  fullName: string;
+  email: string;
+  department: string | null;
+  course: string;
+  year: number;
+  role: "leader" | "member";
+  joinedAt: string;
+};
+
+export type InvitationStatus = "pending" | "accepted" | "declined" | "cancelled";
+
+export type Invitation = {
+  id: string;
+  teamId: string;
+  teamCode: string;
+  teamName: string;
+  category: number;
+  leaderName: string;
+  email: string;
+  status: InvitationStatus;
+  createdAt: string;
+};
+
+export type Team = {
+  id: string;
+  /** Human-friendly reference, e.g. "IT26-0042". */
+  code: string;
+  /** Private code the leader shares so students can join without an email invitation, e.g. "K7PQ-3XM9". */
+  joinCode: string;
+  name: string;
+  category: number;
+  domain: string;
+  projectTitle: string;
+  abstract: string;
+  participantType: ParticipantType;
+  institution: string;
+  /** The leader's department for KIET teams. Null for other colleges and schools. */
+  department: string | null;
+  route: TeamRoute;
+  leaderId: string;
+  members: TeamMember[];
+  /** Pending invitations only. */
+  invitations: Invitation[];
+  status: TeamStatus;
+  result: TeamResult;
+  createdAt: string;
+  submittedAt: string | null;
+};
+
+export type TeamInput = Pick<Team, "name" | "category" | "domain" | "projectTitle" | "abstract">;
+
+/** The signed-in person, before or after they complete their profile. */
+export type Me = {
+  email: string;
+  name: string;
+  profile: Profile | null;
+};

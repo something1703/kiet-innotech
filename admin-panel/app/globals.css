@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Brand tokens shared with the student portal: navy and cyan from the InnoTech logo, orange from the KIET logo. */
+@theme {
+  --color-ink: #0b1633;
+  --color-navy-950: #070f24;
+  --color-navy-900: #0b1633;
+  --color-navy-800: #13244d;
+  --color-navy-700: #1c3468;
+  --color-brand-50: #ecf9fe;
+  --color-brand-100: #d3f1fc;
+  --color-brand-300: #7fd6f5;
+  --color-brand-400: #3fc2ee;
+  --color-brand-500: #16a9dd;
+  --color-brand-600: #0a88b8;
+  --color-brand-700: #0b6c93;
+  --color-accent-50: #fff3eb;
+  --color-accent-100: #ffe2cf;
+  --color-accent-500: #f26b21;
+  --color-accent-600: #d95a14;
+  --color-surface: #f5f8fc;
+  --color-line: #e3e9f2;
+  --color-muted: #5a6784;
+
+  --font-sans: var(--font-body);
+  --font-display: var(--font-heading);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* Visible focus for keyboard users on links and controls that do not set their own. */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* Subtle circuit-style grid used behind dark panels. */
+.bg-grid {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
