@@ -5,18 +5,19 @@ import { useEffect, useRef, useState } from "react";
 type CountUpProps = {
   value: number;
   prefix?: string;
-  /** "lakh" shows 338000 as "3.38L". */
+  suffix?: string;
+  /** "lakh" shows 338000 as "3.38L" and 500000 as "5L". */
   format?: "plain" | "lakh";
   duration?: number;
 };
 
 function display(value: number, format: CountUpProps["format"]) {
-  if (format === "lakh") return `${(value / 100_000).toFixed(2)}L`;
+  if (format === "lakh") return `${Number((value / 100_000).toFixed(2))}L`;
   return Math.round(value).toLocaleString("en-IN");
 }
 
 /** Animates a number from 0 to `value` when it first scrolls into view. */
-export function CountUp({ value, prefix = "", format = "plain", duration = 1600 }: CountUpProps) {
+export function CountUp({ value, prefix = "", suffix = "", format = "plain", duration = 1600 }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const [current, setCurrent] = useState(0);
 
@@ -47,9 +48,10 @@ export function CountUp({ value, prefix = "", format = "plain", duration = 1600 
   }, [value, duration]);
 
   return (
-    <span ref={ref} aria-label={`${prefix}${display(value, format)}`}>
+    <span ref={ref} aria-label={`${prefix}${display(value, format)}${suffix}`}>
       {prefix}
       {display(current, format)}
+      {suffix}
     </span>
   );
 }

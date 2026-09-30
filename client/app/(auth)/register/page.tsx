@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 
 export const metadata: Metadata = {
-  title: "Register | InnoTech'26",
+  title: "Register | InnoTech26",
 };
 
 export default function RegisterPage() {

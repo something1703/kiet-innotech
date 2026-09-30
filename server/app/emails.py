@@ -55,9 +55,9 @@ def invitation(to: str, team_name: str, team_code: str, leader_name: str, settin
     settings = settings or get_settings()
     return Email(
         to=to,
-        subject=f"{leader_name} invited you to join {team_name} at InnoTech'26",
+        subject=f"{leader_name} invited you to join {team_name} at InnoTech26",
         text=(
-            f"{leader_name} has invited you to join the team {team_name} ({team_code}) for InnoTech'26.\n\n"
+            f"{leader_name} has invited you to join the team {team_name} ({team_code}) for InnoTech26.\n\n"
             f"Sign in to accept or decline the invitation: {settings.portal_url}/dashboard\n\n"
             "You can be part of only one team. If you were not expecting this email, you can ignore it."
         ),
@@ -68,9 +68,9 @@ def team_submitted(to: str, team_name: str, team_code: str, settings: Settings |
     settings = settings or get_settings()
     return Email(
         to=to,
-        subject=f"{team_name} is registered for InnoTech'26",
+        subject=f"{team_name} is registered for InnoTech26",
         text=(
-            f"Your team {team_name} ({team_code}) has been submitted for InnoTech'26. "
+            f"Your team {team_name} ({team_code}) has been submitted for InnoTech26. "
             "Members and category are now locked.\n\n"
             f"You can view your team at {settings.portal_url}/team"
         ),

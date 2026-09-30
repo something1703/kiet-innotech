@@ -217,7 +217,7 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
           <span>
             I confirm these details are correct and I have read the{" "}
             <a href="/guidelines" target="_blank" className="font-semibold text-accent-600 hover:underline">
-              InnoTech&apos;26 guidelines
+              InnoTech26 guidelines
             </a>
             .{confirmError && <span className="mt-1 block font-medium text-red-700">Please confirm to continue.</span>}
           </span>

@@ -87,7 +87,7 @@ export function OverviewView() {
         title="Overview"
         description={
           isSuper
-            ? "Registrations across InnoTech'26. Department admins see the same page for their own department."
+            ? "Registrations across InnoTech26. Department admins see the same page for their own department."
             : `Registrations of ${admin.department} students and teams led by ${admin.department} students.`
         }
       />

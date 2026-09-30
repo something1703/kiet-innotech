@@ -1,11 +1,11 @@
 /**
- * All static content for the InnoTech'26 landing page.
+ * All static content for the InnoTech26 landing page.
  * Source: "INNOTECH26 Budget Note and Proposal" and "Budget and Requirements" documents.
  * Keep copy changes here so components stay presentation-only.
  */
 
 export const event = {
-  name: "InnoTech'26",
+  name: "InnoTech26",
   tagline: "Think Big, Build Smart, Act Sustainable",
   theme: "Building an Innovative, Secure and Sustainable Viksit Bharat @2047",
   finaleDate: "2026-10-30T09:00:00+05:30",
@@ -25,25 +25,21 @@ export const navLinks = [
   { label: "Categories", href: "#categories" },
   { label: "Timeline", href: "#timeline" },
   { label: "Prizes", href: "#prizes" },
-  { label: "Judging", href: "#judging" },
   { label: "Rules", href: "#rules" },
   { label: "FAQ", href: "#faq" },
   { label: "Contact", href: "#contact" },
 ];
 
 export const liveUpdates = [
-  "Registrations open on 3 October 2026 and close on 12 October 2026",
+  "Registrations open from 3 to 12 October 2026",
   "No registration fee for any participant",
-  "Department level evaluation: 22 to 24 October 2026",
-  "Finalists will be declared on 26 October 2026",
-  "Institute level Grand Finale on 30 October 2026 at KIET",
-  "School students can participate in the two poster categories",
+  "Grand Finale on 30 October 2026 at KIET",
 ];
 
 export const stats = [
   { value: 8, label: "Categories" },
   { value: 17, label: "Departments" },
-  { value: 338000, label: "Prize pool", prefix: "₹", format: "lakh" as const },
+  { value: 500000, label: "Prize pool", prefix: "₹", suffix: "+", format: "lakh" as const },
   { value: 16, label: "External judges" },
   { value: 180, label: "Exhibition stalls" },
 ];
@@ -51,13 +47,8 @@ export const stats = [
 export const about = {
   title: "A platform for ideas that serve society",
   paragraphs: [
-    "InnoTech'26 is the institute level technical event of KIET, organised by the Department of Information Technology & CSE (Cyber Security). It brings together Artificial Intelligence, Cyber Security, Start-ups and Innovative Projects on one stage.",
+    "InnoTech26 is the institute level technical event of KIET, organised by the Department of Information Technology & CSE (Cyber Security). It brings together Artificial Intelligence, Cyber Security, Start-ups and Innovative Projects on one stage.",
     "The event focuses on societal issues and challenges, and on solutions that map to the Sustainable Development Goals (SDGs) and the vision of Viksit Bharat @2047. Students present working projects, prototypes and posters to faculty and external industry judges.",
-  ],
-  highlights: [
-    "Projects aligned with the Sustainable Development Goals",
-    "Evaluation by faculty and external judges from the NCR region",
-    "Start-up guidance and funding discussions with KIET TBI",
   ],
 };
 
@@ -65,12 +56,7 @@ export const benefits = [
   {
     icon: "trophy",
     title: "Cash Prizes",
-    text: "Prizes worth ₹3.38 lakh across department and institute levels, with trophies for winners.",
-  },
-  {
-    icon: "rocket",
-    title: "Start-up Support",
-    text: "Discuss funding and start-up registration with the KIET Technology Business Incubator.",
+    text: "Win at the department round and again at the Grand Finale, with trophies for the winners.",
   },
   {
     icon: "users",
@@ -80,12 +66,7 @@ export const benefits = [
   {
     icon: "award",
     title: "Recognition",
-    text: "Certificates for winners and e-certificates for participants, plus campus-wide exposure.",
-  },
-  {
-    icon: "shield",
-    title: "Expert Feedback",
-    text: "Get your work reviewed against clear rubrics by experienced judges.",
+    text: "Certificates for winners and e-certificates for every participant.",
   },
   {
     icon: "lightbulb",
@@ -343,31 +324,39 @@ export const timeline: Milestone[] = [
   },
 ];
 
+/** Amounts are per category; `awards` is how many categories (or awards) each row applies to. */
 export const institutePrizes = [
   {
     title: "Project Categories",
     categories: "Categories 1, 2, 3, 4, 6 and 8",
+    awards: 6,
     first: 8000,
     second: 5000,
   },
   {
     title: "Poster Categories",
     categories: "Categories 5 and 7",
+    awards: 2,
     first: 4000,
     second: 3000,
   },
   {
     title: "Best School Project",
     categories: "School project or poster",
+    awards: 1,
     first: 5000,
     second: 3000,
   },
 ];
 
+/** 1st position in every category, awarded separately in each department. */
 export const departmentPrizes = [
-  { categories: "Categories 1, 2, 3, 4, 6 and 8", first: 2000 },
-  { categories: "Categories 5 and 7", first: 1000 },
+  { categories: "Categories 1, 2, 3, 4, 6 and 8", awards: 6, first: 2000 },
+  { categories: "Categories 5 and 7", awards: 2, first: 1000 },
 ];
+
+/** Headline prize figures. The pool includes trophies, certificates and awards beyond the cash prizes. */
+export const prizeHeadline = { pool: "₹5 lakh+", cash: "₹3.4 lakh+" };
 
 export const departments = [
   "CSE",
@@ -389,8 +378,15 @@ export const departments = [
   "KSOP",
 ];
 
+/** Cash totals per level, from the prize tables above; the department pool counts every department. */
+export const prizePools = {
+  institute: institutePrizes.reduce((sum, p) => sum + p.awards * (p.first + p.second), 0),
+  department: departments.length * departmentPrizes.reduce((sum, p) => sum + p.awards * p.first, 0),
+};
+
 type Criterion = { title: string; parts?: string[] };
 
+/** Judging rubrics, kept for the judges module. Not shown on the public site. */
 export const rubrics: Record<
   RubricGroup,
   { label: string; appliesTo: string; criteria: Criterion[] }
@@ -478,15 +474,8 @@ export const teamRules = [
 export const registrationSteps = [
   { title: "Create your account", text: "Every student registers individually and completes their profile." },
   { title: "Form a team", text: "The team leader creates a team and picks one category." },
-  { title: "Add members", text: "The leader invites registered students from the same college or school." },
+  { title: "Add members", text: "Teammates join with the team code the leader shares, or accept an email invitation." },
   { title: "Submit the team", text: "Once 2 to 5 members have joined, the leader submits and the team is locked." },
-];
-
-export const selectionNotes = [
-  "One team per category is nominated from each department for the finale.",
-  "CSE, CS, CSE(AI) and CSE(AIML) can nominate two teams each in Categories 1 to 4.",
-  "Department level evaluation is done by faculty members of another department.",
-  "Ties are broken by the Innovation / Originality score, then Query Addressing, then the panel chair's decision.",
 ];
 
 export const attractions = [
@@ -512,56 +501,17 @@ export const gallery = [
 
 export const faqs = [
   {
-    question: "Who can participate in InnoTech'26?",
-    answer:
-      "Students of KIET, students of other colleges, and school students. KIET and other college teams can choose any of the eight categories. School teams participate in the two poster categories (5 and 7).",
-  },
-  {
     question: "Is there a registration fee?",
-    answer: "No. Registration is free for everyone.",
+    answer: "No. Registration is free for everyone. No reimbursement is given for items used in projects, posters or models.",
   },
   {
-    question: "How many members can a team have?",
+    question: "How do I join my friend's team?",
     answer:
-      "A team has 2 to 5 members, and all members must be from the same college or school.",
+      "Register and complete your profile first. Then either enter the team code your leader shares on your dashboard, or accept the email invitation they send you. You can be part of only one team.",
   },
   {
-    question: "Which email should I use to register?",
+    question: "I am a KIET student. Can I sign in with my personal Gmail?",
     answer:
-      "KIET students must use their official @kiet.edu email. Students from other colleges and schools can use any valid email address.",
+      "No. KIET students must sign in with their official @kiet.edu Google account. A personal Gmail account can only register as a student of another college or a school.",
   },
-  {
-    question: "How do I form a team?",
-    answer:
-      "Every member first registers individually. The team leader then creates the team, chooses a category, adds the registered members and submits the team.",
-  },
-  {
-    question: "Can I change my team or category after submitting?",
-    answer:
-      "No. Once a team is submitted, members and category cannot be changed. If any member withdraws, the team is not considered further.",
-  },
-  {
-    question: "Do students from other colleges and schools go through the department round?",
-    answer:
-      "No. Teams from other colleges and schools go directly to the institute level Grand Finale on 30 October 2026.",
-  },
-  {
-    question: "How are KIET finalists selected?",
-    answer:
-      "Each department nominates one team per category after the department level evaluation. CSE, CS, CSE(AI) and CSE(AIML) can nominate two teams in Categories 1 to 4.",
-  },
-  {
-    question: "Will I be reimbursed for project materials?",
-    answer:
-      "No reimbursement is given for any items used in projects, posters or models.",
-  },
-];
-
-export const coreTeam = [
-  { name: "Dr. Pavi Saraswat", role: "Planning and Implementation Head" },
-  { name: "Dr. Kamal Kant Sharma", role: "Evaluation & Jury Head" },
-  { name: "Ms. Anjali Jain", role: "Media and Promotion Head" },
-  { name: "Mr. Sagar Uniyal", role: "Website Coordinator" },
-  { name: "Ms. Anupriya Pal", role: "Designing Manager" },
-  { name: "Ms. Arushi Singh", role: "Technical Club Activity Coordinator" },
 ];

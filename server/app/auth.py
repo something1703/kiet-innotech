@@ -151,7 +151,7 @@ def get_current_admin(
         return admin or Admin(email=identity.email, name=identity.name, role="super_admin", department=None)
     admin = db.get(Admin, identity.email)
     if admin is None:
-        raise ApiError("This Google account is not an InnoTech'26 admin.", 403)
+        raise ApiError("This Google account is not an InnoTech26 admin.", 403)
     return admin
 
 

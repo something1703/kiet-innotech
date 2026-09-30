@@ -65,7 +65,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
           </Link>
 
           <div className="my-8 lg:my-auto">
-            <Image src="/images/brand/innotech-logo.png" alt="InnoTech'26" width={1536} height={476} priority className="w-full max-w-xs drop-shadow-[0_10px_40px_rgb(22_169_221/0.35)] sm:max-w-sm" />
+            <Image src="/images/brand/innotech-logo.png" alt="InnoTech26" width={1536} height={476} priority className="w-full max-w-xs drop-shadow-[0_10px_40px_rgb(22_169_221/0.35)] sm:max-w-sm" />
             <p className="mt-6 max-w-md font-display text-xl font-bold leading-snug sm:text-2xl">
               Building an <span className="text-brand-400">Innovative</span>, <span className="text-brand-400">Secure</span> and{" "}
               <span className="text-accent-500">Sustainable</span> Viksit Bharat @2047
@@ -92,7 +92,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
             {isRegister ? "Student registration" : "Student login"}
           </p>
           <h1 className="font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-            {isRegister ? "Register for InnoTech'26" : "Welcome back"}
+            {isRegister ? "Register for InnoTech26" : "Welcome back"}
           </h1>
           <p className="mt-3 text-muted">
             {isRegister
@@ -143,7 +143,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
             </p>
 
             <p className="text-sm text-muted">
-              {isRegister ? "Already registered? " : "New to InnoTech'26? "}
+              {isRegister ? "Already registered? " : "New to InnoTech26? "}
               <Link href={isRegister ? "/login" : "/register"} className="font-semibold text-accent-600 hover:underline">
                 {isRegister ? "Log in" : "Register"}
               </Link>

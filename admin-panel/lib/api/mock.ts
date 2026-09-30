@@ -86,7 +86,7 @@ function actor(db: MockDb): AdminUser {
   const email = getMockEmail();
   if (!email) throw new ApiError(401, "You are not signed in.");
   const admin = db.admins.find((a) => a.email.toLowerCase() === email.toLowerCase());
-  if (!admin) throw new ApiError(403, `${email} is not an InnoTech'26 admin.`);
+  if (!admin) throw new ApiError(403, `${email} is not an InnoTech26 admin.`);
   return admin;
 }
 

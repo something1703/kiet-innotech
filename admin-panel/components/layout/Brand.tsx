@@ -7,7 +7,7 @@ export function Brand({ tone = "dark", subtitle = "Admin panel" }: { tone?: "dar
       <Image src="/images/brand/innotech-emblem.png" alt="" width={476} height={476} priority className="size-9 shrink-0" />
       <div className="leading-tight">
         <p className={`font-display text-base font-bold ${tone === "dark" ? "text-white" : "text-navy-900"}`}>
-          InnoTech<span className="text-brand-500">&apos;26</span>
+          InnoTech<span className="text-brand-500">26</span>
         </p>
         <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${tone === "dark" ? "text-white/55" : "text-muted"}`}>{subtitle}</p>
       </div>

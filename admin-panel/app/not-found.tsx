@@ -9,7 +9,7 @@ export default function NotFound() {
         <KietLogo className="h-9 w-auto" />
         <p className="mt-6 font-mono text-xs font-semibold tracking-wider text-brand-600">404</p>
         <h1 className="mt-1 font-display text-2xl font-bold text-navy-900">Page not found</h1>
-        <p className="mt-2 text-sm text-muted">This address does not match any page in the InnoTech&apos;26 admin panel.</p>
+        <p className="mt-2 text-sm text-muted">This address does not match any page in the InnoTech26 admin panel.</p>
         <Link href="/" className={buttonClass("primary", "md", "mt-6")}>
           Go to overview
         </Link>

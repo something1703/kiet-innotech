@@ -38,7 +38,7 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
     tone: "danger",
     description: (team) => (
       <>
-        <strong className="text-navy-900">{team.name}</strong> ({team.code}) will be disqualified from InnoTech&apos;26. Only the super admin can restore it.
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) will be disqualified from InnoTech26. Only the super admin can restore it.
       </>
     ),
   },

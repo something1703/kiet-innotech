@@ -15,7 +15,7 @@ export function Participants() {
         <SectionHeading
           tone="dark"
           eyebrow="Who can participate"
-          title="Three ways to join InnoTech'26"
+          title="Three ways to join InnoTech26"
           description="KIET teams compete at department level first. Teams from other colleges and schools go straight to the Grand Finale."
         />
 
