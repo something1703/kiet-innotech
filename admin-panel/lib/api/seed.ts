@@ -6,6 +6,7 @@ import type { AdminTeam, AdminTeamMember, AdminUser, AuditEntry } from "../admin
 import { categories, departments, domains } from "../content";
 import { JOIN_CODE_ALPHABET, KIET_EMAIL_DOMAIN, KIET_INSTITUTION, categoryEligibility } from "../rules";
 import type { Invitation, ParticipantType, Profile, TeamStatus } from "../types";
+import { demoAdmins } from "./demo-admins";
 
 export type StudentRecord = Profile & { teamId: string | null };
 
@@ -162,12 +163,6 @@ const withdrawReasons = [
 ];
 
 // ---------- Demo admins ----------
-
-export const demoAdmins: AdminUser[] = [
-  { email: "superadmin@kiet.edu", name: "Neha Verma", role: "super_admin", department: null },
-  { email: "cse.coordinator@kiet.edu", name: "Amit Kumar", role: "admin", department: "CSE" },
-  { email: "it.coordinator@kiet.edu", name: "Sonal Gupta", role: "admin", department: "IT" },
-];
 
 const otherAdmins: AdminUser[] = [
   { email: "csecs.coordinator@kiet.edu", name: "Rakesh Yadav", role: "admin", department: "CSE(CS)" },

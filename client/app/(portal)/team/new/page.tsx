@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import { draftKeys } from "@/lib/drafts";
 import { useRegistrationState } from "@/lib/registration";
 import type { TeamInput } from "@/lib/types";
 import { Notice, buttonStyles } from "@/components/ui/form";
@@ -27,11 +28,11 @@ export default function NewTeamPage() {
   if (team) return null;
 
   const create = async (input: TeamInput) => {
-    if (await run(() => api.createTeam(input))) {
-      created.current = true;
-      await refresh();
-      router.push("/team?created=1");
-    }
+    if (!(await run(() => api.createTeam(input)))) return false;
+    created.current = true;
+    await refresh();
+    router.push("/team?created=1");
+    return true;
   };
 
   const route = profile.participantType === "kiet" ? `the ${profile.department} department round` : "the Grand Finale directly";
@@ -69,6 +70,7 @@ export default function NewTeamPage() {
             memberYears={[profile.year]}
             submitLabel="Create team"
             onSubmit={create}
+            draftKey={draftKeys.newTeam(me.email)}
             pending={pending}
             error={error}
             onCancel={() => router.push("/dashboard")}

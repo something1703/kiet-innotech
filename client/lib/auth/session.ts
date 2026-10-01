@@ -1,38 +1,49 @@
 /**
  * Who is signed in.
  *
- * Mock mode (development): a demo student picked on the login page, stored in localStorage.
- * Live mode: Amazon Cognito Hosted UI with Google as the identity provider, using the
- * authorization code flow with PKCE. Tokens are kept in localStorage and refreshed when they expire.
+ * Every sign-in method ends in startSession() with the backend's answer `{ token, expires_at, email, name }`:
+ * Google (POST /auth/google with the ID token from Google Identity Services), the local backend's /dev/token,
+ * and later email with a one-time code. That answer is kept in localStorage as it is; the browser never
+ * decodes the token. There is no refresh token: once the token expires or the API answers 401, the session is over.
+ *
+ * Mock mode (development): the demo sign-in stores a session with a placeholder token.
  */
 import { useSyncExternalStore } from "react";
+import { send } from "../api/http";
+import { ApiError } from "../api/types";
 
-export const apiMode = process.env.NEXT_PUBLIC_API_MODE === "live" ? "live" : "mock";
+/** The in-browser mock only when asked for explicitly. Any other value, or none, means the live backend. */
+export const apiMode: "mock" | "live" = process.env.NEXT_PUBLIC_API_MODE === "mock" ? "mock" : "live";
 
 /** Local development against the real backend: sign in with a token from its /dev/token endpoint instead of Google. */
 export const devSignInEnabled = apiMode === "live" && process.env.NEXT_PUBLIC_DEV_SIGN_IN === "true";
 
-export type Session = { email: string; name: string };
+export const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
-const MOCK_KEY = "innotech-mock-session";
-const TOKENS_KEY = "innotech-tokens";
-const PKCE_KEY = "innotech-pkce";
+export type Session = { token: string; expiresAt: string; email: string; name: string };
+
+/** What every sign-in endpoint returns. */
+export type SessionResponse = { token: string; expires_at: string; email: string; name: string };
+
+const SESSION_KEY = "innotech-session";
 const CHANGE_EVENT = "innotech-session-change";
 
-type Tokens = { idToken: string; refreshToken?: string; expiresAt: number };
+let leaving = false;
+let ended = false;
 
-const cognito = {
-  domain: process.env.NEXT_PUBLIC_COGNITO_DOMAIN ?? "",
-  clientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "",
-  redirectUri: process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI ?? "",
-};
-
-function read<T>(key: string): T | null {
+function readRaw() {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
+    return localStorage.getItem(SESSION_KEY);
   } catch {
     return null;
+  }
+}
+
+function clear() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Storage is blocked; there is nothing to clear.
   }
 }
 
@@ -40,23 +51,17 @@ function notify() {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-function decodeJwt(token: string): Record<string, unknown> {
-  const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-  const json = decodeURIComponent(
-    atob(payload)
-      .split("")
-      .map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
-      .join(""),
-  );
-  return JSON.parse(json);
-}
-
-function readSession(): Session | null {
-  if (apiMode === "mock") return read<Session>(MOCK_KEY);
-  const tokens = read<Tokens>(TOKENS_KEY);
-  if (!tokens) return null;
-  const claims = decodeJwt(tokens.idToken);
-  return { email: String(claims.email ?? ""), name: String(claims.name ?? claims.email ?? "") };
+/** The stored session, or null if it is missing, malformed or expired. */
+function parseSession(raw: string | null): Session | null {
+  if (!raw) return null;
+  try {
+    const { token, expiresAt, email, name } = (JSON.parse(raw) ?? {}) as Partial<Session>;
+    if (typeof token !== "string" || !token || typeof email !== "string" || !email.includes("@")) return null;
+    if (typeof expiresAt !== "string" || !(Date.parse(expiresAt) > Date.now())) return null;
+    return { token, expiresAt, email: email.trim().toLowerCase(), name: typeof name === "string" ? name.trim() : "" };
+  } catch {
+    return null;
+  }
 }
 
 // useSyncExternalStore needs a stable snapshot, so cache by the raw stored value.
@@ -64,10 +69,12 @@ let cachedRaw: string | null | undefined;
 let cachedSession: Session | null = null;
 
 function snapshot(): Session | null {
-  const raw = localStorage.getItem(apiMode === "mock" ? MOCK_KEY : TOKENS_KEY);
+  const raw = readRaw();
   if (raw !== cachedRaw) {
     cachedRaw = raw;
-    cachedSession = readSession();
+    cachedSession = parseSession(raw);
+    // A malformed or expired session is removed, so it cannot get in the way again.
+    if (raw && !cachedSession) clear();
   }
   return cachedSession;
 }
@@ -87,131 +94,75 @@ export function useSession(): Session | null | undefined {
 }
 
 export function getSession() {
-  return readSession();
+  return parseSession(readRaw());
 }
 
-// ---------- Mock mode ----------
+/** The token for API calls, or null when signed out or expired. */
+export function getToken() {
+  return getSession()?.token ?? null;
+}
 
-export function mockSignIn(session: Session) {
+/** Starts a session from a sign-in response. Every sign-in method ends here. */
+export function startSession(response: SessionResponse): Session {
+  const candidate = { token: response?.token, expiresAt: response?.expires_at, email: response?.email, name: response?.name };
+  const session = parseSession(JSON.stringify(candidate));
+  if (!session) throw new ApiError("Sign-in did not complete. Please try again.", 0);
   leaving = false;
-  localStorage.setItem(MOCK_KEY, JSON.stringify({ email: session.email.trim().toLowerCase(), name: session.name.trim() }));
+  ended = false;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   notify();
+  return session;
+}
+
+/** Signs in with the ID token Google Identity Services hands to the page. */
+export async function signInWithGoogle(credential: string) {
+  const response = await send("POST", "/auth/google", { body: { credential, app: "portal" } });
+  return startSession(response as unknown as SessionResponse);
 }
 
 /** Live mode with NEXT_PUBLIC_DEV_SIGN_IN: gets a development token from the local backend. */
-export async function devSignIn(session: Session) {
-  const baseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  const response = await fetch(`${baseUrl}/dev/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: session.email.trim(), name: session.name.trim() }),
-  });
-  if (!response.ok) throw new Error("The backend refused the development sign-in. Is it running with ENVIRONMENT=development?");
-  const data = await response.json();
-  const tokens: Tokens = { idToken: data.id_token, expiresAt: Date.now() + (data.expires_in - 60) * 1000 };
-  leaving = false;
-  localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
-  notify();
-}
-
-// ---------- Live mode (Cognito + Google) ----------
-
-function base64Url(bytes: Uint8Array) {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-/** Sends the browser to Google sign-in through the Cognito Hosted UI. */
-export async function startGoogleSignIn(returnTo = "/dashboard") {
-  const verifier = base64Url(crypto.getRandomValues(new Uint8Array(48)));
-  const state = base64Url(crypto.getRandomValues(new Uint8Array(16)));
-  const challenge = base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
-  sessionStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state, returnTo }));
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: cognito.clientId,
-    redirect_uri: cognito.redirectUri,
-    identity_provider: "Google",
-    scope: "openid email profile",
-    state,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-  });
-  const url = new URL("/oauth2/authorize", cognito.domain);
-  url.search = params.toString();
-  window.location.assign(url);
-}
-
-async function requestTokens(body: Record<string, string>): Promise<Tokens> {
-  const response = await fetch(`${cognito.domain}/oauth2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: cognito.clientId, ...body }),
-  });
-  if (!response.ok) throw new Error("Sign-in could not be completed. Please try again.");
-  const data = await response.json();
-  return {
-    idToken: data.id_token,
-    refreshToken: data.refresh_token ?? body.refresh_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
-  };
-}
-
-/** Finishes sign-in on /auth/callback. Returns the page to continue to. */
-export async function completeSignIn(code: string, state: string): Promise<string> {
-  const saved = JSON.parse(sessionStorage.getItem(PKCE_KEY) ?? "null") as { verifier: string; state: string; returnTo: string } | null;
-  sessionStorage.removeItem(PKCE_KEY);
-  if (!saved || saved.state !== state) throw new Error("This sign-in link has expired. Please sign in again.");
-
-  const tokens = await requestTokens({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: cognito.redirectUri,
-    code_verifier: saved.verifier,
-  });
-  leaving = false;
-  localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
-  notify();
-  return saved.returnTo;
-}
-
-let refreshing: Promise<string | null> | null = null;
-
-/** A valid ID token for API calls, refreshed if it has expired. Null when signed out. */
-export async function getIdToken(): Promise<string | null> {
-  const tokens = read<Tokens>(TOKENS_KEY);
-  if (!tokens) return null;
-  if (Date.now() < tokens.expiresAt) return tokens.idToken;
-  if (!tokens.refreshToken) {
-    signOut();
-    return null;
+export async function devSignIn({ email, name }: { email: string; name: string }) {
+  try {
+    const response = await send("POST", "/dev/token", { body: { email: email.trim(), name: name.trim(), app: "portal" } });
+    return startSession(response as unknown as SessionResponse);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw new ApiError("The backend refused the development sign-in. Is it running with ENVIRONMENT=development?", 404);
+    }
+    throw err;
   }
-  // Parallel requests share one refresh, which also keeps working if Cognito rotates refresh tokens.
-  refreshing ??= requestTokens({ grant_type: "refresh_token", refresh_token: tokens.refreshToken })
-    .then((fresh) => {
-      localStorage.setItem(TOKENS_KEY, JSON.stringify(fresh));
-      return fresh.idToken;
-    })
-    .catch(() => {
-      signOut();
-      return null;
-    })
-    .finally(() => {
-      refreshing = null;
-    });
-  return refreshing;
 }
 
-let leaving = false;
+/** Mock mode: signs in as anyone, with a placeholder token that lasts as long as a real one. */
+export function mockSignIn({ email, name }: { email: string; name: string }) {
+  return startSession({ token: "mock", expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(), email, name });
+}
 
 /** True while the student is signing out and leaving the portal, so guards don't redirect to /login meanwhile. */
 export function isSigningOut() {
   return leaving;
 }
 
+/** True when the last session ended by itself (expired or rejected by the server), so the login page can say so. */
+export function sessionEnded() {
+  return ended;
+}
+
 /** Signs out. Pass `leavingPortal` when the caller navigates away itself, e.g. to the home page. */
 export function signOut({ leavingPortal = false } = {}) {
   leaving = leavingPortal;
-  localStorage.removeItem(apiMode === "mock" ? MOCK_KEY : TOKENS_KEY);
+  ended = false;
+  clear();
+  notify();
+}
+
+/**
+ * The token expired or the server answered 401: the session is over. The portal guard in PortalProvider
+ * then sends the student to /login?next=<current page>; forms keep their drafts in sessionStorage meanwhile.
+ */
+export function endSession() {
+  leaving = false;
+  ended = true;
+  clear();
   notify();
 }

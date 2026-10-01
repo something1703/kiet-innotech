@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, String, and_, cast, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import rules
@@ -476,10 +477,13 @@ def stats(db: Session, admin: Admin) -> StatsOut:
 # ---------- Finalists ----------
 
 
-def _eligible(db: Session, department: str | None = None) -> list[Team]:
+def _eligible(db: Session, department: str | None = None, lock: bool = False) -> list[Team]:
     statement = select(Team).where(Team.route == "department", Team.status == "submitted").order_by(Team.number)
     if department:
         statement = statement.where(Team.department == department)
+    if lock:
+        # Waits for a concurrent withdrawal, then re-checks the status, so a withdrawn team is never nominated.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     return list(db.scalars(statement))
 
 
@@ -530,7 +534,7 @@ def save_finalists(db: Session, admin: Admin, department: str, data: Nominations
         raise ApiError("Results have been published, so nominations can no longer change.", 409)
     state = _lock_state(db, f"finalists:{department}")
 
-    eligible = {t.id: t for t in _eligible(db, department)}
+    eligible = {t.id: t for t in _eligible(db, department, lock=True)}
     seen_categories: set[int] = set()
     for entry in data.nominations:
         if entry.category not in rules.CATEGORIES:
@@ -654,7 +658,12 @@ def add_admin(db: Session, admin: Admin, data: AdminInput, settings: Settings) -
         detail=f"{data.email} ({data.role}{', ' + data.department if data.department else ''})",
         department=data.department,
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Another super admin added the same email a moment earlier.
+        db.rollback()
+        raise ApiError("This email is already an admin.", 409) from exc
     return admin_out(new)
 
 
@@ -665,6 +674,8 @@ def remove_admin(db: Session, admin: Admin, email: str, settings: Settings) -> N
         raise ApiError("You cannot remove your own admin access.", 409)
     if email in settings.super_admin_emails:
         raise ApiError("This super admin is set in the server configuration and cannot be removed here.", 409)
+    # Lock every super admin, not just the target, so two super admins removing each other cannot both succeed.
+    db.execute(select(Admin.email).where(Admin.role == "super_admin").with_for_update())
     target = db.scalar(select(Admin).where(Admin.email == email).with_for_update())
     if target is None:
         raise ApiError("No admin with this email exists.", 404)

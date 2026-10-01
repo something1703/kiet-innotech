@@ -13,8 +13,8 @@ export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
           <Image
             src="/images/brand/innotech-logo.png"
             alt="InnoTech'26"
-            width={1536}
-            height={476}
+            width={1152}
+            height={357}
             className="h-14 w-auto"
           />
           <p className="mt-5 max-w-sm text-sm leading-relaxed">

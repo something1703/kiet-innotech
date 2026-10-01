@@ -1,0 +1,56 @@
+# HTTPS with free, automatically renewed certificates. The *_HOSTS variables are comma-separated hostnames, e.g.
+# "portal-13-233-1-2.sslip.io" now and "portal-13-233-1-2.sslip.io, innotech.kiet.edu" once the domain is delegated.
+
+(security) {
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+	}
+}
+
+# Static sites: Next.js exports /login/ as /login/index.html. Hashed assets are cached for a year, pages are always
+# revalidated so a new release shows up immediately.
+(site) {
+	import security
+	encode zstd gzip
+	@assets path /_next/static/*
+	handle @assets {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		header Cache-Control "no-cache"
+		try_files {path} {path}/index.html
+		file_server
+	}
+	handle_errors {
+		rewrite * /404.html
+		file_server
+	}
+}
+
+{$PORTAL_HOSTS} {
+	root * /srv/portal
+	import site
+}
+
+{$ADMIN_HOSTS} {
+	root * /srv/admin
+	import site
+}
+
+{$API_HOSTS} {
+	import security
+	encode zstd gzip
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy api:8000
+	log {
+		output stdout
+		format json
+	}
+}

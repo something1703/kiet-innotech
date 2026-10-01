@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Send } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { FinalistSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departments } from "@/lib/content";
 import { formatDateTime, typeShortLabels } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
+import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,23 +20,55 @@ import { Pill } from "@/components/ui/Pill";
 import { numClass, TableFrame, tdClass, Th } from "@/components/ui/Table";
 import { BoardForm } from "./BoardForm";
 
-function Board({ department, onSaved }: { department: string; onSaved?: () => void }) {
+function Board({
+  department,
+  onSaved,
+  onDirtyChange,
+}: {
+  department: string;
+  onSaved?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const board = useQuery(`finalists:${department}`, () => api.getFinalists(department));
   const [saved, setSaved] = useState(false);
+  const [conflict, setConflict] = useState<string | null>(null);
+  // Bumped on every reload after a refused save, so the form remounts with the fresh board even
+  // when its updatedAt did not change (e.g. a nominated team was withdrawn meanwhile).
+  const [version, setVersion] = useState(0);
+
   if (board.error) return <Notice tone="error">{board.error}</Notice>;
-  if (!board.data || board.data.department !== department) return <Loading label={`Loading ${department} teams`} />;
+  if (!board.data || board.data.department !== department || board.loading) return <Loading label={`Loading ${department} teams`} />;
   return (
-    <BoardForm
-      key={`${department}:${board.data.updatedAt}:${board.data.publishedAt}`}
-      board={board.data}
-      justSaved={saved}
-      onEdit={() => setSaved(false)}
-      onSaved={(updated) => {
-        setSaved(true);
-        board.setData(updated);
-        onSaved?.();
-      }}
-    />
+    <div className="space-y-4">
+      {conflict && (
+        <Notice tone="error" title="Nominations were not saved">
+          {conflict} The board has been reloaded with the latest nominations. Check them and save again.
+        </Notice>
+      )}
+      <BoardForm
+        key={`${department}:${version}:${board.data.updatedAt}:${board.data.publishedAt}`}
+        board={board.data}
+        justSaved={saved}
+        onEdit={() => {
+          setSaved(false);
+          setConflict(null);
+        }}
+        onDirtyChange={onDirtyChange}
+        onSaved={(updated) => {
+          setSaved(true);
+          setConflict(null);
+          board.setData(updated);
+          onSaved?.();
+        }}
+        onConflict={(message) => {
+          setSaved(false);
+          setConflict(message);
+          setVersion((v) => v + 1);
+          board.reload();
+          onSaved?.();
+        }}
+      />
+    </div>
   );
 }
 
@@ -98,15 +131,39 @@ function SuperAdminFinalists() {
   const [boardNonce, setBoardNonce] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const data = summary.data;
   const nominatedTotal = data?.matrix.reduce((sum, row) => sum + row.categories.reduce((s, c) => s + c.nominated, 0), 0) ?? 0;
   const eligibleTotal = data?.matrix.reduce((sum, row) => sum + row.categories.reduce((s, c) => s + c.eligible, 0), 0) ?? 0;
   const departmentsWithout = data?.matrix.filter((row) => row.categories.some((c) => c.eligible > 0) && row.categories.every((c) => c.nominated === 0)).map((row) => row.department) ?? [];
 
-  function pick(next: string) {
+  /** Switches the board, confirming first if the current one has unsaved nominations. */
+  function switchTo(next: string) {
+    if (next === department) return true;
+    if (dirty && !window.confirm(`Discard your unsaved ${department} nominations and open ${next}?`)) return false;
     setDepartment(next);
+    return true;
+  }
+
+  function pick(next: string) {
+    if (!switchTo(next)) return;
     document.getElementById("department-board")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function publish() {
+    try {
+      const result = await api.publishResults();
+      setPublished(`${result.finalists} teams marked finalist and ${result.notSelected} marked not selected.`);
+    } catch (error) {
+      // 409: already published (perhaps from another tab). Show the current state instead.
+      if (!(error instanceof ApiError && error.status === 409)) throw error;
+      setPublishError(error.message);
+    }
+    setPublishing(false);
+    summary.reload();
+    setBoardNonce((n) => n + 1);
   }
 
   return (
@@ -128,13 +185,20 @@ function SuperAdminFinalists() {
                 <span className="font-semibold text-navy-900">{eligibleTotal}</span> submitted KIET teams.
                 {departmentsWithout.length > 0 && ` ${departmentsWithout.length} departments have not nominated yet.`}
               </p>
-              <Button onClick={() => setPublishing(true)}>
+              <Button
+                onClick={() => {
+                  setPublishError(null);
+                  setPublishing(true);
+                }}
+                disabled={summary.loading}
+              >
                 <Send aria-hidden="true" className="size-4" />
                 Publish results
               </Button>
             </div>
           )}
           {published && <Notice tone="success">{published}</Notice>}
+          {publishError && <Notice tone="error">{publishError}</Notice>}
         </section>
       )}
 
@@ -149,14 +213,14 @@ function SuperAdminFinalists() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <SectionTitle id="board-title" title={`${department} nominations`} />
           <Field label="Department" htmlFor="board-department" className="sm:w-56">
-            <Select id="board-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
+            <Select id="board-department" value={department} onChange={(e) => switchTo(e.target.value)}>
               {departments.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
           </Field>
         </div>
-        <Board key={`${department}:${boardNonce}`} department={department} onSaved={summary.reload} />
+        <Board key={`${department}:${boardNonce}`} department={department} onSaved={summary.reload} onDirtyChange={setDirty} />
       </section>
 
       {data && (
@@ -180,7 +244,7 @@ function SuperAdminFinalists() {
                 {data.directTeams.map((team) => (
                   <tr key={team.id}>
                     <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>
-                      <Link href={`/teams/${team.id}`} className="font-semibold text-brand-700 hover:underline">{team.code}</Link>
+                      <Link href={teamHref(team.id)} className="font-semibold text-brand-700 hover:underline">{team.code}</Link>
                     </td>
                     <td className={`${tdClass} font-semibold text-navy-900`}>{team.name}</td>
                     <td className={tdClass}>
@@ -197,19 +261,13 @@ function SuperAdminFinalists() {
         </section>
       )}
 
-      {publishing && data && (
+      {publishing && data && !summary.loading && (
         <ConfirmDialog
           title="Publish department round results?"
           description="This cannot be undone from the panel."
           confirmLabel="Publish results"
           onClose={() => setPublishing(false)}
-          onConfirm={async () => {
-            const result = await api.publishResults();
-            setPublishing(false);
-            setPublished(`${result.finalists} teams marked finalist and ${result.notSelected} marked not selected.`);
-            summary.reload();
-            setBoardNonce((n) => n + 1);
-          }}
+          onConfirm={publish}
         >
           <ul className="list-disc space-y-1 pl-5 text-sm text-navy-800">
             <li>{nominatedTotal} nominated teams become finalists for the Grand Finale.</li>

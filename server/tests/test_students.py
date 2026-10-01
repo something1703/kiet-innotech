@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from conftest import college_profile, kiet_profile, school_profile, team_input
 
@@ -8,7 +8,9 @@ from conftest import college_profile, kiet_profile, school_profile, team_input
 def test_me_before_profile(as_user):
     response = as_user("new.student@kiet.edu").get("/me")
     assert response.status_code == 200
-    assert response.json() == {"email": "new.student@kiet.edu", "name": "New Student", "profile": None}
+    body = response.json()
+    assert (body["email"], body["name"], body["profile"]) == ("new.student@kiet.edu", "New Student", None)
+    assert body["registration"]["state"] == "open"
 
 
 def test_kiet_email_must_register_as_kiet(as_user):
@@ -82,10 +84,14 @@ def test_locked_profile_fields_in_team(student, team_of):
 
 def test_new_profile_needs_open_registration(as_user, settings):
     settings.force_registration_open = False
-    settings.registration_opens = datetime.now(UTC) + timedelta(days=1)
+    settings.registration_opens = datetime(2026, 10, 3, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    settings.registration_closes = settings.registration_opens + timedelta(days=9)
+    if datetime.now(UTC) >= settings.registration_opens:
+        settings.registration_opens = datetime.now(UTC) + timedelta(days=1)
     response = as_user("a@kiet.edu").put("/me/profile", kiet_profile())
     assert response.status_code == 403
-    assert "opens on 3 October" in response.json()["detail"]
+    # The message follows the configured date (in IST), not a hard-coded one.
+    assert f"opens on {settings.registration_opens.astimezone(timezone(timedelta(hours=5, minutes=30))).day} " in response.json()["detail"]
 
 
 # ---------- Teams ----------

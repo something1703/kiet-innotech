@@ -3,26 +3,27 @@
  * It enforces the same role scoping and rules the FastAPI backend will: a department admin
  * asking for another department's data gets an ApiError, exactly as the real API would respond.
  */
-import type {
-  AdminInput,
-  AdminStudent,
-  AdminTeam,
-  AdminUser,
-  AuditEntry,
-  FinalistBoard,
-  FinalistSummary,
-  NominationInput,
-  Page,
-  PublishResult,
-  StatusCounts,
-  Stats,
-  StudentQuery,
-  TeamQuery,
-  TeamSummary,
+import {
+  CONFIGURED_BY_SERVER,
+  type AdminInput,
+  type AdminStudent,
+  type AdminTeam,
+  type AdminUser,
+  type AuditEntry,
+  type FinalistBoard,
+  type FinalistSummary,
+  type NominationInput,
+  type Page,
+  type PublishResult,
+  type StatusCounts,
+  type Stats,
+  type StudentQuery,
+  type TeamQuery,
+  type TeamSummary,
 } from "../admin-types";
 import { getMockEmail } from "../auth/session";
 import { categories, departments } from "../content";
-import { finalistQuota } from "../rules";
+import { finalistQuota, TEAM_MIN_SIZE } from "../rules";
 import type { ParticipantType, TeamStatus } from "../types";
 import { ApiError, DEFAULT_PAGE_SIZE, type AdminApi } from "./contract";
 import { createSeed, MOCK_DB_VERSION, type MockDb, type StudentRecord } from "./seed";
@@ -82,10 +83,28 @@ function log(db: MockDb, entry: Omit<AuditEntry, "id" | "at">) {
   db.audit.push({ id: `a-${String(db.seq).padStart(4, "0")}`, at: now(db), ...entry });
 }
 
+/**
+ * Like the backend's SUPER_ADMIN_EMAILS setting: super admins that exist without an admins row.
+ * They are listed first with addedBy "server configuration" and cannot be removed.
+ */
+const CONFIGURED_SUPER_ADMINS = ["innotech.admin@kiet.edu"];
+
+function configuredAdmins(db: MockDb): AdminUser[] {
+  const known = new Set(db.admins.map((a) => a.email.toLowerCase()));
+  return CONFIGURED_SUPER_ADMINS.filter((email) => !known.has(email)).map((email) => ({
+    email,
+    name: email.split("@")[0],
+    role: "super_admin",
+    department: null,
+    addedAt: null,
+    addedBy: CONFIGURED_BY_SERVER,
+  }));
+}
+
 function actor(db: MockDb): AdminUser {
   const email = getMockEmail();
   if (!email) throw new ApiError(401, "You are not signed in.");
-  const admin = db.admins.find((a) => a.email.toLowerCase() === email.toLowerCase());
+  const admin = [...configuredAdmins(db), ...db.admins].find((a) => a.email.toLowerCase() === email.toLowerCase());
   if (!admin) throw new ApiError(403, `${email} is not an InnoTech'26 admin.`);
   return admin;
 }
@@ -434,6 +453,11 @@ export const mockApi: AdminApi = {
     if (team.status !== "withdrawn" && team.status !== "disqualified") {
       throw new ApiError(409, "Only withdrawn or disqualified teams can be restored.");
     }
+    // Members of a withdrawn team may have left to join other teams (same check as the backend).
+    const leaderStillIn = team.members.some((m) => m.userId === team.leaderId);
+    if (!leaderStillIn || (team.submittedAt && team.members.length < TEAM_MIN_SIZE)) {
+      throw new ApiError(409, "Members have left this team since it was withdrawn, so it cannot be restored.");
+    }
     const status: TeamStatus = team.submittedAt ? "submitted" : "draft";
     return setStatus(db, admin, team, status, "team.restored", `Restored to ${status}. Reason: ${text}`);
   },
@@ -537,7 +561,7 @@ export const mockApi: AdminApi = {
     await delay();
     const db = load();
     requireSuper(actor(db), "manage admins");
-    return clone(db.admins);
+    return clone([...configuredAdmins(db), ...db.admins]);
   },
 
   async addAdmin(input: AdminInput) {
@@ -553,7 +577,9 @@ export const mockApi: AdminApi = {
     if (input.role === "admin" && (!input.department || !departments.includes(input.department))) {
       throw new ApiError(422, "Choose the department this admin manages.");
     }
-    if (db.admins.some((a) => a.email.toLowerCase() === email)) throw new ApiError(409, `${email} is already an admin.`);
+    if ([...configuredAdmins(db), ...db.admins].some((a) => a.email.toLowerCase() === email)) {
+      throw new ApiError(409, `${email} is already an admin.`);
+    }
     const created: AdminUser = {
       email,
       name,
@@ -578,9 +604,12 @@ export const mockApi: AdminApi = {
     const db = load();
     const admin = actor(db);
     requireSuper(admin, "manage admins");
+    if (email.toLowerCase() === admin.email.toLowerCase()) throw new ApiError(409, "You cannot remove your own admin access.");
+    if (configuredAdmins(db).some((a) => a.email === email.toLowerCase())) {
+      throw new ApiError(409, "This super admin is set in the server configuration and cannot be removed here.");
+    }
     const target = db.admins.find((a) => a.email.toLowerCase() === email.toLowerCase());
     if (!target) throw new ApiError(404, "No admin with this email exists.");
-    if (target.email.toLowerCase() === admin.email.toLowerCase()) throw new ApiError(409, "You cannot remove your own admin access.");
     if (target.role === "super_admin" && !db.admins.some((a) => a !== target && a.role === "super_admin")) {
       throw new ApiError(409, "At least one super admin must remain.");
     }

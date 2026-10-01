@@ -1,0 +1,57 @@
+# Runs on the EC2 instance in /opt/innotech. deploy.sh uploads it; remote/update.sh starts it.
+# Only Caddy is reachable from outside; the API and PostgreSQL stay on the internal Docker network.
+name: innotech
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: innotech
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?}
+      POSTGRES_DB: innotech
+    # Sized for a 4 GB instance shared with the API.
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "effective_cache_size=1536MB", "-c", "work_mem=8MB", "-c", "max_connections=100"]
+    shm_size: 256m
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "innotech"]
+      interval: 5s
+      retries: 20
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?}
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://innotech:${DB_PASSWORD}@db:5432/innotech
+    depends_on:
+      db: { condition: service_healthy }
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      API_HOSTS: ${API_HOSTS:?}
+      PORTAL_HOSTS: ${PORTAL_HOSTS:?}
+      ADMIN_HOSTS: ${ADMIN_HOSTS:?}
+    volumes:
+      # The folder, not the file: replacing a single mounted file leaves the container on the old copy.
+      - ./caddy:/etc/caddy:ro
+      - ./sites:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

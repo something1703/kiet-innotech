@@ -9,7 +9,7 @@ from sqlalchemy import text
 from .config import get_settings
 from .db import get_engine
 from .errors import register_error_handlers
-from .routers import admin, dev, students
+from .routers import admin, auth, dev, students
 
 
 def create_app() -> FastAPI:
@@ -53,9 +53,10 @@ def create_app() -> FastAPI:
             connection.execute(text("SELECT 1"))
         return {"status": "ok"}
 
+    app.include_router(auth.router)
     app.include_router(students.router)
     app.include_router(admin.router)
-    if settings.environment == "development" and settings.dev_jwt_secret:
+    if settings.environment == "development" and settings.dev_sign_in:
         app.include_router(dev.router)
     return app
 

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { draftKeys } from "@/lib/drafts";
+import { accountName } from "@/lib/format";
 import { useRegistrationState } from "@/lib/registration";
 import { Notice } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
@@ -17,15 +19,15 @@ export default function OnboardingPage() {
 
   const save = async (input: Parameters<typeof api.saveProfile>[0]) => {
     const saved = await run(() => api.saveProfile(input));
-    if (saved) {
-      await refresh();
-      router.replace("/dashboard");
-    }
+    if (!saved) return false;
+    await refresh();
+    router.replace("/dashboard");
+    return true;
   };
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeading eyebrow="Step 1 of 4" title={`Welcome, ${me.name.split(" ")[0] || "student"}`}>
+      <PageHeading eyebrow="Step 1 of 4" title={`Welcome, ${accountName(me.name, me.email).split(" ")[0] || "student"}`}>
         Tell us about yourself. Your team leader will use your email to add you to their team, and these details go on your certificate.
       </PageHeading>
 
@@ -41,7 +43,16 @@ export default function OnboardingPage() {
       )}
 
       <Panel>
-        <ProfileForm email={me.email} defaultName={me.name} profile={null} submitLabel="Save and continue" onSubmit={save} pending={pending} error={error} />
+        <ProfileForm
+          email={me.email}
+          defaultName={me.name}
+          profile={null}
+          submitLabel="Save and continue"
+          onSubmit={save}
+          draftKey={draftKeys.profile(me.email)}
+          pending={pending}
+          error={error}
+        />
       </Panel>
     </div>
   );

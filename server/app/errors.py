@@ -2,10 +2,11 @@
 
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DataError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,26 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse({"detail": detail}, status_code=422)
 
     @app.exception_handler(OperationalError)
-    async def database_unavailable(_: Request, exc: OperationalError) -> JSONResponse:
-        logger.exception("Database error", exc_info=exc)
+    @app.exception_handler(PoolTimeoutError)
+    async def database_unavailable(_: Request, exc: Exception) -> JSONResponse:
+        # Also raised when every pooled connection is busy for longer than the pool timeout.
+        logger.exception("Database unavailable", exc_info=exc)
         return JSONResponse({"detail": "The service is busy. Please try again in a moment."}, status_code=503)
 
-    @app.exception_handler(Exception)
-    async def unexpected(_: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled error", exc_info=exc)
-        return JSONResponse({"detail": "Something went wrong. Please try again."}, status_code=500)
+    @app.exception_handler(DataError)
+    async def unstorable_input(_: Request, exc: DataError) -> JSONResponse:
+        logger.warning("Rejected input the database cannot store: %s", exc.orig)
+        return JSONResponse(
+            {"detail": "Some of the text contains characters that cannot be saved. Please check it and try again."},
+            status_code=422,
+        )
+
+    @app.middleware("http")
+    async def unexpected(request: Request, call_next) -> Response:
+        # A middleware rather than an Exception handler: FastAPI runs that handler outside CORSMiddleware, so the
+        # browser would see a CORS failure instead of this message. main.py adds CORS after this, around it.
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            logger.exception("Unhandled error", exc_info=exc)
+            return JSONResponse({"detail": "Something went wrong. Please try again."}, status_code=500)

@@ -9,6 +9,8 @@ export const event = {
   tagline: "Think Big, Build Smart, Act Sustainable",
   theme: "Building an Innovative, Secure and Sustainable Viksit Bharat @2047",
   finaleDate: "2026-10-30T09:00:00+05:30",
+  /** After this the landing page says the event has concluded. */
+  finaleEndDate: "2026-10-30T23:59:59+05:30",
   finaleLabel: "30 October 2026",
   venue: "KIET Deemed to be University, Delhi-NCR, Ghaziabad",
   organiser: "Department of Information Technology & CSE (Cyber Security)",
@@ -499,14 +501,14 @@ export const attractions = [
 ] as const;
 
 export const gallery = [
-  { src: "/images/kiet/campus-walkway.png", alt: "Covered walkway through the KIET campus gardens", wide: true },
+  { src: "/images/kiet/campus-walkway.jpg", alt: "Covered walkway through the KIET campus gardens", wide: true },
   { src: "/images/kiet/infra-2.webp", alt: "KIET academic block surrounded by trees" },
-  { src: "/images/kiet/ai-skills-lab.webp", alt: "Students working in the AI Skills Lab", wide: true },
+  { src: "/images/kiet/ai-skills-lab.jpg", alt: "Students working in the AI Skills Lab", wide: true },
   { src: "/images/kiet/auditorium.webp", alt: "Students attending an event in the KIET auditorium" },
-  { src: "/images/kiet/library.webp", alt: "Students studying in the KIET library" },
+  { src: "/images/kiet/library.jpg", alt: "Students studying in the KIET library" },
   { src: "/images/kiet/infra-3.webp", alt: "Aerial view of the lawns between KIET buildings" },
   { src: "/images/kiet/seminar-hall.webp", alt: "Seminar in progress at the KIET CRPC hall" },
-  { src: "/images/kiet/infra-1.webp", alt: "Palm-lined courtyard on the KIET campus", wide: true },
+  { src: "/images/kiet/infra-1.jpg", alt: "Palm-lined courtyard on the KIET campus", wide: true },
   { src: "/images/kiet/sports.webp", alt: "Students playing cricket on the KIET ground" },
 ];
 

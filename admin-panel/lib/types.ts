@@ -87,9 +87,19 @@ export type Team = {
 
 export type TeamInput = Pick<Team, "name" | "category" | "domain" | "projectTitle" | "abstract">;
 
+export type RegistrationState = "upcoming" | "open" | "closed";
+
+/** The registration window as the server sees it. The server is the authority; the browser's clock is not. */
+export type RegistrationWindow = {
+  state: RegistrationState;
+  opens: string;
+  closes: string;
+};
+
 /** The signed-in person, before or after they complete their profile. */
 export type Me = {
   email: string;
   name: string;
   profile: Profile | null;
+  registration: RegistrationWindow;
 };

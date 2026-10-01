@@ -1,17 +1,18 @@
 """
-Development only: issues signed test tokens so the frontends can run against a local backend without
-Cognito. main.py registers this router only when ENVIRONMENT=development and DEV_JWT_SECRET is set.
+Development only: signs anyone in without Google, so the frontends can run against a local backend.
+main.py registers this router only when ENVIRONMENT=development and DEV_SIGN_IN=true.
 """
 
-import time
 from typing import Annotated
 
-import jwt
 from fastapi import APIRouter, Depends
 from pydantic import EmailStr, Field
+from sqlalchemy.orm import Session
 
+from ..auth import App, Identity, sign_in
 from ..config import Settings, get_settings
-from ..schemas import Input
+from ..db import get_db
+from ..schemas import Input, SessionOut
 
 router = APIRouter(prefix="/dev", tags=["development"])
 
@@ -19,13 +20,13 @@ router = APIRouter(prefix="/dev", tags=["development"])
 class DevTokenInput(Input):
     email: EmailStr
     name: str = Field(min_length=1, max_length=120)
+    app: App = "portal"
 
 
 @router.post("/token")
-def dev_token(data: DevTokenInput, settings: Annotated[Settings, Depends(get_settings)]) -> dict[str, str | int]:
-    email = str(data.email).lower()
-    expires_in = 8 * 3600
-    claims = {"email": email, "email_verified": True, "name": data.name, "sub": f"dev-{email}", "exp": int(time.time()) + expires_in}
-    if settings.cognito_client_ids:
-        claims["aud"] = settings.cognito_client_ids[0]
-    return {"id_token": jwt.encode(claims, settings.dev_jwt_secret, algorithm="HS256"), "expires_in": expires_in}
+def dev_token(
+    data: DevTokenInput,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SessionOut:
+    return SessionOut(**sign_in(db, Identity(email=str(data.email).lower(), name=data.name), data.app, settings))

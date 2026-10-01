@@ -1,23 +1,33 @@
 /**
  * Where the signed-in session lives.
  * Mock mode: the chosen demo admin's email in localStorage.
- * Live mode: Cognito tokens in sessionStorage (cleared when the tab closes).
+ * Live mode: our backend's session (token, expiry, email, name) in sessionStorage (cleared when the tab closes).
  */
 
-export const API_MODE: "mock" | "live" = process.env.NEXT_PUBLIC_API_MODE === "live" ? "live" : "mock";
+/** Mock data only when explicitly asked for; anything else (including unset) talks to the real backend. */
+export const API_MODE: "mock" | "live" = process.env.NEXT_PUBLIC_API_MODE === "mock" ? "mock" : "live";
 
 /** Local development against the real backend: the demo picker signs in with tokens from its /dev/token endpoint. */
 export const DEV_SIGN_IN = API_MODE === "live" && process.env.NEXT_PUBLIC_DEV_SIGN_IN === "true";
 
 const MOCK_SESSION_KEY = "innotech-admin-session";
-const TOKENS_KEY = "innotech-admin-tokens";
+const SESSION_KEY = "innotech-admin-auth";
 
-export type Tokens = {
-  idToken: string;
-  accessToken: string;
-  refreshToken: string | null;
-  /** Epoch milliseconds. */
-  expiresAt: number;
+/** What POST /auth/google (and /dev/token, and later email sign-in) returns. */
+export type SessionResponse = {
+  token: string;
+  /** ISO 8601. */
+  expires_at: string;
+  email: string;
+  name: string;
+};
+
+export type Session = {
+  token: string;
+  /** ISO 8601, as the server sent it. */
+  expiresAt: string;
+  email: string;
+  name: string;
 };
 
 function read(storage: () => Storage, key: string) {
@@ -48,56 +58,56 @@ export function setMockEmail(email: string | null) {
   write(local, MOCK_SESSION_KEY, email);
 }
 
-export function getTokens(): Tokens | null {
-  const raw = read(session, TOKENS_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Tokens;
-  } catch {
-    return null;
-  }
+function isUsable(value: unknown): value is Session {
+  if (!value || typeof value !== "object") return false;
+  const { token, expiresAt, email, name } = value as Record<string, unknown>;
+  return (
+    typeof token === "string" &&
+    token.length > 0 &&
+    typeof expiresAt === "string" &&
+    Date.parse(expiresAt) > Date.now() &&
+    typeof email === "string" &&
+    typeof name === "string"
+  );
 }
 
-export function setTokens(tokens: Tokens | null) {
-  write(session, TOKENS_KEY, tokens ? JSON.stringify(tokens) : null);
+/** The stored live session, or null when there is none or it is malformed or expired (it is then removed). */
+export function getSession(): Session | null {
+  const raw = read(session, SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isUsable(parsed)) return parsed;
+  } catch {
+    // Malformed: treat as signed out.
+  }
+  write(session, SESSION_KEY, null);
+  return null;
+}
+
+/** Stores the response of any sign-in endpoint. Every sign-in method ends here. */
+export function startSession(response: SessionResponse) {
+  const next = {
+    token: response?.token,
+    expiresAt: response?.expires_at,
+    email: response?.email,
+    name: response?.name,
+  };
+  if (!isUsable(next)) throw new Error("The server sent an invalid sign-in response. Please try again.");
+  write(session, SESSION_KEY, JSON.stringify(next));
 }
 
 export function hasSession() {
-  return API_MODE === "mock" ? getMockEmail() !== null : getTokens() !== null;
+  return API_MODE === "mock" ? getMockEmail() !== null : getSession() !== null;
 }
 
 export function clearSession() {
   setMockEmail(null);
-  setTokens(null);
-}
-
-/** Reads the email claim from an ID token without verifying it (the backend verifies). */
-export function emailFromIdToken(idToken: string): string | null {
-  try {
-    const payload = idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = JSON.parse(atob(payload.padEnd(payload.length + ((4 - (payload.length % 4)) % 4), "=")));
-    return typeof json.email === "string" ? json.email : null;
-  } catch {
-    return null;
-  }
+  write(session, SESSION_KEY, null);
 }
 
 /** The email of whoever is signed in, for the "not authorised" screen. */
 export function signedInEmail() {
   if (API_MODE === "mock") return getMockEmail();
-  const tokens = getTokens();
-  return tokens ? emailFromIdToken(tokens.idToken) : null;
-}
-
-/** Live mode with DEV_SIGN_IN: asks the local backend for a development token. */
-export async function devSignIn(email: string, name: string) {
-  const baseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  const response = await fetch(`${baseUrl}/dev/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, name }),
-  });
-  if (!response.ok) throw new Error("The backend refused the development sign-in. Is it running with ENVIRONMENT=development?");
-  const data = await response.json();
-  setTokens({ idToken: data.id_token, accessToken: "", refreshToken: null, expiresAt: Date.now() + data.expires_in * 1000 });
+  return getSession()?.email ?? null;
 }

@@ -1,7 +1,6 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { Reveal } from "@/components/ui/Reveal";
+import { RegisterCta, RegistrationNote } from "./RegisterCta";
 
 export function CallToAction() {
   return (
@@ -23,16 +22,13 @@ export function CallToAction() {
             Have an idea that can change things?
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-slate-300 sm:text-lg">
-            Registrations are open from 3 to 12 October 2026. It is free, and it takes just a few minutes.
+            <RegistrationNote />
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link
-              href="/register"
+            <RegisterCta
+              label="Register Now"
               className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 px-8 py-4 font-semibold text-white shadow-xl shadow-accent-500/30 transition hover:-translate-y-0.5 hover:bg-accent-600"
-            >
-              Register Now
-              <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-            </Link>
+            />
             <a
               href="#rules"
               className="inline-flex items-center justify-center rounded-full border border-white/25 px-8 py-4 font-semibold text-white transition hover:bg-white/10"

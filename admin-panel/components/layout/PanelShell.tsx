@@ -21,7 +21,9 @@ const nav = [
 ];
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  // The static export uses trailing slashes ("/teams/"), so compare without them.
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
 }
 
 function scopeLabel(admin: AdminUser) {
@@ -144,11 +146,13 @@ export function PanelShell({ children }: { children: ReactNode }) {
   const { state, signOut, refresh } = useAuth();
   const router = useRouter();
 
+  const signedOutReason = state.status === "signed_out" ? (state.reason ?? null) : undefined;
   useEffect(() => {
-    if (state.status !== "signed_out") return;
+    if (signedOutReason === undefined) return;
     const next = `${window.location.pathname}${window.location.search}`;
-    router.replace(next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`);
-  }, [state.status, router]);
+    // After choosing "Sign out" there is nothing to come back to.
+    router.replace(next === "/" || signedOutReason === "signed_out" ? "/login" : `/login?next=${encodeURIComponent(next)}`);
+  }, [signedOutReason, router]);
 
   if (state.status === "signed_in") {
     return (
@@ -158,7 +162,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (state.status === "unauthorised") return <NotAuthorised email={state.email} onSignOut={signOut} />;
+  if (state.status === "unauthorised") return <NotAuthorised email={state.email} message={state.message} onSignOut={signOut} />;
 
   if (state.status === "error") {
     return (

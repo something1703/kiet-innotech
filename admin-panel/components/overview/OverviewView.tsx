@@ -8,6 +8,7 @@ import { categories, timeline } from "@/lib/content";
 import { categoryTitle, formatDate, formatDateTime, formatNumber, typeShortLabels } from "@/lib/format";
 import { REGISTRATION_CLOSES, REGISTRATION_OPENS, registrationState } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
+import { teamHref } from "@/lib/routes";
 import { AuditList } from "@/components/audit/AuditList";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading, Notice } from "@/components/ui/Notice";
@@ -210,7 +211,7 @@ export function OverviewView() {
                   {data.recentSubmissions.map((team) => (
                     <li key={team.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
                       <div className="min-w-0">
-                        <Link href={`/teams/${team.id}`} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
+                        <Link href={teamHref(team.id)} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
                           {team.name}
                         </Link>
                         <p className="text-xs text-muted">

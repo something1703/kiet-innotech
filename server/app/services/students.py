@@ -7,7 +7,8 @@ constraints back up the rules that span teams (one team per student, unique team
 """
 
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -19,17 +20,25 @@ from ..db import violated_constraint
 from ..errors import ApiError
 from ..models import Invitation, Profile, Team, TeamMember, User, utcnow
 from ..schemas import ProfileInput, TeamInput
-from . import audit
+from . import audit, limits
 
 # ---------- Shared checks ----------
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _day(moment: datetime) -> str:
+    local = moment.astimezone(IST)
+    return f"{local.day} {local:%B %Y}"
 
 
 def require_open(settings: Settings) -> None:
     state = rules.registration_state(settings)
     if state == "upcoming":
-        raise ApiError("Registration opens on 3 October 2026.", 403)
+        raise ApiError(f"Registration opens on {_day(settings.registration_opens)}.", 403)
     if state == "closed":
-        raise ApiError("Registration closed on 12 October 2026. Teams can no longer be changed.", 403)
+        raise ApiError(f"Registration closed on {_day(settings.registration_closes)}. Teams can no longer be changed.", 403)
 
 
 def _locked(statement):
@@ -136,8 +145,10 @@ def save_profile(db: Session, user: User, data: ProfileInput, settings: Settings
             422,
         )
 
+    # Lock the account first: a first save has no profile row to lock yet, and a double click would otherwise race.
+    db.scalar(_locked(select(User.id).where(User.id == user.id)))
     profile = db.scalar(_locked(select(Profile).where(Profile.user_id == user.id)))
-    institution_key = rules.normalise_institution(data.institution)
+    institution_key = rules.institution_key(data.participant_type, data.institution, data.city)
 
     if profile is None:
         require_open(settings)
@@ -425,6 +436,8 @@ def respond(db: Session, user: User, invitation_id: uuid.UUID, accept: bool, set
 def join_with_code(db: Session, user: User, code: str, settings: Settings) -> Team:
     """Joins the team whose leader shared this code, under the same rules as accepting an invitation."""
     require_open(settings)
+    # 32^8 codes cannot be enumerated at this rate, and a real student needs only a couple of tries.
+    limits.hit(f"join:{user.id}", 10, timedelta(minutes=15), "Too many attempts. Check the code with your leader and try again later.")
     join_code = rules.normalise_join_code(code)
     if join_code is None:
         raise ApiError("Enter the 8-character team code your leader shared, e.g. K7PQ-3XM9.", 422)
@@ -434,6 +447,9 @@ def join_with_code(db: Session, user: User, code: str, settings: Settings) -> Te
 
     # Same lock order as accepting an invitation: team, then profile.
     team = _lock_team(db, team_id)
+    if team.join_code != join_code:
+        # The leader reset the code while this request was waiting for the lock.
+        raise ApiError("No team uses this code. Check it with your team leader.", 404)
     profile = require_profile(db, user, lock=True)
     membership = _membership(db, user.id)
     if membership is not None:

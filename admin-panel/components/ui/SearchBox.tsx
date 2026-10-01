@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
+import { MAX_SEARCH_LENGTH } from "@/lib/api";
 
 /**
  * Search input that reports its value after the user pauses typing.
+ * When `value` changes from outside (e.g. a sidebar link clears ?q=), the text follows it.
  * Give it a new `key` to reset it from outside (e.g. "Clear filters").
  */
 export function SearchBox({
@@ -21,10 +23,28 @@ export function SearchBox({
   onSearch: (value: string) => void;
 }) {
   const [text, setText] = useState(value);
+  const [seenValue, setSeenValue] = useState(value);
+  // The last text this box reported, so its own search coming back as `value` is not mistaken for
+  // an outside change (which would overwrite anything typed since).
+  const [reported, setReported] = useState<string | null>(null);
+
+  if (value !== seenValue) {
+    setSeenValue(value);
+    setReported(null);
+    if (value !== reported) setText(value);
+  }
+
+  function report(next: string) {
+    setReported(next);
+    onSearch(next);
+  }
 
   useEffect(() => {
     if (text.trim() === value) return;
-    const timer = setTimeout(() => onSearch(text.trim()), 300);
+    const timer = setTimeout(() => {
+      setReported(text.trim());
+      onSearch(text.trim());
+    }, 300);
     return () => clearTimeout(timer);
   }, [text, value, onSearch]);
 
@@ -41,9 +61,10 @@ export function SearchBox({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") onSearch(text.trim());
+            if (e.key === "Enter") report(text.trim());
           }}
           placeholder={placeholder}
+          maxLength={MAX_SEARCH_LENGTH}
           className="block h-10 w-full rounded-xl border-0 bg-white pl-9 pr-3 text-sm text-ink ring-1 ring-inset ring-line placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>

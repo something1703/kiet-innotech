@@ -2,8 +2,8 @@ import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { KietLogo } from "./Brand";
 
-/** Shown when someone signs in with a Google account that is not on the admin list. */
-export function NotAuthorised({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+/** Shown when the signed-in account is not (or is no longer) on the admin list. `message` is the server's explanation. */
+export function NotAuthorised({ email, message, onSignOut }: { email: string | null; message?: string; onSignOut: () => void }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <section aria-labelledby="not-authorised-title" className="w-full max-w-md rounded-2xl bg-white p-6 ring-1 ring-line sm:p-8">
@@ -25,6 +25,9 @@ export function NotAuthorised({ email, onSignOut }: { email: string | null; onSi
           )}{" "}
           If you are an organiser, ask the super admin to add this email. Students should use the student portal instead.
         </p>
+        {message && (
+          <p className="mt-3 border-l-4 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-800">{message}</p>
+        )}
         <div className="mt-6 flex flex-wrap gap-2">
           <Button onClick={onSignOut}>Sign in with another account</Button>
         </div>

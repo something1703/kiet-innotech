@@ -7,12 +7,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import emails
+from .. import emails, rules
 from ..auth import CurrentUser
 from ..config import Settings, get_settings
 from ..db import get_db
 from ..models import Profile
-from ..schemas import InvitationOut, InviteInput, JoinInput, MeOut, ProfileInput, ProfileOut, TeamInput, TeamOut
+from ..schemas import InvitationOut, InviteInput, JoinInput, MeOut, ProfileInput, ProfileOut, RegistrationOut, TeamInput, TeamOut
 from ..services import students
 from ..services.serializers import invitation_out, profile_out, team_out
 
@@ -27,9 +27,12 @@ def no_content() -> Response:
 
 
 @router.get("/me")
-def get_me(user: CurrentUser, db: Db) -> MeOut:
+def get_me(user: CurrentUser, db: Db, settings: AppSettings) -> MeOut:
     profile = db.get(Profile, user.id)
-    return MeOut(email=user.email, name=user.name, profile=profile_out(profile, user.email) if profile else None)
+    registration = RegistrationOut(
+        state=rules.registration_state(settings), opens=settings.registration_opens, closes=settings.registration_closes
+    )
+    return MeOut(email=user.email, name=user.name, profile=profile_out(profile, user.email) if profile else None, registration=registration)
 
 
 @router.put("/me/profile")

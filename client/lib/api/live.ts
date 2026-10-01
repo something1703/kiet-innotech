@@ -1,13 +1,16 @@
 /**
- * Client for the FastAPI backend (NEXT_PUBLIC_API_MODE=live).
+ * Client for the FastAPI backend (the default, unless NEXT_PUBLIC_API_MODE=mock).
  *
- * Every request sends the Cognito ID token as `Authorization: Bearer <token>`. The server verifies it,
- * reads the email from it and enforces the rules in lib/rules.ts. JSON is snake_case on the wire and
- * camelCase here. Errors return `{ "detail": "<message for the student>" }` with a 4xx status.
+ * Every request sends our session token (from POST /auth/google, see lib/auth/session.ts) as
+ * `Authorization: Bearer <token>`. The server enforces the rules in lib/rules.ts. JSON is snake_case on the wire
+ * and camelCase here. Errors return `{ "detail": "<message for the student>" }` with a 4xx status.
+ * A 401 means the session is over: it is cleared here and the portal sends the student to /login.
  *
  * Endpoints this client expects (all under NEXT_PUBLIC_API_URL):
  *
- *   GET    /me                                  -> Me            (profile is null until onboarding)
+ *   POST   /auth/google       { credential, app } -> { token, expires_at, email, name }   (no Authorization)
+ *
+ *   GET    /me                                  -> Me            (profile is null until onboarding; includes registration)
  *   PUT    /me/profile        ProfileInput      -> Profile       (creates or updates)
  *   GET    /me/team                             -> Team | null
  *   GET    /me/invitations                      -> Invitation[]  (pending, addressed to me)
@@ -26,13 +29,10 @@
  *   POST   /invitations/{id}/accept             -> 204           (invitee)
  *   POST   /invitations/{id}/decline            -> 204           (invitee)
  */
-import { getIdToken } from "../auth/session";
+import { endSession, getToken } from "../auth/session";
 import type { Invitation, Me, Profile, Team } from "../types";
+import { send, type Json } from "./http";
 import { ApiError, type StudentApi } from "./types";
-
-const baseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 const toCamel = (key: string) => key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 const toSnake = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -46,30 +46,22 @@ function convertKeys(value: Json, convert: (key: string) => string): Json {
 }
 
 async function request<T>(method: string, path: string, body?: object): Promise<T> {
-  const token = await getIdToken();
-  if (!token) throw new ApiError("Please sign in again.", 401);
+  const token = getToken();
+  if (!token) {
+    // Expired while the page was open.
+    endSession();
+    throw new ApiError("Your session has ended. Please sign in again.", 401);
+  }
 
-  let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(convertKeys(body as Json, toSnake)) : undefined,
-    });
-  } catch {
-    throw new ApiError("Could not reach the server. Check your connection and try again.", 0);
+    const data = await send(method, path, { token, body: body ? convertKeys(body as Json, toSnake) : undefined });
+    return (data === undefined ? undefined : convertKeys(data, toCamel)) as T;
+  } catch (err) {
+    // One place for every call: the session is over, so clear it. PortalProvider sees the change and sends
+    // the student to /login?next=<this page>. Forms keep their drafts in sessionStorage until they return.
+    if (err instanceof ApiError && err.status === 401) endSession();
+    throw err;
   }
-
-  if (response.status === 204) return undefined as T;
-  const data = (await response.json().catch(() => null)) as Json;
-  if (!response.ok) {
-    const detail = data && typeof data === "object" && !Array.isArray(data) ? data.detail : null;
-    throw new ApiError(typeof detail === "string" ? detail : "Something went wrong. Please try again.", response.status);
-  }
-  return convertKeys(data, toCamel) as T;
 }
 
 export const liveApi: StudentApi = {

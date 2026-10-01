@@ -18,4 +18,4 @@ select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101", "S105", "S106", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "conftest"]
+known-first-party = ["app", "conftest", "test_concurrency"]

@@ -47,7 +47,7 @@ def main() -> None:
         for email, name, (kind, institution, city, course), department, year, roll, phone in STUDENTS:
             user = db.scalar(select(User).where(User.email == email))
             if user is None:
-                user = User(email=email, name=name, cognito_sub=f"dev-{email}")
+                user = User(email=email, name=name)
                 db.add(user)
                 db.flush()
             users[email] = user
@@ -59,7 +59,7 @@ def main() -> None:
                         phone=phone,
                         participant_type=kind,
                         institution=institution,
-                        institution_key=rules.normalise_institution(institution),
+                        institution_key=rules.institution_key(kind, institution, city),
                         city=city,
                         department=department,
                         course=course,
@@ -83,7 +83,7 @@ def main() -> None:
                 ),
                 participant_type="kiet",
                 institution=rules.KIET_INSTITUTION,
-                institution_key=rules.normalise_institution(rules.KIET_INSTITUTION),
+                institution_key=rules.institution_key("kiet", rules.KIET_INSTITUTION, rules.KIET_CITY),
                 department="IT",
                 route="department",
                 leader_id=leader.id,

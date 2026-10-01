@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { AuditEntry } from "@/lib/admin-types";
 import { auditLabels, formatDateTime } from "@/lib/format";
+import { teamHref } from "@/lib/routes";
 import { Pill, type PillTone } from "@/components/ui/Pill";
 
 const tones: Partial<Record<string, PillTone>> = {
@@ -31,7 +32,7 @@ export function AuditList({ entries, showTeam = true }: { entries: AuditEntry[];
               {/* Unknown (future) actions fall back to the raw action string. */}
               <Pill tone={tones[entry.action] ?? "slate"}>{(auditLabels as Record<string, string>)[entry.action] ?? entry.action}</Pill>
               {showTeam && entry.teamId && entry.teamCode && (
-                <Link href={`/teams/${entry.teamId}`} className="text-xs font-semibold text-brand-700 hover:underline">
+                <Link href={teamHref(entry.teamId)} className="text-xs font-semibold text-brand-700 hover:underline">
                   {entry.teamCode}
                 </Link>
               )}

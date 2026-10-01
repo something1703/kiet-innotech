@@ -1,8 +1,8 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight, CalendarDays, MapPin, Ticket } from "lucide-react";
+import { CalendarDays, MapPin, Ticket } from "lucide-react";
 import { event } from "@/lib/content";
 import { Countdown } from "./Countdown";
+import { RegisterCta } from "./RegisterCta";
 
 const facts = [
   { icon: CalendarDays, label: event.finaleLabel },
@@ -15,7 +15,7 @@ export function Hero() {
     <section className="relative isolate overflow-hidden bg-navy-950">
       {/* Background photo with a slow zoom-out */}
       <Image
-        src="/images/kiet/campus-walkway.png"
+        src="/images/kiet/campus-walkway.jpg"
         alt=""
         fill
         priority
@@ -37,8 +37,8 @@ export function Hero() {
           <Image
             src="/images/brand/innotech-logo.png"
             alt=""
-            width={1536}
-            height={476}
+            width={1152}
+            height={357}
             priority
             className="mb-8 w-full max-w-xl animate-fade-up [animation-delay:120ms] drop-shadow-[0_10px_40px_rgb(22_169_221/0.35)]"
           />
@@ -56,13 +56,10 @@ export function Hero() {
           </p>
 
           <div className="mt-8 flex animate-fade-up flex-col gap-3 [animation-delay:480ms] sm:flex-row">
-            <Link
-              href="/register"
+            <RegisterCta
+              label="Register Your Team"
               className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 px-7 py-3.5 font-semibold text-white shadow-xl shadow-accent-500/30 transition hover:-translate-y-0.5 hover:bg-accent-600"
-            >
-              Register Your Team
-              <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-            </Link>
+            />
             <a
               href="#categories"
               className="inline-flex items-center justify-center rounded-full border border-white/20 px-7 py-3.5 font-semibold text-white transition hover:border-white/50 hover:bg-white/5"
@@ -82,12 +79,7 @@ export function Hero() {
         </div>
 
         <div className="animate-float rounded-3xl border border-white/10 bg-navy-900/60 p-6 shadow-2xl backdrop-blur-md sm:p-8">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand-300">
-            Grand Finale begins in
-          </p>
-          <div className="mt-5">
-            <Countdown to={event.finaleDate} />
-          </div>
+          <Countdown to={event.finaleDate} endsAt={event.finaleEndDate} />
 
           <div className="mt-8 space-y-4 border-t border-white/10 pt-6">
             <Milestone label="Registrations" value="3 - 12 Oct 2026" />

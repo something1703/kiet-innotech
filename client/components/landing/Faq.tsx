@@ -44,9 +44,12 @@ export function Faq() {
                       />
                     </button>
                   </h3>
-                  {/* grid-rows trick animates height between 0 and auto */}
+                  {/* grid-rows trick animates height between 0 and auto. Closed answers are inert, so screen readers
+                      and the Tab key skip them. */}
                   <div
                     id={panelId}
+                    inert={!isOpen}
+                    aria-hidden={!isOpen}
                     className={`grid transition-[grid-template-rows] duration-300 ${
                       isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                     }`}

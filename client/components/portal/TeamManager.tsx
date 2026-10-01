@@ -5,10 +5,11 @@ import { useState, type FormEvent } from "react";
 import { Check, Copy, Mail, Pencil, RefreshCw, Send, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { categories } from "@/lib/content";
+import { draftKeys, hasDraft } from "@/lib/drafts";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useRegistrationState } from "@/lib/registration";
 import { TEAM_MAX_SIZE, openSlots, submissionChecks, yearLabel } from "@/lib/rules";
-import type { Team } from "@/lib/types";
+import type { RegistrationState, Team } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button, Field, Input, Notice, Pill } from "@/components/ui/form";
 import { Panel } from "./PageHeading";
@@ -64,14 +65,16 @@ export function TeamManager({ team }: { team: Team }) {
   const isLeader = team.leaderId === me.profile!.userId;
   const editable = team.status === "draft" && registration === "open";
   const canEdit = isLeader && editable;
-  const [editing, setEditing] = useState(false);
+  const draftKey = draftKeys.team(me.email, team.id);
+  // Reopen the form if unsaved changes were kept, e.g. after signing in again.
+  const [editing, setEditing] = useState(() => canEdit && hasDraft(draftKey));
   const details = useAction();
 
   const saveDetails = async (input: Parameters<typeof api.updateTeam>[1]) => {
-    if (await details.run(() => api.updateTeam(team.id, input))) {
-      await refresh();
-      setEditing(false);
-    }
+    if (!(await details.run(() => api.updateTeam(team.id, input)))) return false;
+    await refresh();
+    setEditing(false);
+    return true;
   };
 
   const onLeft = async () => {
@@ -105,6 +108,7 @@ export function TeamManager({ team }: { team: Team }) {
               memberYears={team.members.map((m) => m.year)}
               submitLabel="Save changes"
               onSubmit={saveDetails}
+              draftKey={draftKey}
               pending={details.pending}
               error={details.error}
               onCancel={() => setEditing(false)}
@@ -140,7 +144,7 @@ export function TeamManager({ team }: { team: Team }) {
 
       <div className="min-w-0 space-y-6 lg:sticky lg:top-40">
         {team.status === "draft" && openSlots(team) > 0 && <TeamCodePanel team={team} canReset={canEdit} />}
-        {team.status === "draft" && <SubmitPanel team={team} isLeader={isLeader} editable={editable} />}
+        {team.status === "draft" && <SubmitPanel team={team} isLeader={isLeader} editable={editable} registration={registration} />}
         <TeamFacts team={team} />
         {((team.status === "draft" && editable) || (team.status === "withdrawn" && registration === "open")) && (
           <DangerZone team={team} deletes={isLeader && team.status === "draft"} onDone={onLeft} />
@@ -401,11 +405,11 @@ function TeamCodePanel({ team, canReset }: { team: Team; canReset: boolean }) {
   );
 }
 
-function SubmitPanel({ team, isLeader, editable }: { team: Team; isLeader: boolean; editable: boolean }) {
+function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; isLeader: boolean; editable: boolean; registration: RegistrationState | null }) {
   const { refresh } = usePortal();
   const { run, pending, error, setError } = useAction();
   const [confirming, setConfirming] = useState(false);
-  const checks = submissionChecks(team);
+  const checks = submissionChecks(team, registration);
   const ready = checks.every((check) => check.ok);
 
   const submit = async () => {

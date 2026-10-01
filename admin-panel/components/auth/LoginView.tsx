@@ -3,17 +3,17 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronRight, LoaderCircle, LockKeyhole } from "lucide-react";
-import { demoAdmins } from "@/lib/api/seed";
-import { resetMockData } from "@/lib/api/mock";
+import { demoAdmins } from "@/lib/api/demo-admins";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { cognitoConfigured, safeNext, startSignIn } from "@/lib/auth/cognito";
+import { GOOGLE_CLIENT_ID } from "@/lib/auth/google";
 import { API_MODE, DEV_SIGN_IN } from "@/lib/auth/session";
+import { googleSignIn, safeNext } from "@/lib/auth/sign-in";
 import { event, timeline } from "@/lib/content";
-import { Button } from "@/components/ui/Button";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { Brand, KietLogo } from "@/components/layout/Brand";
 import { NotAuthorised } from "@/components/layout/NotAuthorised";
+import { GoogleButton } from "./GoogleButton";
 
 const demoAccounts = [
   ...demoAdmins.map((admin) => ({
@@ -24,19 +24,8 @@ const demoAccounts = [
   { email: "rohan.verma42@gmail.com", name: "Rohan Verma", scope: "Not an admin · shows the access denied screen" },
 ];
 
-function GoogleMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4">
-      <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.56-5.17 3.56-8.81z" />
-      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.88-3c-1.07.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.95H1.28v3.1A12 12 0 0 0 12 24z" />
-      <path fill="#FBBC05" d="M5.29 14.29a7.2 7.2 0 0 1 0-4.58v-3.1H1.28a12 12 0 0 0 0 10.78l4.01-3.1z" />
-      <path fill="#EA4335" d="M12 4.77c1.76 0 3.34.61 4.59 1.8l3.44-3.44A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.28 6.61l4.01 3.1C6.23 6.88 8.88 4.77 12 4.77z" />
-    </svg>
-  );
-}
-
 export function LoginView() {
-  const { state, signInAsDemo, signOut } = useAuth();
+  const { state, refresh, signInAsDemo, signOut } = useAuth();
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const [pending, setPending] = useState<string | null>(null);
@@ -51,6 +40,7 @@ export function LoginView() {
     return (
       <NotAuthorised
         email={state.email}
+        message={state.message}
         onSignOut={() => {
           setPending(null);
           signOut();
@@ -59,12 +49,16 @@ export function LoginView() {
     );
   }
 
-  async function google() {
+  /** Google returned an ID token: exchange it for our session, then /admin/me decides where to go. */
+  async function google(credential: string) {
     setError(null);
     setPending("google");
     try {
-      await startSignIn(next);
+      await googleSignIn(credential);
+      setPending(null);
+      refresh();
     } catch (err) {
+      // e.g. 403 "not an organiser" from the server.
       setError(errorMessage(err));
       setPending(null);
     }
@@ -113,17 +107,19 @@ export function LoginView() {
             <div className="mt-7 space-y-6">
               {error && <Notice tone="error">{error}</Notice>}
               {state.status === "error" && <Notice tone="error">{state.message}</Notice>}
+              {state.status === "signed_out" && state.reason === "expired" && !error && (
+                <Notice tone="info">Your session has ended. Sign in again to continue.</Notice>
+              )}
 
               {API_MODE === "live" && !DEV_SIGN_IN ? (
-                <>
-                  <Button variant="secondary" className="w-full" onClick={google} pending={pending === "google"} disabled={busy}>
-                    {pending !== "google" && <GoogleMark />}
-                    Sign in with Google
-                  </Button>
-                  {!cognitoConfigured() && (
-                    <Notice tone="warning">Cognito is not configured. Set the NEXT_PUBLIC_COGNITO_* variables.</Notice>
-                  )}
-                </>
+                GOOGLE_CLIENT_ID ? (
+                  <div className="space-y-3">
+                    <GoogleButton onCredential={google} busy={busy} />
+                    {pending === "google" && <Loading label="Signing you in" />}
+                  </div>
+                ) : (
+                  <Notice tone="warning">Google sign-in is not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID.</Notice>
+                )
               ) : (
                 <div>
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-accent-600">
@@ -135,7 +131,7 @@ export function LoginView() {
                       "Signs in through the local backend's development tokens instead of Google."
                     ) : (
                       <>
-                        Mock mode. Google sign-in through Cognito is used when <code className="text-xs">NEXT_PUBLIC_API_MODE=live</code>.
+                        Mock mode (<code className="text-xs">NEXT_PUBLIC_API_MODE=mock</code>). Live builds sign in with Google.
                       </>
                     )}
                   </p>
@@ -170,8 +166,11 @@ export function LoginView() {
                     <button
                       type="button"
                       onClick={() => {
-                        resetMockData();
-                        setResetDone(true);
+                        if (process.env.NEXT_PUBLIC_API_MODE !== "mock") return;
+                        import("@/lib/api/mock").then((mock) => {
+                          mock.resetMockData();
+                          setResetDone(true);
+                        });
                       }}
                       className="font-semibold text-navy-800 underline underline-offset-2 hover:text-accent-600"
                     >

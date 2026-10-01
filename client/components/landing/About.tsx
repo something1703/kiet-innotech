@@ -36,7 +36,7 @@ export function About() {
           <div className="grid grid-cols-5 grid-rows-[auto_auto] gap-4">
             <div className="relative col-span-5 aspect-[16/9] overflow-hidden rounded-3xl sm:col-span-3 sm:row-span-2 sm:aspect-auto">
               <Image
-                src="/images/kiet/ai-skills-lab.webp"
+                src="/images/kiet/ai-skills-lab.jpg"
                 alt="Students working in the KIET AI Skills Lab"
                 fill
                 sizes="(min-width: 1024px) 30vw, (min-width: 640px) 60vw, 100vw"

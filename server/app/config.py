@@ -23,18 +23,18 @@ class Settings(BaseSettings):
     # Browser origins allowed to call the API: the student portal and the admin panel.
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
-    # Amazon Cognito user pool that signs the ID tokens (Google is its identity provider).
-    cognito_region: str = ""
-    cognito_user_pool_id: str = ""
-    # App client IDs whose tokens are accepted (student portal and admin panel may use separate clients).
-    cognito_client_ids: Annotated[list[str], NoDecode] = Field(default_factory=list)
-    # Only accept accounts that signed in through Google, never a username/password user in the pool.
-    require_google_identity: bool = True
-    # Requires Google's email_verified to be mapped onto the Cognito email_verified attribute.
-    require_email_verified: bool = True
+    # Signs our own session tokens (HS256). At least 32 random characters; changing it signs everyone out.
+    session_secret: str = ""
+    # Google OAuth client IDs (Google Cloud Console) whose ID tokens are accepted at sign-in.
+    google_client_ids: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # Google Workspace domain behind @kiet.edu accounts: their ID tokens must carry this "hd" claim.
+    kiet_google_domain: str = "kiet.edu"
+    # Students stay signed in through the registration window; organisers sign in again each day.
+    portal_session_hours: int = 7 * 24
+    admin_session_hours: int = 12
 
-    # Development only: accept HS256 tokens signed with this secret instead of Cognito tokens.
-    dev_jwt_secret: str = ""
+    # Development only: POST /dev/token signs anyone in without Google.
+    dev_sign_in: bool = False
 
     # These accounts are always super admins, so the first admin can sign in and add the others.
     super_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Limits abuse of the invitation emails: invitations a team can send in 24 hours.
     invitations_per_team_per_day: int = 20
 
-    @field_validator("cors_origins", "cognito_client_ids", "super_admin_emails", mode="before")
+    @field_validator("cors_origins", "google_client_ids", "super_admin_emails", mode="before")
     @classmethod
     def split_lists(cls, value: object) -> object:
         return _split(value)
@@ -66,21 +66,27 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def check_safe_for_production(self) -> "Settings":
         if self.environment == "production":
-            if self.dev_jwt_secret:
-                raise ValueError("DEV_JWT_SECRET must not be set in production.")
+            if self.dev_sign_in:
+                raise ValueError("DEV_SIGN_IN must not be set in production.")
             if self.force_registration_open:
                 raise ValueError("FORCE_REGISTRATION_OPEN must not be set in production.")
-            if not (self.cognito_region and self.cognito_user_pool_id and self.cognito_client_ids):
-                raise ValueError("COGNITO_REGION, COGNITO_USER_POOL_ID and COGNITO_CLIENT_IDS are required in production.")
+            if len(self.session_secret) < 32:
+                raise ValueError("SESSION_SECRET must be at least 32 characters in production.")
+            if not self.google_client_ids:
+                raise ValueError("GOOGLE_CLIENT_IDS is required in production.")
             if "*" in self.cors_origins:
                 raise ValueError("CORS_ORIGINS must list the exact frontend origins in production.")
+            # A forgotten EMAIL_BACKEND would silently turn every email into a log line.
+            if "email_backend" not in self.model_fields_set:
+                raise ValueError('EMAIL_BACKEND must be set explicitly in production ("ses", or "log" until SES is ready).')
+        if self.email_backend == "ses" and not self.ses_region:
+            raise ValueError("SES_REGION is required when EMAIL_BACKEND=ses.")
+        if not self.session_secret and self.environment != "production":
+            # Development and tests only: a fixed secret so tokens survive restarts.
+            self.session_secret = "development-only-session-secret-not-for-production"
         if self.registration_opens.tzinfo is None or self.registration_closes.tzinfo is None:
             raise ValueError("Registration dates must include a timezone offset, e.g. +05:30.")
         return self
-
-    @property
-    def cognito_issuer(self) -> str:
-        return f"https://cognito-idp.{self.cognito_region}.amazonaws.com/{self.cognito_user_pool_id}"
 
 
 @lru_cache

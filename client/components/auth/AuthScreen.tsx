@@ -3,18 +3,25 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, CalendarDays, MapPin, Ticket } from "lucide-react";
-import { demoStudents } from "@/lib/api/mock";
-import { apiMode, devSignIn, devSignInEnabled, mockSignIn, startGoogleSignIn, useSession, type Session } from "@/lib/auth/session";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowLeft, CalendarDays, LoaderCircle, MapPin, RefreshCw, Ticket } from "lucide-react";
+import { demoStudents } from "@/lib/api/demo";
+import { ApiError } from "@/lib/api/types";
+import { renderGoogleButton } from "@/lib/auth/google";
+import { apiMode, devSignIn, devSignInEnabled, googleClientId, mockSignIn, sessionEnded, signInWithGoogle, useSession } from "@/lib/auth/session";
 import { event, registrationSteps } from "@/lib/content";
+import { normalisePath } from "@/lib/paths";
 import { useRegistrationState } from "@/lib/registration";
 import { Button, Field, Input, Notice } from "@/components/ui/form";
 
-/** Only allow returning to a page on this site. */
+/** Only allow returning to a page on this site, and not to the sign-in pages themselves. */
 function safeNext(next: string | null) {
   // Browsers read "/\\host" and "/<tab>/host" as "//host", so backslashes, whitespace and control characters are refused too.
-  return next && /^\/(?![/\\])[^\\\s\u0000-\u001f]*$/.test(next) ? next : "/dashboard";
+  if (!next || !/^\/(?![/\\])[^\\\s\u0000-\u001f]*$/.test(next)) return "/dashboard";
+  // A signed-in student is sent straight on from /login, so returning there would loop.
+  const path = normalisePath(next.split(/[?#]/)[0]).toLowerCase();
+  if (path === "/login" || path === "/register" || path === "/auth" || path.startsWith("/auth/")) return "/dashboard";
+  return next;
 }
 
 const facts = [
@@ -28,32 +35,36 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
   const next = safeNext(useSearchParams().get("next"));
   const session = useSession();
   const registration = useRegistrationState();
-  const [redirecting, setRedirecting] = useState(false);
+  // Only after a client-side trip from the portal, so this never differs from the prerendered page.
+  const [ended] = useState(sessionEnded);
+  const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Already signed in: continue straight to the portal.
+  // Signed in, now or already: continue to the portal.
   useEffect(() => {
     if (session) router.replace(next);
   }, [session, next, router]);
 
-  const signInWithGoogle = async () => {
+  const onCredential = useCallback(async (credential: string) => {
     setError(null);
-    setRedirecting(true);
+    setSigningIn(true);
     try {
-      await startGoogleSignIn(next);
-    } catch {
-      setRedirecting(false);
-      setError("Could not start Google sign-in. Please try again.");
+      await signInWithGoogle(credential);
+      // The effect above moves on once the session is stored.
+    } catch (err) {
+      setSigningIn(false);
+      setError(err instanceof ApiError ? err.message : "Sign-in did not complete. Please try again.");
     }
-  };
+  }, []);
 
   const isRegister = mode === "register";
+  const googleAvailable = apiMode === "live" && googleClientId !== "";
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
       {/* Brand panel */}
       <aside className="relative isolate overflow-hidden bg-navy-950 px-6 py-8 text-white sm:px-10 lg:py-12">
-        <Image src="/images/kiet/campus-walkway.png" alt="" fill priority sizes="(min-width: 1024px) 45vw, 100vw" className="-z-20 object-cover" />
+        <Image src="/images/kiet/campus-walkway.jpg" alt="" fill priority sizes="(min-width: 1024px) 45vw, 100vw" className="-z-20 object-cover" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-navy-950 via-navy-950/90 to-navy-900/70" />
         <div className="bg-grid absolute inset-0 -z-10" aria-hidden="true" />
         <div className="absolute -left-24 bottom-0 -z-10 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl" aria-hidden="true" />
@@ -65,7 +76,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
           </Link>
 
           <div className="my-8 lg:my-auto">
-            <Image src="/images/brand/innotech-logo.png" alt="InnoTech'26" width={1536} height={476} priority className="w-full max-w-xs drop-shadow-[0_10px_40px_rgb(22_169_221/0.35)] sm:max-w-sm" />
+            <Image src="/images/brand/innotech-logo.png" alt="InnoTech'26" width={1152} height={357} priority className="w-full max-w-xs drop-shadow-[0_10px_40px_rgb(22_169_221/0.35)] sm:max-w-sm" />
             <p className="mt-6 max-w-md font-display text-xl font-bold leading-snug sm:text-2xl">
               Building an <span className="text-brand-400">Innovative</span>, <span className="text-brand-400">Secure</span> and{" "}
               <span className="text-accent-500">Sustainable</span> Viksit Bharat @2047
@@ -115,6 +126,11 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
           )}
 
           <div className="mt-8 space-y-4">
+            {ended && !isRegister && (
+              <Notice tone="info" title="Your session has ended">
+                Please sign in again to continue. Anything you were typing has been kept.
+              </Notice>
+            )}
             {registration === "upcoming" && isRegister && (
               <Notice tone="info" title="Registration opens on 3 October 2026">
                 You can sign in now, but profiles and teams can only be created once registration opens.
@@ -126,15 +142,25 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               </Notice>
             )}
 
-            <button
-              type="button"
-              onClick={signInWithGoogle}
-              disabled={apiMode === "mock" || devSignInEnabled || redirecting}
-              className="flex w-full items-center justify-center gap-3 rounded-full border border-line bg-white px-6 py-3.5 font-semibold text-ink shadow-sm transition hover:border-navy-800/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <GoogleMark />
-              {redirecting ? "Opening Google..." : "Continue with Google"}
-            </button>
+            {googleAvailable ? (
+              <GoogleSignIn context={isRegister ? "signup" : "signin"} busy={signingIn} onCredential={onCredential} />
+            ) : (
+              // Mock mode, or dev sign-in without a Google client ID: a stand-in for Google's button.
+              <button
+                type="button"
+                disabled
+                className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-full border border-line bg-white px-6 py-3.5 font-semibold text-ink opacity-50 shadow-sm"
+              >
+                <GoogleMark />
+                Continue with Google
+              </button>
+            )}
+            {signingIn && (
+              <p className="flex items-center justify-center gap-2 text-sm font-semibold text-navy-800" role="status">
+                <LoaderCircle size={16} className="animate-spin text-accent-500" aria-hidden="true" />
+                Signing you in...
+              </p>
+            )}
             {error && <Notice tone="error">{error}</Notice>}
 
             <p className="rounded-2xl bg-surface p-4 text-sm leading-relaxed text-muted">
@@ -161,17 +187,75 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
   );
 }
 
+/**
+ * Google's own button, rendered by Google Identity Services into a container. Sign-in happens in a popup;
+ * `onCredential` receives the ID token. If the script is blocked or the network is down, says so with a retry.
+ */
+function GoogleSignIn({ context, busy, onCredential }: { context: "signin" | "signup"; busy: boolean; onCredential: (credential: string) => void }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [attempt, setAttempt] = useState(0);
+
+  // Google keeps the first callback it is given, so forward to the latest handler through a ref.
+  const handler = useRef(onCredential);
+  useEffect(() => {
+    handler.current = onCredential;
+  }, [onCredential]);
+
+  useEffect(() => {
+    const parent = container.current;
+    if (!parent) return;
+    let cancelled = false;
+    renderGoogleButton(parent, { clientId: googleClientId, context, handle: (credential) => handler.current(credential) })
+      .then(() => !cancelled && setStatus("ready"))
+      .catch(() => !cancelled && setStatus("failed"));
+    return () => {
+      cancelled = true;
+    };
+  }, [context, attempt]);
+
+  return (
+    <div>
+      <div ref={container} aria-busy={busy} className={`flex min-h-11 justify-center ${busy ? "pointer-events-none opacity-50" : ""} ${status === "failed" ? "hidden" : ""}`} />
+      {status === "loading" && (
+        <p className="-mt-11 flex h-11 items-center justify-center gap-2 rounded-full border border-line text-sm text-muted" role="status">
+          <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
+          Loading Google sign-in...
+        </p>
+      )}
+      {status === "failed" && (
+        <div className="space-y-3">
+          <Notice tone="error" title="Google sign-in could not load">
+            Check your internet connection. If you use an ad or content blocker, allow accounts.google.com for this site, then try again.
+          </Notice>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setStatus("loading");
+              setAttempt((n) => n + 1);
+            }}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Development only: sign in as a demo student instead of going through Google. */
 function DevSignIn() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const signIn = async (session: Session) => {
+  const signIn = async (student: { email: string; name: string }) => {
     setError(null);
-    if (apiMode === "mock") return mockSignIn(session);
     try {
-      await devSignIn(session);
+      if (apiMode === "mock") mockSignIn(student);
+      else await devSignIn(student);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     }

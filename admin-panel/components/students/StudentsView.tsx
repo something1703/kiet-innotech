@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, X } from "lucide-react";
-import { api, DEFAULT_PAGE_SIZE, errorMessage } from "@/lib/api";
+import { api, DEFAULT_PAGE_SIZE, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { StudentQuery, StudentSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { departments } from "@/lib/content";
@@ -13,12 +13,13 @@ import { collegeYears, schoolClasses, yearLabel } from "@/lib/rules";
 import type { ParticipantType } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Select } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Pagination } from "@/components/ui/Pagination";
+import { lastPage, Pagination } from "@/components/ui/Pagination";
 import { Pill, StatusPill } from "@/components/ui/Pill";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
@@ -40,7 +41,7 @@ export function StudentsView() {
     department: isSuper ? pickParam(params, "department", departments) : undefined,
     year: intParam(params, "year", 1, 12),
     inTeam: inTeam === "yes" || inTeam === "no" ? inTeam : undefined,
-    q: params.get("q")?.trim() || undefined,
+    q: params.get("q")?.trim().slice(0, MAX_SEARCH_LENGTH) || undefined,
     sort: pickParam(params, "sort", sorts) ?? "name",
     order: params.get("order") === "desc" ? "desc" : "asc",
     page: intParam(params, "page", 1, 10_000) ?? 1,
@@ -164,74 +165,87 @@ export function StudentsView() {
       {error && <Notice tone="error">{error}</Notice>}
       {!data && !error && <Loading label="Loading students" />}
 
-      {data && data.items.length === 0 && (
+      {data && data.total === 0 && (
         <EmptyState title="No students found">{filtered ? "Try removing a filter or searching for something else." : "Nobody has registered yet."}</EmptyState>
       )}
 
-      {data && data.items.length > 0 && (
+      {data && data.total > 0 && (
         <div className={`space-y-4 transition-opacity ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
-          <TableFrame label="Students" minWidth="min-w-[1000px]">
-            <thead>
-              <tr>
-                <SortableTh label="Name" sortKey="name" {...sortProps} />
-                <SortableTh label="Email" sortKey="email" {...sortProps} />
-                <Th>Phone</Th>
-                <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
-                <SortableTh label="Year" sortKey="year" {...sortProps} />
-                <Th>Roll no.</Th>
-                <Th>Team</Th>
-                <SortableTh label="Registered" sortKey="created_at" {...sortProps} />
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((s) => {
-                const teamVisible = s.team && (isSuper || s.team.department === admin.department);
-                return (
-                  <tr key={s.userId} className="hover:bg-surface/70">
-                    <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>{s.fullName}</td>
-                    <td className={`${tdClass} break-all`}>{s.email}</td>
-                    <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
-                    <td className={tdClass}>
-                      {s.department ?? <span className="block max-w-56">{s.institution}</span>}
-                      {isSuper && (
-                        <span className="mt-0.5 block">
-                          <Pill tone={s.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[s.participantType]}</Pill>
-                        </span>
-                      )}
-                    </td>
-                    <td className={`${tdClass} whitespace-nowrap`}>
-                      {yearLabel(s.year, s.participantType)}
-                      <span className="block text-xs text-muted">{s.course}</span>
-                    </td>
-                    <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{s.rollNumber || "—"}</td>
-                    <td className={`${tdClass} whitespace-nowrap`}>
-                      {s.team ? (
-                        <>
-                          {teamVisible ? (
-                            <Link href={`/teams/${s.team.id}`} className="font-mono text-xs font-semibold text-brand-700 hover:underline">
-                              {s.team.code}
-                            </Link>
-                          ) : (
-                            <span className="font-mono text-xs font-semibold" title={`Led by a ${s.team.department} student`}>
-                              {s.team.code}
-                            </span>
-                          )}
-                          <span className="ml-1.5 text-xs text-muted">{s.team.role === "leader" ? "Leader" : "Member"}</span>
+          {data.items.length === 0 ? (
+            <EmptyState
+              title="No results on this page"
+              action={
+                <Button variant="secondary" size="sm" onClick={() => update({ page: lastPage(data) })} disabled={loading}>
+                  Go to page {lastPage(data)}
+                </Button>
+              }
+            >
+              The list is shorter than this page number, possibly because students were removed since the link was made.
+            </EmptyState>
+          ) : (
+            <TableFrame label="Students" minWidth="min-w-[1000px]">
+              <thead>
+                <tr>
+                  <SortableTh label="Name" sortKey="name" {...sortProps} />
+                  <SortableTh label="Email" sortKey="email" {...sortProps} />
+                  <Th>Phone</Th>
+                  <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
+                  <SortableTh label="Year" sortKey="year" {...sortProps} />
+                  <Th>Roll no.</Th>
+                  <Th>Team</Th>
+                  <SortableTh label="Registered" sortKey="created_at" {...sortProps} />
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((s) => {
+                  const teamVisible = s.team && (isSuper || s.team.department === admin.department);
+                  return (
+                    <tr key={s.userId} className="hover:bg-surface/70">
+                      <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>{s.fullName}</td>
+                      <td className={`${tdClass} break-all`}>{s.email}</td>
+                      <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
+                      <td className={tdClass}>
+                        {s.department ?? <span className="block max-w-56">{s.institution}</span>}
+                        {isSuper && (
                           <span className="mt-0.5 block">
-                            <StatusPill status={s.team.status} />
+                            <Pill tone={s.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[s.participantType]}</Pill>
                           </span>
-                          {!teamVisible && <span className="block text-xs text-muted">{s.team.department} team</span>}
-                        </>
-                      ) : (
-                        <span className="text-muted">Not in a team</span>
-                      )}
-                    </td>
-                    <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(s.createdAt)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </TableFrame>
+                        )}
+                      </td>
+                      <td className={`${tdClass} whitespace-nowrap`}>
+                        {yearLabel(s.year, s.participantType)}
+                        <span className="block text-xs text-muted">{s.course}</span>
+                      </td>
+                      <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{s.rollNumber || "—"}</td>
+                      <td className={`${tdClass} whitespace-nowrap`}>
+                        {s.team ? (
+                          <>
+                            {teamVisible ? (
+                              <Link href={teamHref(s.team.id)} className="font-mono text-xs font-semibold text-brand-700 hover:underline">
+                                {s.team.code}
+                              </Link>
+                            ) : (
+                              <span className="font-mono text-xs font-semibold" title={`Led by a ${s.team.department} student`}>
+                                {s.team.code}
+                              </span>
+                            )}
+                            <span className="ml-1.5 text-xs text-muted">{s.team.role === "leader" ? "Leader" : "Member"}</span>
+                            <span className="mt-0.5 block">
+                              <StatusPill status={s.team.status} />
+                            </span>
+                            {!teamVisible && <span className="block text-xs text-muted">{s.team.department} team</span>}
+                          </>
+                        ) : (
+                          <span className="text-muted">Not in a team</span>
+                        )}
+                      </td>
+                      <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(s.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableFrame>
+          )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
       )}

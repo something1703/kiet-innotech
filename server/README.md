@@ -1,7 +1,7 @@
 # InnoTech'26 API
 
 FastAPI backend for the student portal (`client/`) and the admin panel (`admin-panel/`).
-PostgreSQL (Amazon RDS) for data, Amazon Cognito with Google for sign-in, Amazon SES for emails.
+PostgreSQL for data (in Docker on the same EC2 instance), Google sign-in verified by this API, Amazon SES for emails.
 
 ## Run it locally
 
@@ -26,8 +26,8 @@ Tests run against the `innotech_test` database (override with `TEST_DATABASE_URL
 
 ### Frontends against the local API
 
-Without Cognito, both frontends can sign in with development tokens from `POST /dev/token`. That
-endpoint exists only when `ENVIRONMENT=development` and `DEV_JWT_SECRET` is set. Create a
+Without Google, both frontends can sign in through `POST /dev/token`. That endpoint exists only when
+`ENVIRONMENT=development` and `DEV_SIGN_IN=true`. Create a
 `.env.local` in `client/` (and in `admin-panel/`):
 
 ```
@@ -42,40 +42,34 @@ admin from `SUPER_ADMIN_EMAILS` in `.env.development.example`.
 
 ## Deploying
 
-Every setting is an environment variable; `.env.example` lists them with production values. The app
-**refuses to start** in production if `DEV_JWT_SECRET` or `FORCE_REGISTRATION_OPEN` is set, if the
-Cognito settings are missing, or if `CORS_ORIGINS` contains `*`.
+Everything is in [`deploy/`](../deploy): one CloudFormation stack (EC2 t4g.medium running Caddy, this API and
+PostgreSQL in Docker; the two static sites on S3 + CloudFront; daily disk snapshots; 15-minute database dumps to S3),
+and `deploy/deploy.sh` to roll out releases. Copy `deploy/production.env.example` to `deploy/production.env`, then
+`./deploy.sh stack`, `./deploy.sh api`, `./deploy.sh sites`.
 
-1. Build the image: `docker build -t innotech-api .` (runs as a non-root user; health check on `/health`).
-2. Run migrations before each release: `docker run --env-file prod.env innotech-api alembic upgrade head`.
-3. Run the container behind the load balancer on port 8000. Point the load balancer health check at `GET /health`
-   (it also checks the database).
-4. Build the frontends with `NEXT_PUBLIC_API_MODE=live`, `NEXT_PUBLIC_API_URL` and their `NEXT_PUBLIC_COGNITO_*`
-   variables (see each app's `.env.example`). Do **not** set `NEXT_PUBLIC_DEV_SIGN_IN` or
-   `NEXT_PUBLIC_FORCE_REGISTRATION_OPEN` in production builds.
+The app **refuses to start** in production if `DEV_SIGN_IN` or `FORCE_REGISTRATION_OPEN` is set, if `SESSION_SECRET` is
+shorter than 32 characters, if `GOOGLE_CLIENT_IDS` is empty, if `CORS_ORIGINS` contains `*`, or if `EMAIL_BACKEND` is not
+set explicitly.
 
-### Cognito checklist
+### Sign-in
 
-The API trusts the email in the Cognito ID token, so this configuration is what keeps a stranger from
-registering as a KIET student.
+- The frontends show Google's "Sign in with Google" button (Google Identity Services) and post the Google ID token to
+  `POST /auth/google` with `app` = `portal` or `admin`. The API checks Google's signature, the audience (one of
+  `GOOGLE_CLIENT_IDS`), expiry and `email_verified`, and returns its own session token
+  (`{token, expires_at, email, name}`): 7 days for the portal, 12 hours for the admin panel. Admin tokens are issued only
+  to organisers, and portal tokens are rejected by admin endpoints.
+- `@kiet.edu` accounts must carry Google Workspace's `hd=kiet.edu` claim, so a personal Google account registered with a
+  KIET address cannot pose as a student.
+- Google Cloud Console: OAuth consent screen *External* and *In production* (the scopes `openid email profile` need no
+  verification); an OAuth client of type *Web application* whose *Authorised JavaScript origins* are the portal and admin
+  origins (plus `http://localhost:3000` and `:3001` for local testing). No redirect URIs are needed.
 
-- Google must be the identity provider. Keep `REQUIRE_GOOGLE_IDENTITY=true`: tokens of username/password users
-  in the pool are rejected even if someone enables self sign-up.
-- Map Google's `email_verified` attribute to the Cognito `email_verified` attribute (and `email`, `name`).
-  With `REQUIRE_EMAIL_VERIFIED=true` (the default) tokens without a verified email are rejected.
-- App clients: public clients (no secret), authorization code grant with PKCE, scopes `openid email profile`.
-  Callback URLs: `https://<portal>/auth/callback` and `https://<admin panel>/auth/callback`. Put both client IDs in
-  `COGNITO_CLIENT_IDS`.
-- The API accepts only **ID tokens** (`token_use=id`) from the configured pool and clients, and fetches Cognito's
-  signing keys from the pool's JWKS URL (outbound HTTPS to `cognito-idp.<region>.amazonaws.com` is required).
+### Other pieces
 
-### Other AWS pieces
-
-- **RDS**: PostgreSQL 14 or newer; use `sslmode=require` in `DATABASE_URL`. Each worker keeps up to 20 connections.
-- **SES**: `EMAIL_BACKEND=ses`, a verified sender identity, and an IAM role for the container allowing
-  `ses:SendEmail`. Emails are sent after the request commits; a failed email is logged and never fails the action.
-- **Rate limiting**: the API limits invitations per team per day. Put an AWS WAF rate-based rule on the load balancer
-  or API Gateway for general request flooding.
+- **SES**: `EMAIL_BACKEND=ses`, a verified sender identity and SES production access. Emails are sent after the request
+  commits; a failed email is logged and never fails the action.
+- **Rate limiting**: invitations per team per day, and join-code attempts per student (stored in PostgreSQL, shared by
+  all workers). Caddy caps request bodies at 1 MB.
 - **Admins**: people in `SUPER_ADMIN_EMAILS` are always super admins and add department admins in the admin panel.
 
 ## How it works
@@ -84,12 +78,12 @@ registering as a KIET student.
 app/
   main.py          app setup: CORS, security headers, error format, routers, /health
   config.py        settings from environment variables, with production safety checks
-  auth.py          Cognito ID token verification, current student / admin
+  auth.py          Google ID token verification, session tokens, current student / admin
   rules.py         registration rules (mirrors client/lib/rules.ts)
   models.py        tables and constraints
   schemas.py       request validation and response shapes
-  services/        students.py (profile, teams, invitations), admin.py, serializers, audit
-  routers/         students.py, admin.py, dev.py (development only)
+  services/        students.py (profile, teams, invitations), admin.py, serializers, audit, limits (rate limits)
+  routers/         auth.py (sign-in), students.py, admin.py, dev.py (development only)
   emails.py        SES notifications
 migrations/        Alembic
 tests/             pytest, against PostgreSQL
@@ -111,8 +105,10 @@ teammates cannot break the rules. `tests/test_concurrency.py` fires such races i
 
 ### Endpoints
 
-Student portal (`client/lib/api/live.ts`): `GET /me`, `PUT /me/profile`, `GET /me/team`, `GET /me/invitations`,
-`POST /teams`, `PATCH /teams/{id}`, `DELETE /teams/{id}`, `POST /teams/{id}/submit`, `POST /teams/{id}/leave`,
+Sign-in: `POST /auth/google` (and `POST /dev/token` in development).
+
+Student portal (`client/lib/api/live.ts`): `GET /me` (includes the registration window the server enforces), `PUT /me/profile`, `GET /me/team`, `GET /me/invitations`,
+`POST /teams`, `POST /teams/join`, `POST /teams/{id}/join-code/reset`, `PATCH /teams/{id}`, `DELETE /teams/{id}`, `POST /teams/{id}/submit`, `POST /teams/{id}/leave`,
 `DELETE /teams/{id}/members/{user_id}`, `POST /teams/{id}/invitations`, `DELETE /invitations/{id}`,
 `POST /invitations/{id}/accept`, `POST /invitations/{id}/decline`.
 

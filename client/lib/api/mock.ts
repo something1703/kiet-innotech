@@ -1,5 +1,5 @@
 /**
- * In-browser stand-in for the FastAPI backend, used until the server exists (NEXT_PUBLIC_API_MODE=mock).
+ * In-browser stand-in for the FastAPI backend, used only when NEXT_PUBLIC_API_MODE=mock (development).
  * Data lives in localStorage and every rule from lib/rules.ts is enforced here, the way the server will.
  */
 import { getSession } from "../auth/session";
@@ -15,6 +15,7 @@ import {
   normalisePhone,
   profileErrors,
   registrationState,
+  registrationWindow,
   sameInstitution,
   submissionChecks,
 } from "../rules";
@@ -23,10 +24,15 @@ import { ApiError, type StudentApi } from "./types";
 
 const DB_KEY = "innotech-mock-db";
 const LATENCY_MS = 250;
+/** Invitations one team may send in 24 hours, as on the server. */
+const INVITATIONS_PER_DAY = 20;
 
 type Membership = { userId: string; role: TeamMember["role"]; joinedAt: string };
 type StoredTeam = Omit<Team, "members" | "invitations"> & { memberships: Membership[] };
 type Db = { version: 1; seq: number; profiles: Profile[]; teams: StoredTeam[]; invitations: Invitation[] };
+
+/** The leader's profile: like the server, a team's college or school (and a school's city) is its leader's. */
+const leaderProfile = (db: Db, team: StoredTeam) => db.profiles.find((p) => p.userId === team.leaderId)!;
 
 const seededAt = "2026-10-03T10:00:00+05:30";
 
@@ -46,18 +52,6 @@ function kiet(email: string, fullName: string, department: string, year: number,
     createdAt: seededAt,
   };
 }
-
-/** Demo accounts offered on the login page in development. */
-export const demoStudents = [
-  { email: "aarav.sharma@kiet.edu", name: "Aarav Sharma", note: "KIET, CSE, 3rd year" },
-  { email: "diya.verma@kiet.edu", name: "Diya Verma", note: "KIET, CSE(AIML), 3rd year" },
-  { email: "kabir.singh@kiet.edu", name: "Kabir Singh", note: "KIET, IT, 1st year" },
-  { email: "tanvi.arora@kiet.edu", name: "Tanvi Arora", note: "KIET, already in a team" },
-  { email: "meera.gupta@kiet.edu", name: "Meera Gupta", note: "KIET, new, no profile yet" },
-  { email: "rohan.mehta@gmail.com", name: "Rohan Mehta", note: "ABES Engineering College" },
-  { email: "sneha.kapoor@gmail.com", name: "Sneha Kapoor", note: "ABES Engineering College" },
-  { email: "ishaan.jain@gmail.com", name: "Ishaan Jain", note: "School student, Class 11" },
-];
 
 function seed(): Db {
   const profiles: Profile[] = [
@@ -232,9 +226,12 @@ function validateTeamInput(input: TeamInput) {
   if (error) throw new ApiError(error, 422);
 }
 
+/** "Code  Crafters " and "code crafters" are the same name, as on the server. */
+const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
+
 function nameTaken(db: Db, name: string, exceptId?: string) {
-  const key = name.trim().toLowerCase();
-  return db.teams.some((t) => t.id !== exceptId && t.name.trim().toLowerCase() === key);
+  const key = nameKey(name);
+  return db.teams.some((t) => t.id !== exceptId && nameKey(t.name) === key);
 }
 
 // ---------- The API ----------
@@ -244,7 +241,7 @@ export const mockApi: StudentApi = {
     await sleep();
     const session = currentUser();
     const profile = load().profiles.find((p) => p.email === session.email) ?? null;
-    return { email: session.email, name: session.name, profile: profile && structuredClone(profile) };
+    return { email: session.email, name: session.name, profile: profile && structuredClone(profile), registration: registrationWindow() };
   },
 
   async saveProfile(input: ProfileInput) {
@@ -364,6 +361,7 @@ export const mockApi: StudentApi = {
 
   async deleteTeam(teamId) {
     await sleep();
+    requireOpen();
     const db = load();
     const { team } = requireLedTeam(db, teamId);
     requireDraft(team);
@@ -376,10 +374,11 @@ export const mockApi: StudentApi = {
 
   async submitTeam(teamId) {
     await sleep();
+    requireOpen();
     const db = load();
     const { team } = requireLedTeam(db, teamId);
     requireDraft(team);
-    const failed = submissionChecks(toTeam(db, team)).find((check) => !check.ok);
+    const failed = submissionChecks(toTeam(db, team), registrationState()).find((check) => !check.ok);
     if (failed) throw new ApiError(`Cannot submit yet: ${failed.label.toLowerCase()}.`, 422);
     team.status = "submitted";
     team.submittedAt = now();
@@ -389,6 +388,7 @@ export const mockApi: StudentApi = {
 
   async leaveTeam(teamId) {
     await sleep();
+    requireOpen();
     const db = load();
     const profile = requireProfile(db);
     const team = db.teams.find((t) => t.id === teamId);
@@ -404,10 +404,12 @@ export const mockApi: StudentApi = {
 
   async removeMember(teamId, userId) {
     await sleep();
+    requireOpen();
     const db = load();
     const { team, profile } = requireLedTeam(db, teamId);
     requireDraft(team);
     if (userId === profile.userId) throw new ApiError("You cannot remove yourself. Delete the team instead.", 409);
+    if (!team.memberships.some((m) => m.userId === userId)) throw new ApiError("This student is not in your team.", 404);
     team.memberships = team.memberships.filter((m) => m.userId !== userId);
     save(db);
     return toTeam(db, team);
@@ -430,7 +432,7 @@ export const mockApi: StudentApi = {
     const pending = db.invitations.filter((i) => i.teamId === team.id && i.status === "pending").length;
     // Pending invitations hold places in the team, except the one this student is using now.
     if (team.memberships.length + pending - (ownInvitation ? 1 : 0) >= TEAM_MAX_SIZE) throw new ApiError("This team is already full.", 409);
-    if (!sameInstitution(team, profile)) {
+    if (!sameInstitution(leaderProfile(db, team), profile)) {
       throw new ApiError("This team is from another college or school. All members must be from the same college or school.", 422);
     }
     const eligibility = categoryEligibility(team.category, team.participantType, [...toTeam(db, team).members.map((m) => m.year), profile.year]);
@@ -459,6 +461,9 @@ export const mockApi: StudentApi = {
     requireOpen();
     const db = load();
     const { team, profile } = requireLedTeam(db, teamId);
+    const dayAgo = Date.now() - 86_400_000;
+    const sentToday = db.invitations.filter((i) => i.teamId === team.id && Date.parse(i.createdAt) > dayAgo).length;
+    if (sentToday >= INVITATIONS_PER_DAY) throw new ApiError("Your team has sent too many invitations today. Please try again tomorrow.", 429);
     const target = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target)) throw new ApiError("Enter a valid email address.", 422);
     if (target === profile.email) throw new ApiError("You are already in this team.", 409);
@@ -484,9 +489,10 @@ export const mockApi: StudentApi = {
   async cancelInvitation(invitationId) {
     await sleep();
     const db = load();
-    const invitation = db.invitations.find((i) => i.id === invitationId && i.status === "pending");
+    const invitation = db.invitations.find((i) => i.id === invitationId);
     if (!invitation) throw new ApiError("Invitation not found.", 404);
     const { team } = requireLedTeam(db, invitation.teamId);
+    if (invitation.status !== "pending") throw new ApiError("This invitation has already been answered.", 409);
     invitation.status = "cancelled";
     save(db);
     return toTeam(db, team);
@@ -496,12 +502,12 @@ export const mockApi: StudentApi = {
     await sleep();
     const db = load();
     const profile = requireProfile(db);
-    return db.invitations
-      .filter((i) => i.email === profile.email && i.status === "pending")
-      .map((i) => {
-        const team = db.teams.find((t) => t.id === i.teamId)!;
-        return structuredClone({ ...i, teamName: team.name, category: team.category });
-      });
+    // Invitations to teams that were submitted, withdrawn or deleted can no longer be accepted, so they are not listed.
+    return db.invitations.flatMap((i) => {
+      const team = db.teams.find((t) => t.id === i.teamId);
+      if (i.email !== profile.email || i.status !== "pending" || team?.status !== "draft") return [];
+      return [structuredClone({ ...i, teamName: team.name, category: team.category })];
+    });
   },
 
   async respondToInvitation(invitationId, accept) {
@@ -522,7 +528,7 @@ export const mockApi: StudentApi = {
     const team = db.teams.find((t) => t.id === invitation.teamId);
     if (!team || team.status !== "draft") throw new ApiError("This team is no longer accepting members.", 409);
     if (team.memberships.length >= TEAM_MAX_SIZE) throw new ApiError("This team is already full.", 409);
-    if (!sameInstitution(team, profile)) throw new ApiError("You are not from the same college or school as this team.", 422);
+    if (!sameInstitution(leaderProfile(db, team), profile)) throw new ApiError("You are not from the same college or school as this team.", 422);
     const years = [...toTeam(db, team).members.map((m) => m.year), profile.year];
     const eligibility = categoryEligibility(team.category, team.participantType, years);
     if (!eligibility.allowed) throw new ApiError(eligibility.reason, 422);

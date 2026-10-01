@@ -3,7 +3,9 @@
  * The FastAPI backend must enforce the same rules; the frontend only uses them to guide students.
  */
 import { categories, departments } from "./content";
-import type { ParticipantType, Profile, ProfileInput, Team } from "./types";
+import type { ParticipantType, Profile, ProfileInput, RegistrationState, RegistrationWindow, Team } from "./types";
+
+export type { RegistrationState };
 
 export const KIET_EMAIL_DOMAIN = "kiet.edu";
 export const KIET_INSTITUTION = "KIET Deemed to be University";
@@ -45,8 +47,10 @@ export function yearLabel(year: number, type: ParticipantType = "kiet") {
 
 // ---------- Registration window ----------
 
-export type RegistrationState = "upcoming" | "open" | "closed";
-
+/**
+ * The registration window by the browser's clock. The portal uses the server's answer from GET /me instead
+ * once it has loaded; this is for the public pages and the mock API.
+ */
 export function registrationState(now = new Date()): RegistrationState {
   if (process.env.NEXT_PUBLIC_FORCE_REGISTRATION_OPEN === "true") return "open";
   if (now < new Date(REGISTRATION_OPENS)) return "upcoming";
@@ -54,17 +58,58 @@ export function registrationState(now = new Date()): RegistrationState {
   return "open";
 }
 
-// ---------- Institutions ----------
-
-/** Normalises a college or school name so "K.I.E.T. Group" and "kiet group" compare equal. */
-export function normaliseInstitution(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** The window in the shape GET /me returns it, computed from the local rules (used by the mock). */
+export function registrationWindow(now = new Date()): RegistrationWindow {
+  return { state: registrationState(now), opens: REGISTRATION_OPENS, closes: REGISTRATION_CLOSES };
 }
 
-export function sameInstitution(a: Pick<Profile, "participantType" | "institution">, b: Pick<Profile, "participantType" | "institution">) {
+// ---------- Institutions ----------
+
+/** Common short forms students type, so "ABES Engg. College" and "ABES Engineering College" compare equal. Mirrors server/app/rules.py. */
+const INSTITUTION_ABBREVIATIONS = new Map<string, string>(Object.entries({
+  engg: "engineering",
+  engr: "engineering",
+  eng: "engineering",
+  coll: "college",
+  clg: "college",
+  univ: "university",
+  uni: "university",
+  inst: "institute",
+  instt: "institute",
+  tech: "technology",
+  mgmt: "management",
+  sr: "senior",
+  sec: "secondary",
+  sch: "school",
+  vidyalay: "vidyalaya",
+  and: "",
+  of: "",
+  the: "",
+}));
+
+/** Normalises a college or school name so "K.I.E.T. Group" and "kiet group" compare equal. Empty if nothing comparable. */
+export function normaliseInstitution(name: string) {
+  // Dots and apostrophes join letters ("K.I.E.T." is "kiet"); anything else separates words.
+  const words = name.toLowerCase().replace(/[.'’]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ");
+  return words
+    .map((word) => INSTITUTION_ABBREVIATIONS.get(word) ?? word)
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 200);
+}
+
+type InstitutionOf = Pick<Profile, "participantType" | "institution"> & { city?: string };
+
+/**
+ * Teams must share this. Schools often share a name across cities (e.g. Delhi Public School), so the city counts
+ * too when both sides know it (a Team from the API has no city; the server then decides).
+ */
+export function sameInstitution(a: InstitutionOf, b: InstitutionOf) {
   if (a.participantType !== b.participantType) return false;
   if (a.participantType === "kiet") return true;
-  return normaliseInstitution(a.institution) === normaliseInstitution(b.institution);
+  if (normaliseInstitution(a.institution) !== normaliseInstitution(b.institution)) return false;
+  if (a.participantType !== "school" || a.city === undefined || b.city === undefined) return true;
+  return normaliseInstitution(a.city) === normaliseInstitution(b.city);
 }
 
 // ---------- Categories ----------
@@ -112,8 +157,8 @@ export function inviteError(team: Team, invitee: Profile | null, inviteeHasTeam:
 
 export type Check = { label: string; ok: boolean };
 
-/** The checklist shown before a team is submitted. All must pass. */
-export function submissionChecks(team: Team): Check[] {
+/** The checklist shown before a team is submitted. All must pass. `registration` is the current window state. */
+export function submissionChecks(team: Team, registration: RegistrationState | null): Check[] {
   const size = team.members.length;
   const eligibility = categoryEligibility(team.category, team.participantType, team.members.map((m) => m.year));
   return [
@@ -121,7 +166,7 @@ export function submissionChecks(team: Team): Check[] {
     { label: "No invitations are still pending", ok: team.invitations.length === 0 },
     { label: "Every member is eligible for the chosen category", ok: eligibility.allowed },
     { label: "Project title and abstract are filled in", ok: team.projectTitle.trim().length > 0 && team.abstract.trim().length > 0 },
-    { label: "Registration is open", ok: registrationState() === "open" },
+    { label: "Registration is open", ok: registration === "open" },
   ];
 }
 
@@ -136,6 +181,15 @@ export const limits = {
   teamName: { min: 3, max: 40 },
   projectTitle: { min: 5, max: 120 },
   abstract: { min: 100, max: 1500 },
+};
+
+/** Longest values the server accepts for profile fields. */
+export const profileMaxLength = {
+  fullName: 120,
+  phone: 20,
+  institution: 200,
+  city: 100,
+  rollNumber: 40,
 };
 
 /** Digits only, without a leading +91 or 0 country/trunk prefix. */
@@ -162,6 +216,7 @@ export function lengthError(label: string, value: string, { min, max }: { min: n
 export function profileErrors(input: ProfileInput, email: string): Partial<Record<keyof ProfileInput, string>> {
   const errors: Partial<Record<keyof ProfileInput, string>> = {};
   if (input.fullName.trim().length < 3) errors.fullName = "Enter your full name.";
+  else if (input.fullName.trim().length > profileMaxLength.fullName) errors.fullName = `Full name must be at most ${profileMaxLength.fullName} characters.`;
   const phoneError = validatePhone(input.phone);
   if (phoneError) errors.phone = phoneError;
   if (!allowedParticipantTypes(email).includes(input.participantType)) {
@@ -172,20 +227,25 @@ export function profileErrors(input: ProfileInput, email: string): Partial<Recor
 
   if (input.participantType === "kiet") {
     if (!input.department || !departments.includes(input.department)) errors.department = "Choose your department.";
-    if (!input.course) errors.course = "Choose your course.";
+    if (!kietCourses.includes(input.course)) errors.course = "Choose your course.";
     if (!collegeYears.includes(input.year)) errors.year = "Choose your year of study.";
     if (!/^\d{10,15}$/.test(input.rollNumber.trim())) errors.rollNumber = "Enter your university roll number (digits only).";
   } else {
     const label = input.participantType === "school" ? "school" : "college";
     if (input.institution.trim().length < 3) errors.institution = `Enter the full name of your ${label}.`;
+    else if (input.institution.trim().length > profileMaxLength.institution) errors.institution = `The name must be at most ${profileMaxLength.institution} characters.`;
     if (input.city.trim().length < 2) errors.city = "Enter the city.";
+    else if (input.city.trim().length > profileMaxLength.city) errors.city = `The city must be at most ${profileMaxLength.city} characters.`;
     if (input.participantType === "college") {
-      if (!input.course) errors.course = "Choose your course.";
+      if (!collegeCourses.includes(input.course)) errors.course = "Choose your course.";
       if (!collegeYears.includes(input.year)) errors.year = "Choose your year of study.";
       if (input.rollNumber.trim().length < 3) errors.rollNumber = "Enter your college enrolment or roll number.";
     } else if (!schoolClasses.includes(input.year)) {
       errors.year = "Choose your class.";
     }
+  }
+  if (!errors.rollNumber && input.rollNumber.trim().length > profileMaxLength.rollNumber) {
+    errors.rollNumber = `This number must be at most ${profileMaxLength.rollNumber} characters.`;
   }
   return errors;
 }

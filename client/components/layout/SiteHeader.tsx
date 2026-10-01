@@ -71,8 +71,8 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
             <Image
               src="/images/brand/innotech-emblem.png"
               alt=""
-              width={476}
-              height={476}
+              width={160}
+              height={160}
               priority
               className="h-9 w-9 sm:h-11 sm:w-11"
             />
@@ -125,11 +125,13 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
         </div>
       </div>
 
-      {/* Mobile and tablet menu */}
+      {/* Mobile and tablet menu. Scrolls when taller than the screen (phones in landscape); inert while closed,
+          so its links are neither tabbable nor read out. */}
       <div
         id="mobile-menu"
-        className={`overflow-hidden border-t border-line bg-white transition-[max-height,opacity] duration-300 xl:hidden ${
-          menuOpen ? "max-h-[calc(100vh-4rem)] opacity-100" : "max-h-0 border-transparent opacity-0"
+        inert={!menuOpen}
+        className={`overflow-y-auto overscroll-contain border-t border-line bg-white transition-[max-height,opacity] duration-300 xl:hidden ${
+          menuOpen ? "max-h-[calc(100dvh-4rem)] opacity-100" : "max-h-0 border-transparent opacity-0"
         }`}
       >
         <nav aria-label="Mobile" className="mx-auto max-w-7xl px-4 py-4 sm:px-6">

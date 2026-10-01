@@ -1,30 +1,30 @@
 """
 Tests run against a real PostgreSQL database (TEST_DATABASE_URL, default: local innotech_test),
 because row locks and partial unique indexes are part of what is being tested.
-Tokens are signed with the development HS256 secret; the Cognito RS256 path has its own tests.
+Requests carry real session tokens issued by app.auth; Google sign-in has its own tests.
 """
 
 import os
-import time
 import uuid
 from collections.abc import Iterator
 
 os.environ.update(
     ENVIRONMENT="test",
     DATABASE_URL=os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg:///innotech_test"),
-    DEV_JWT_SECRET="test-secret-that-is-long-enough-for-hs256",
-    COGNITO_CLIENT_IDS="",
+    SESSION_SECRET="test-session-secret-that-is-long-enough-for-hs256",
+    GOOGLE_CLIENT_IDS="test-client.apps.googleusercontent.com",
+    DEV_SIGN_IN="false",
     SUPER_ADMIN_EMAILS="root@kiet.edu",
     FORCE_REGISTRATION_OPEN="true",
     EMAIL_BACKEND="log",
     CORS_ORIGINS="http://localhost:3000",
 )
 
-import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from app.auth import Identity, issue_session
 from app.config import get_settings
 from app.db import Base, get_engine
 from app.main import create_app
@@ -62,16 +62,9 @@ def app():
     return create_app()
 
 
-def token(email: str, name: str | None = None, **claims: object) -> str:
-    payload = {
-        "email": email,
-        "email_verified": True,
-        "name": name or email.split("@")[0].replace(".", " ").title(),
-        "sub": claims.pop("sub", f"sub-{email}"),
-        "exp": int(time.time()) + 3600,
-        **claims,
-    }
-    return jwt.encode(payload, os.environ["DEV_JWT_SECRET"], algorithm="HS256")
+def token(email: str, name: str | None = None, app: str = "portal") -> str:
+    name = name or email.split("@")[0].replace(".", " ").title()
+    return issue_session(Identity(email=email.strip().lower(), name=name), app, get_settings())["token"]
 
 
 class Api:
@@ -80,22 +73,27 @@ class Api:
     def __init__(self, client: TestClient, email: str):
         self.client = client
         self.email = email
-        self.headers = {"Authorization": f"Bearer {token(email)}"}
+        # Like the real frontends: the admin panel holds an admin session, the portal a portal session.
+        self.portal = {"Authorization": f"Bearer {token(email)}"}
+        self.admin = {"Authorization": f"Bearer {token(email, app='admin')}"}
+
+    def headers(self, path: str) -> dict[str, str]:
+        return self.admin if path.startswith("/admin") else self.portal
 
     def get(self, path: str, **kwargs):
-        return self.client.get(path, headers=self.headers, **kwargs)
+        return self.client.get(path, headers=self.headers(path), **kwargs)
 
     def post(self, path: str, json: object = None):
-        return self.client.post(path, headers=self.headers, json=json)
+        return self.client.post(path, headers=self.headers(path), json=json)
 
     def put(self, path: str, json: object = None):
-        return self.client.put(path, headers=self.headers, json=json)
+        return self.client.put(path, headers=self.headers(path), json=json)
 
     def patch(self, path: str, json: object = None):
-        return self.client.patch(path, headers=self.headers, json=json)
+        return self.client.patch(path, headers=self.headers(path), json=json)
 
     def delete(self, path: str):
-        return self.client.delete(path, headers=self.headers)
+        return self.client.delete(path, headers=self.headers(path))
 
 
 @pytest.fixture

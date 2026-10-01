@@ -1,0 +1,227 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  InnoTech'26: one EC2 instance running Caddy (HTTPS, serves the student portal and admin panel as static files),
+  FastAPI and PostgreSQL in Docker. Delete the stack after the event; the ops/backups bucket is kept.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t4g.medium
+    AllowedValues: [t4g.small, t4g.medium, t4g.large]
+    Description: Resize for registration week if load tests ask for it (stop/start, ~2 minutes).
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  VolumeSizeGiB:
+    Type: Number
+    Default: 30
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Optional. Gets an email when the server fails its health checks (confirm the subscription email).
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Resources:
+  # ---------- API server ----------
+
+  ApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: InnoTech API - HTTP/HTTPS only; administration goes through SSM Session Manager (no SSH).
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: udp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: innotech-api }]
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: innotech-api
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecr:GetAuthorizationToken]
+                Resource: "*"
+              - Effect: Allow
+                Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+                Resource: !GetAtt ApiRepository.Arn
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource: [!Sub "${OpsBucket.Arn}/release/*", !Sub "${OpsBucket.Arn}/sites/*"]
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !GetAtt OpsBucket.Arn
+              - Effect: Allow
+                Action: [s3:PutObject]
+                Resource: !Sub "${OpsBucket.Arn}/backups/*"
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: "*"
+
+  ApiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ApiRole]
+
+  ApiInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref ApiInstanceProfile
+      SecurityGroupIds: [!GetAtt ApiSecurityGroup.GroupId]
+      # Unlimited: short CPU bursts above the baseline are billed per vCPU-hour instead of throttling the API.
+      CreditSpecification: { CPUCredits: unlimited }
+      MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 2 }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeType: gp3, VolumeSize: !Ref VolumeSizeGiB, Encrypted: true, DeleteOnTermination: true }
+      Tags:
+        - { Key: Name, Value: innotech-api }
+        - { Key: innotech-backup, Value: daily }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # First boot only: Docker, the Compose plugin, swap, and the folder the deploy script fills in.
+          set -euxo pipefail
+          dnf install -y docker jq
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+            https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          # 2 GB swap: a safety net for memory spikes, not for regular use.
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=2048 && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+            echo "/swapfile none swap sw 0 0" >> /etc/fstab
+          fi
+          mkdir -p /opt/innotech
+          echo "OPS_BUCKET=${OpsBucket}" > /opt/innotech/bootstrap.env
+          echo "ECR_REPOSITORY=${ApiRepository.RepositoryUri}" >> /opt/innotech/bootstrap.env
+          echo "AWS_REGION=${AWS::Region}" >> /opt/innotech/bootstrap.env
+
+  ApiAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref ApiInstance
+      Tags: [{ Key: Name, Value: innotech-api }]
+
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      ImageScanningConfiguration: { ScanOnPush: true }
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep the last 10 images","selection":
+          {"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}
+
+  # Deploy files (release/) and database dumps (backups/). Kept when the stack is deleted.
+  OpsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VersioningConfiguration: { Status: Enabled }
+      PublicAccessBlockConfiguration:
+        { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-backups, Status: Enabled, Prefix: backups/, ExpirationInDays: 30, NoncurrentVersionExpiration: { NoncurrentDays: 7 } }
+          - { Id: expire-old-releases, Status: Enabled, Prefix: release/, NoncurrentVersionExpiration: { NoncurrentDays: 30 } }
+
+  # Recovers the instance on AWS hardware failure; reboots it if the operating system stops responding.
+  RecoverAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: innotech-api host failure - recover the instance
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref ApiInstance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Sub arn:aws:automate:${AWS::Region}:ec2:recover
+        - !If [HasAlertEmail, !Ref AlertTopic, !Ref AWS::NoValue]
+
+  RebootAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: innotech-api operating system not responding - reboot
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Dimensions: [{ Name: InstanceId, Value: !Ref ApiInstance }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Sub arn:aws:automate:${AWS::Region}:ec2:reboot
+        - !If [HasAlertEmail, !Ref AlertTopic, !Ref AWS::NoValue]
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      Subscription: [{ Protocol: email, Endpoint: !Ref AlertEmail }]
+
+  # Daily disk snapshots of the instance (kept 7 days), on top of the 15-minute database dumps in S3.
+  SnapshotRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: dlm.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole]
+
+  SnapshotPolicy:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: innotech-api daily snapshots
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt SnapshotRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags: [{ Key: innotech-backup, Value: daily }]
+        Schedules:
+          - Name: daily
+            CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["21:30"] }
+            RetainRule: { Count: 7 }
+            CopyTags: true
+
+Outputs:
+  InstanceId:
+    Value: !Ref ApiInstance
+  PublicIp:
+    Value: !Ref ApiAddress
+  # Until the kiet.edu subdomain is delegated: hostnames that resolve to the Elastic IP (sslip.io), so Caddy can
+  # get free Let's Encrypt certificates for them.
+  ApiHost:
+    Value: !Join ["", ["api-", !Join ["-", !Split [".", !Ref ApiAddress]], ".sslip.io"]]
+  PortalHost:
+    Value: !Join ["", ["portal-", !Join ["-", !Split [".", !Ref ApiAddress]], ".sslip.io"]]
+  AdminHost:
+    Value: !Join ["", ["admin-", !Join ["-", !Split [".", !Ref ApiAddress]], ".sslip.io"]]
+  OpsBucket:
+    Value: !Ref OpsBucket
+  EcrRepository:
+    Value: !GetAtt ApiRepository.RepositoryUri

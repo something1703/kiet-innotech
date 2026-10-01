@@ -19,3 +19,9 @@ export function formatDateTime(iso: string) {
 export function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 }
+
+/** The account's display name, or "" when it is just the email's local part (what sign-in falls back to without a name). */
+export function accountName(name: string, email: string) {
+  const trimmed = name.trim();
+  return trimmed.toLowerCase() === email.split("@")[0].toLowerCase() ? "" : trimmed;
+}

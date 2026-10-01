@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { GraduationCap, School, University } from "lucide-react";
 import { departments } from "@/lib/content";
+import { clearDraft, hasDraft, readDraft, writeDraft } from "@/lib/drafts";
+import { accountName } from "@/lib/format";
 import {
   KIET_INSTITUTION,
   allowedParticipantTypes,
@@ -11,6 +13,7 @@ import {
   kietCourses,
   participantTypeLabels,
   profileErrors,
+  profileMaxLength,
   schoolClasses,
   yearLabel,
 } from "@/lib/rules";
@@ -31,7 +34,10 @@ type ProfileFormProps = {
   /** In a team, the college or school, department and year can no longer change. */
   lockInstitution?: boolean;
   submitLabel: string;
-  onSubmit: (input: ProfileInput) => Promise<unknown>;
+  /** Resolves to true once saved, which discards the draft. */
+  onSubmit: (input: ProfileInput) => Promise<boolean>;
+  /** Where unsaved values are kept (sessionStorage), so they survive a trip through /login. See lib/drafts.ts. */
+  draftKey: string;
   pending: boolean;
   error: string | null;
   onCancel?: () => void;
@@ -44,7 +50,7 @@ function initialValues(email: string, defaultName: string, profile: Profile | nu
   }
   const participantType = allowedParticipantTypes(email)[0];
   return {
-    fullName: defaultName,
+    fullName: accountName(defaultName, email),
     phone: "",
     participantType,
     institution: participantType === "kiet" ? KIET_INSTITUTION : "",
@@ -56,22 +62,41 @@ function initialValues(email: string, defaultName: string, profile: Profile | nu
   };
 }
 
-export function ProfileForm({ email, defaultName, profile, lockInstitution = false, submitLabel, onSubmit, pending, error, onCancel }: ProfileFormProps) {
-  const [values, setValues] = useState<ProfileInput>(() => initialValues(email, defaultName, profile));
+export function ProfileForm({ email, defaultName, profile, lockInstitution = false, submitLabel, onSubmit, draftKey, pending, error, onCancel }: ProfileFormProps) {
+  const [values, setValues] = useState<ProfileInput>(() => {
+    const initial = initialValues(email, defaultName, profile);
+    const draft = readDraft(draftKey, initial);
+    // Fields locked while in a team always come from the saved profile, whatever the draft says.
+    return lockInstitution ? { ...draft, participantType: initial.participantType, institution: initial.institution, department: initial.department, year: initial.year } : draft;
+  });
+  const [restored] = useState(() => hasDraft(draftKey));
+  const [dirty, setDirty] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof ProfileInput, string>>>({});
   const [confirmed, setConfirmed] = useState(profile !== null);
   const [confirmError, setConfirmError] = useState(false);
+
+  // Keep unsaved changes, so an expired session does not lose them.
+  useEffect(() => {
+    if (dirty) writeDraft(draftKey, values);
+  }, [dirty, draftKey, values]);
 
   const types = allowedParticipantTypes(email);
   const type = values.participantType;
   const set = <K extends keyof ProfileInput>(key: K, value: ProfileInput[K]) => {
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
+    setDirty(true);
   };
 
   const chooseType = (next: ParticipantType) => {
     setValues((v) => ({ ...v, participantType: next, course: "", year: 0, institution: next === "kiet" ? KIET_INSTITUTION : "", department: null }));
     setErrors({});
+    setDirty(true);
+  };
+
+  const cancel = () => {
+    clearDraft(draftKey);
+    onCancel?.();
   };
 
   const submit = async (e: FormEvent) => {
@@ -83,13 +108,18 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
       document.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
       return;
     }
-    await onSubmit(values);
+    if (await onSubmit(values)) {
+      clearDraft(draftKey);
+      setDirty(false);
+    }
   };
 
   const institutionLabel = type === "school" ? "School name" : "College name";
 
   return (
     <form onSubmit={submit} noValidate className="space-y-8">
+      {restored && <Notice tone="info">We kept the changes you had not saved yet. Check them and save.</Notice>}
+
       <fieldset>
         <legend className="mb-3 text-sm font-semibold text-navy-800">I am a</legend>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -132,13 +162,13 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
 
       <div className="grid gap-6 sm:grid-cols-2">
         <Field id="fullName" label="Full name" error={errors.fullName} hint="As it should appear on your certificate.">
-          <Input id="fullName" value={values.fullName} invalid={!!errors.fullName} onChange={(e) => set("fullName", e.target.value)} autoComplete="name" />
+          <Input id="fullName" value={values.fullName} invalid={!!errors.fullName} maxLength={profileMaxLength.fullName} onChange={(e) => set("fullName", e.target.value)} autoComplete="name" />
         </Field>
         <Field id="email" label="Email" hint="From your Google account.">
           <Input id="email" value={email} disabled />
         </Field>
         <Field id="phone" label="Mobile number" error={errors.phone} hint="10 digits. Used only for event updates.">
-          <Input id="phone" type="tel" inputMode="numeric" value={values.phone} invalid={!!errors.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel-national" placeholder="98XXXXXXXX" />
+          <Input id="phone" type="tel" inputMode="numeric" value={values.phone} invalid={!!errors.phone} maxLength={profileMaxLength.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel-national" placeholder="98XXXXXXXX" />
         </Field>
 
         {type === "kiet" ? (
@@ -165,16 +195,16 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
             </Field>
             <YearField values={values} error={errors.year} locked={lockInstitution} onChange={(year) => set("year", year)} />
             <Field id="rollNumber" label="University roll number" error={errors.rollNumber}>
-              <Input id="rollNumber" inputMode="numeric" value={values.rollNumber} invalid={!!errors.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} placeholder="e.g. 2300290100012" />
+              <Input id="rollNumber" inputMode="numeric" value={values.rollNumber} invalid={!!errors.rollNumber} maxLength={profileMaxLength.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} placeholder="e.g. 2300290100012" />
             </Field>
           </>
         ) : (
           <>
             <Field id="institution" label={institutionLabel} error={errors.institution} className="sm:col-span-2" hint={lockInstitution ? "Locked while you are in a team." : "Write the full official name. Your teammates must enter the same name."}>
-              <Input id="institution" value={values.institution} invalid={!!errors.institution} disabled={lockInstitution} onChange={(e) => set("institution", e.target.value)} autoComplete="organization" />
+              <Input id="institution" value={values.institution} invalid={!!errors.institution} maxLength={profileMaxLength.institution} disabled={lockInstitution} onChange={(e) => set("institution", e.target.value)} autoComplete="organization" />
             </Field>
             <Field id="city" label="City" error={errors.city}>
-              <Input id="city" value={values.city} invalid={!!errors.city} onChange={(e) => set("city", e.target.value)} autoComplete="address-level2" />
+              <Input id="city" value={values.city} invalid={!!errors.city} maxLength={profileMaxLength.city} onChange={(e) => set("city", e.target.value)} autoComplete="address-level2" />
             </Field>
             {type === "college" && (
               <Field id="course" label="Course" error={errors.course}>
@@ -191,11 +221,11 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
             <YearField values={values} error={errors.year} locked={lockInstitution} onChange={(year) => set("year", year)} />
             {type === "college" ? (
               <Field id="rollNumber" label="Enrolment or roll number" error={errors.rollNumber}>
-                <Input id="rollNumber" value={values.rollNumber} invalid={!!errors.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} />
+                <Input id="rollNumber" value={values.rollNumber} invalid={!!errors.rollNumber} maxLength={profileMaxLength.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} />
               </Field>
             ) : (
               <Field id="rollNumber" label="School admission number" optional>
-                <Input id="rollNumber" value={values.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} />
+                <Input id="rollNumber" value={values.rollNumber} maxLength={profileMaxLength.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} />
               </Field>
             )}
           </>
@@ -231,7 +261,7 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
           {submitLabel}
         </Button>
         {onCancel && (
-          <Button variant="outline" onClick={onCancel} disabled={pending}>
+          <Button variant="outline" onClick={cancel} disabled={pending}>
             Cancel
           </Button>
         )}

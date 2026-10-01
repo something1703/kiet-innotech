@@ -61,3 +61,6 @@ export function errorMessage(error: unknown) {
 }
 
 export const DEFAULT_PAGE_SIZE = 25;
+
+/** The backend rejects longer search text with 422. */
+export const MAX_SEARCH_LENGTH = 100;

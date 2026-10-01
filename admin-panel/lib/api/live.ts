@@ -3,10 +3,17 @@
  *
  * Base URL: NEXT_PUBLIC_API_URL (no trailing slash). All routes below are relative to it.
  *
+ * Sign-in (lib/auth/sign-in.ts; no bearer token, same error format)
+ *   POST   /auth/google   body { credential: <Google ID token from Google Identity Services>, app: "admin" }
+ *   POST   /dev/token     body { email, name, app: "admin" }   (local development backend only)
+ *          → { token, expires_at (ISO 8601), email (lowercased), name }
+ *          401 bad credential, 403 not an organiser. Admin tokens last 12 hours; there is no refresh.
+ *
  * Conventions
- * - Every request sends `Authorization: Bearer <Cognito ID token>`. The backend verifies the JWT
- *   against the user pool's JWKS (issuer, audience = app client ID, expiry), reads the `email`
- *   claim and looks it up in the admins table. Unknown emails get 403.
+ * - Every admin request sends `Authorization: Bearer <session token>` from the sign-in response.
+ *   Admin endpoints reject student portal tokens. 401 (missing or expired token) signs the panel
+ *   out and returns to /login; 403 from /admin/me shows the "not authorised" screen.
+ * - Requests time out after 20 seconds.
  * - Request and response bodies use snake_case keys; this client converts them to and from camelCase.
  *   Query parameter names are snake_case too. Enum values (statuses, sort keys) are sent as-is.
  * - Errors are non-2xx responses with `{ "detail": "Human readable message" }`; `detail` is always a
@@ -34,8 +41,8 @@
  *   GET    /admin/teams?department=&category=&status=&type=&route=&q=&sort=&order=&page=&page_size=
  *          department: KIET department name (e.g. "CSE(AI)"); category: 1-8;
  *          status: draft | submitted | withdrawn | disqualified; type: kiet | college | school;
- *          route: department | finale; q: case-insensitive match on team name, team code,
- *          institution, member names and member emails;
+ *          route: department | finale; q (at most 100 characters, else 422): case-insensitive match
+ *          on team name, team code, institution, member names and member emails;
  *          sort: code | name | category | department | status | members | submitted_at (default code);
  *          order: asc | desc (default asc).
  *          → Page<AdminTeam> (members include phone, roll_number, institution; invitations = pending only)
@@ -55,11 +62,12 @@
  *
  *   POST   /admin/teams/{id}/restore      body { reason }   (super_admin only)
  *          Allowed from withdrawn | disqualified. Status becomes "submitted" if submitted_at is set,
- *          otherwise "draft". → AdminTeam
+ *          otherwise "draft". 409 if members have left since (leader gone, or a submitted team
+ *          below 2 members). → AdminTeam
  *          `reason` is required (at least 5 characters) on all three actions.
  *
  *   GET    /admin/students?department=&type=&year=&in_team=&q=&sort=&order=&page=&page_size=
- *          in_team: yes | no; q matches name, email, roll number, institution, phone;
+ *          in_team: yes | no; q (at most 100 characters) matches name, email, roll number, institution, phone;
  *          sort: name | email | department | year | institution | created_at (default name).
  *          → Page<AdminStudent> (Profile + team { id, code, name, status, department, role } | null)
  *
@@ -89,6 +97,8 @@
  *          → PublishResult { published_at, finalists, not_selected }
  *
  *   GET    /admin/admins                    (super_admin only) → AdminUser[]
+ *          Super admins set in the server configuration come first, with added_by
+ *          "server configuration" and added_at null. They cannot be removed here (409).
  *   POST   /admin/admins                    (super_admin only)
  *          body { email, name, role, department }  department required (a KIET department) when
  *          role = "admin", must be null for "super_admin". 409 if the email is already an admin.
@@ -119,10 +129,12 @@ import type {
   StudentQuery,
   TeamQuery,
 } from "../admin-types";
-import { getIdToken } from "../auth/cognito";
+import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const TIMEOUT_MS = 20_000;
+const SESSION_ENDED = "Your session has ended. Please sign in again.";
 
 const toSnake = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 const toCamel = (key: string) => key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
@@ -147,37 +159,76 @@ function queryString(query: object) {
   return text ? `?${text}` : "";
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  if (!BASE_URL) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set.");
-  const token = await getIdToken();
-  if (!token) throw new ApiError(401, "Your session has expired. Please sign in again.");
-  let response: Response;
+/**
+ * One request to the backend, with a timeout. Bodies are sent and returned as-is (snake_case);
+ * non-2xx responses become an ApiError carrying the server's `detail`.
+ */
+export async function send(method: string, path: string, { body, token }: { body?: unknown; token?: string } = {}): Promise<unknown> {
+  if (!API_URL) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set.");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(convertKeys(body, toSnake)),
-    });
-  } catch {
-    throw new ApiError(0, "Could not reach the server. Check your connection and try again.");
+    let response: Response;
+    let data: unknown;
+    try {
+      response = await fetch(`${API_URL}${path}`, {
+        method,
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+      data = response.status === 204 ? undefined : await response.json().catch(() => null);
+    } catch {
+      throw new ApiError(
+        0,
+        controller.signal.aborted
+          ? "The server took too long to respond. Please try again."
+          : "Could not reach the server. Check your connection and try again.",
+      );
+    }
+    if (!response.ok) {
+      const detail = (data as { detail?: unknown } | null)?.detail;
+      const message =
+        typeof detail === "string"
+          ? detail
+          : Array.isArray(detail) && typeof detail[0]?.msg === "string"
+            ? detail[0].msg
+            : `Request failed (${response.status}).`;
+      throw new ApiError(response.status, message);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  if (response.status === 204) return undefined as T;
-  const data: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const detail = (data as { detail?: unknown } | null)?.detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : Array.isArray(detail) && typeof detail[0]?.msg === "string"
-          ? detail[0].msg
-          : `Request failed (${response.status}).`;
-    throw new ApiError(response.status, message);
+}
+
+export type AuthFailure = { status: 401 | 403; message: string };
+
+let authFailureHandler: ((failure: AuthFailure) => void) | null = null;
+
+/** AuthProvider registers here to sign out on 401 and show "not authorised" on 403 from /admin/me. */
+export function setAuthFailureHandler(handler: ((failure: AuthFailure) => void) | null) {
+  authFailureHandler = handler;
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const session = getSession();
+  if (!session) {
+    authFailureHandler?.({ status: 401, message: SESSION_ENDED });
+    throw new ApiError(401, SESSION_ENDED);
   }
-  return convertKeys(data, toCamel) as T;
+  try {
+    const data = await send(method, path, { body: body === undefined ? undefined : convertKeys(body, toSnake), token: session.token });
+    return convertKeys(data, toCamel) as T;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) authFailureHandler?.({ status: 401, message: error.message });
+    if (error instanceof ApiError && error.status === 403 && path === "/admin/me") authFailureHandler?.({ status: 403, message: error.message });
+    throw error;
+  }
 }
 
 const id = (value: string) => encodeURIComponent(value);

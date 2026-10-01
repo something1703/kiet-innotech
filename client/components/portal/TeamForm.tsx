@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { categories, domains } from "@/lib/content";
+import { clearDraft, hasDraft, readDraft, writeDraft } from "@/lib/drafts";
 import { categoryEligibility, lengthError, limits } from "@/lib/rules";
 import type { ParticipantType, TeamInput } from "@/lib/types";
 import { Button, Field, Input, Notice, Pill, Select, Textarea } from "@/components/ui/form";
@@ -14,7 +15,10 @@ type TeamFormProps = {
   /** Years of everyone already in the team, used to check category eligibility. */
   memberYears: number[];
   submitLabel: string;
-  onSubmit: (input: TeamInput) => Promise<unknown>;
+  /** Resolves to true once saved, which discards the draft. */
+  onSubmit: (input: TeamInput) => Promise<boolean>;
+  /** Where unsaved values are kept (sessionStorage), so they survive a trip through /login. See lib/drafts.ts. */
+  draftKey: string;
   pending: boolean;
   error: string | null;
   onCancel?: () => void;
@@ -22,13 +26,26 @@ type TeamFormProps = {
 
 const empty: TeamInput = { name: "", category: 0, domain: "", projectTitle: "", abstract: "" };
 
-export function TeamForm({ initial = empty, participantType, memberYears, submitLabel, onSubmit, pending, error, onCancel }: TeamFormProps) {
-  const [values, setValues] = useState<TeamInput>(initial);
+export function TeamForm({ initial = empty, participantType, memberYears, submitLabel, onSubmit, draftKey, pending, error, onCancel }: TeamFormProps) {
+  const [values, setValues] = useState<TeamInput>(() => readDraft(draftKey, initial));
+  const [restored] = useState(() => hasDraft(draftKey));
+  const [dirty, setDirty] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof TeamInput, string>>>({});
+
+  // Keep unsaved changes, so an expired session does not lose a long abstract.
+  useEffect(() => {
+    if (dirty) writeDraft(draftKey, values);
+  }, [dirty, draftKey, values]);
 
   const set = <K extends keyof TeamInput>(key: K, value: TeamInput[K]) => {
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
+    setDirty(true);
+  };
+
+  const cancel = () => {
+    clearDraft(draftKey);
+    onCancel?.();
   };
 
   const submit = async (e: FormEvent) => {
@@ -47,13 +64,18 @@ export function TeamForm({ initial = empty, participantType, memberYears, submit
       document.querySelector<HTMLElement>("[aria-invalid=true], [data-invalid=true]:not(:disabled)")?.focus();
       return;
     }
-    await onSubmit(values);
+    if (await onSubmit(values)) {
+      clearDraft(draftKey);
+      setDirty(false);
+    }
   };
 
   const abstractLength = values.abstract.trim().length;
 
   return (
     <form onSubmit={submit} noValidate className="space-y-8">
+      {restored && <Notice tone="info">We kept the changes you had not saved yet. Check them and save.</Notice>}
+
       <Field id="name" label="Team name" error={errors.name} hint={`${limits.teamName.min} to ${limits.teamName.max} characters. Must be unique.`}>
         <Input id="name" value={values.name} invalid={!!errors.name} maxLength={limits.teamName.max} onChange={(e) => set("name", e.target.value)} autoComplete="off" />
       </Field>
@@ -142,7 +164,7 @@ export function TeamForm({ initial = empty, participantType, memberYears, submit
           {submitLabel}
         </Button>
         {onCancel && (
-          <Button variant="outline" onClick={onCancel} disabled={pending}>
+          <Button variant="outline" onClick={cancel} disabled={pending}>
             Cancel
           </Button>
         )}

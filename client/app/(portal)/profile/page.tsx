@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { api } from "@/lib/api";
+import { draftKeys, hasDraft } from "@/lib/drafts";
 import { participantTypeLabels, yearLabel } from "@/lib/rules";
 import type { Profile } from "@/lib/types";
 import { Button, Notice } from "@/components/ui/form";
@@ -14,16 +15,18 @@ import { useAction } from "@/components/portal/useAction";
 export default function ProfilePage() {
   const { me, team, refresh } = usePortal();
   const profile = me.profile!;
-  const [editing, setEditing] = useState(false);
+  const draftKey = draftKeys.profile(me.email);
+  // Reopen the form if unsaved changes were kept, e.g. after signing in again.
+  const [editing, setEditing] = useState(() => hasDraft(draftKey));
   const [saved, setSaved] = useState(false);
   const { run, pending, error } = useAction();
 
   const save = async (input: Parameters<typeof api.saveProfile>[0]) => {
-    if (await run(() => api.saveProfile(input))) {
-      await refresh();
-      setEditing(false);
-      setSaved(true);
-    }
+    if (!(await run(() => api.saveProfile(input)))) return false;
+    await refresh();
+    setEditing(false);
+    setSaved(true);
+    return true;
   };
 
   return (
@@ -68,6 +71,7 @@ export default function ProfilePage() {
               lockInstitution={team !== null}
               submitLabel="Save changes"
               onSubmit={save}
+              draftKey={draftKey}
               pending={pending}
               error={error}
               onCancel={() => setEditing(false)}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, X } from "lucide-react";
-import { api, DEFAULT_PAGE_SIZE, errorMessage } from "@/lib/api";
+import { api, DEFAULT_PAGE_SIZE, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { TeamQuery, TeamSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departments } from "@/lib/content";
@@ -12,12 +12,13 @@ import { formatDate, otherMemberDepartments, plural, routeLabels, statusLabels, 
 import type { ParticipantType, TeamRoute, TeamStatus } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Select } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Pagination } from "@/components/ui/Pagination";
+import { lastPage, Pagination } from "@/components/ui/Pagination";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { numClass, SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
@@ -41,7 +42,7 @@ export function TeamsView() {
     status: pickParam(params, "status", statuses),
     type: isSuper ? pickParam(params, "type", types) : undefined,
     route: isSuper ? pickParam(params, "route", routes) : undefined,
-    q: params.get("q")?.trim() || undefined,
+    q: params.get("q")?.trim().slice(0, MAX_SEARCH_LENGTH) || undefined,
     sort: pickParam(params, "sort", sorts) ?? "code",
     order: params.get("order") === "desc" ? "desc" : "asc",
     page: intParam(params, "page", 1, 10_000) ?? 1,
@@ -176,76 +177,89 @@ export function TeamsView() {
       {error && <Notice tone="error">{error}</Notice>}
       {!data && !error && <Loading label="Loading teams" />}
 
-      {data && data.items.length === 0 && (
+      {data && data.total === 0 && (
         <EmptyState title="No teams found">{filtered ? "Try removing a filter or searching for something else." : "No teams have been created yet."}</EmptyState>
       )}
 
-      {data && data.items.length > 0 && (
+      {data && data.total > 0 && (
         <div className={`space-y-4 transition-opacity ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
-          <TableFrame label="Teams" minWidth="min-w-[920px]">
-            <thead>
-              <tr>
-                <SortableTh label="Code" sortKey="code" {...sortProps} />
-                <SortableTh label="Team" sortKey="name" {...sortProps} />
-                <SortableTh label="Cat." sortKey="category" {...sortProps} />
-                <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
-                <SortableTh label="Members" sortKey="members" {...sortProps} className={numClass} />
-                <SortableTh label="Status" sortKey="status" {...sortProps} />
-                <SortableTh label="Submitted" sortKey="submitted_at" {...sortProps} />
-                <Th>Result</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((team) => {
-                const leader = team.members.find((m) => m.role === "leader");
-                return (
-                  <tr key={team.id} className="hover:bg-surface/70">
-                    <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>
-                      <Link href={`/teams/${team.id}`} className="font-semibold text-brand-700 hover:underline">
-                        {team.code}
-                      </Link>
-                    </td>
-                    <td className={`${tdClass} min-w-56`}>
-                      <Link href={`/teams/${team.id}`} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
-                        {team.name}
-                      </Link>
-                      <p className="text-xs text-muted">Led by {leader?.fullName ?? "—"}</p>
-                    </td>
-                    <td className={`${tdClass} whitespace-nowrap`} title={categories.find((c) => c.number === team.category)?.title}>
-                      <span className="font-display font-bold text-navy-900">{team.category}</span>
-                    </td>
-                    <td className={tdClass}>
-                      {team.department ? (
-                        <>
-                          <span className="font-medium">{team.department}</span>
-                          {otherMemberDepartments(team).length > 0 && (
-                            <span className="block text-xs text-muted">+ {otherMemberDepartments(team).join(", ")}</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="block max-w-56 text-sm">{team.institution}</span>
-                      )}
-                      {isSuper && (
-                        <span className="mt-0.5 flex gap-1">
-                          <Pill tone={team.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[team.participantType]}</Pill>
-                          {team.route === "finale" && <Pill tone="orange">Direct to finale</Pill>}
-                        </span>
-                      )}
-                    </td>
-                    <td className={`${tdClass} ${numClass}`}>
-                      {team.members.length}
-                      {team.invitations.length > 0 && <span className="block text-xs text-muted">+{team.invitations.length} invited</span>}
-                    </td>
-                    <td className={tdClass}>
-                      <StatusPill status={team.status} />
-                    </td>
-                    <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(team.submittedAt)}</td>
-                    <td className={tdClass}>{team.result !== "pending" ? <ResultPill result={team.result} /> : <span className="text-muted">—</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </TableFrame>
+          {data.items.length === 0 ? (
+            <EmptyState
+              title="No results on this page"
+              action={
+                <Button variant="secondary" size="sm" onClick={() => update({ page: lastPage(data) })} disabled={loading}>
+                  Go to page {lastPage(data)}
+                </Button>
+              }
+            >
+              The list is shorter than this page number, possibly because teams were removed since the link was made.
+            </EmptyState>
+          ) : (
+            <TableFrame label="Teams" minWidth="min-w-[920px]">
+              <thead>
+                <tr>
+                  <SortableTh label="Code" sortKey="code" {...sortProps} />
+                  <SortableTh label="Team" sortKey="name" {...sortProps} />
+                  <SortableTh label="Cat." sortKey="category" {...sortProps} />
+                  <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
+                  <SortableTh label="Members" sortKey="members" {...sortProps} className={numClass} />
+                  <SortableTh label="Status" sortKey="status" {...sortProps} />
+                  <SortableTh label="Submitted" sortKey="submitted_at" {...sortProps} />
+                  <Th>Result</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((team) => {
+                  const leader = team.members.find((m) => m.role === "leader");
+                  return (
+                    <tr key={team.id} className="hover:bg-surface/70">
+                      <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>
+                        <Link href={teamHref(team.id)} className="font-semibold text-brand-700 hover:underline">
+                          {team.code}
+                        </Link>
+                      </td>
+                      <td className={`${tdClass} min-w-56`}>
+                        <Link href={teamHref(team.id)} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
+                          {team.name}
+                        </Link>
+                        <p className="text-xs text-muted">Led by {leader?.fullName ?? "—"}</p>
+                      </td>
+                      <td className={`${tdClass} whitespace-nowrap`} title={categories.find((c) => c.number === team.category)?.title}>
+                        <span className="font-display font-bold text-navy-900">{team.category}</span>
+                      </td>
+                      <td className={tdClass}>
+                        {team.department ? (
+                          <>
+                            <span className="font-medium">{team.department}</span>
+                            {otherMemberDepartments(team).length > 0 && (
+                              <span className="block text-xs text-muted">+ {otherMemberDepartments(team).join(", ")}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="block max-w-56 text-sm">{team.institution}</span>
+                        )}
+                        {isSuper && (
+                          <span className="mt-0.5 flex gap-1">
+                            <Pill tone={team.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[team.participantType]}</Pill>
+                            {team.route === "finale" && <Pill tone="orange">Direct to finale</Pill>}
+                          </span>
+                        )}
+                      </td>
+                      <td className={`${tdClass} ${numClass}`}>
+                        {team.members.length}
+                        {team.invitations.length > 0 && <span className="block text-xs text-muted">+{team.invitations.length} invited</span>}
+                      </td>
+                      <td className={tdClass}>
+                        <StatusPill status={team.status} />
+                      </td>
+                      <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(team.submittedAt)}</td>
+                      <td className={tdClass}>{team.result !== "pending" ? <ResultPill result={team.result} /> : <span className="text-muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableFrame>
+          )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
       )}

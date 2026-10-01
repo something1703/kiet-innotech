@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 from . import rules
 
@@ -13,6 +13,14 @@ class Input(BaseModel):
     """Base for request bodies: unknown fields are rejected and strings are trimmed."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def no_nul_characters(cls, value: object) -> object:
+        # PostgreSQL cannot store NUL in text; reject it here instead of failing at the database.
+        if isinstance(value, str) and "\x00" in value:
+            raise ValueError("Text cannot contain NUL characters.")
+        return value
 
 
 # ---------- Students ----------
@@ -60,6 +68,9 @@ class ProfileInput(Input):
         label = "school" if self.participant_type == "school" else "college"
         if len(self.institution) < 3:
             raise ValueError(f"Enter the full name of your {label}.")
+        if not rules.normalise_institution(self.institution):
+            # Teams are matched on this name, so it needs letters or digits we can compare.
+            raise ValueError(f"Enter the name of your {label} in English letters.")
         if len(self.city) < 2:
             raise ValueError("Enter the city.")
         self.department = None
@@ -92,10 +103,26 @@ class ProfileOut(BaseModel):
     created_at: datetime
 
 
+class RegistrationOut(BaseModel):
+    """The registration window as the server enforces it; the portal follows this, not the device clock."""
+
+    state: rules.RegistrationState
+    opens: datetime
+    closes: datetime
+
+
 class MeOut(BaseModel):
     email: str
     name: str
     profile: ProfileOut | None
+    registration: RegistrationOut
+
+
+class SessionOut(BaseModel):
+    token: str
+    expires_at: datetime
+    email: str
+    name: str
 
 
 class TeamInput(Input):
@@ -111,6 +138,9 @@ class TeamInput(Input):
         value = " ".join(value.split())
         if len(value) < rules.TEAM_NAME_LENGTH[0]:
             raise ValueError(f"Team name must be at least {rules.TEAM_NAME_LENGTH[0]} characters.")
+        # Lower-casing can lengthen some letters (e.g. "İ"); the uniqueness key must still fit its column.
+        if len(rules.normalise_team_name(value)) > rules.TEAM_NAME_LENGTH[1]:
+            raise ValueError("Team name contains characters we cannot use. Please choose another name.")
         return value
 
     @field_validator("category")
@@ -143,7 +173,15 @@ class TeamInput(Input):
 
 
 class InviteInput(Input):
-    email: EmailStr
+    email: str = Field(max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value: str) -> str:
+        try:
+            return str(TypeAdapter(EmailStr).validate_python(value)).lower()
+        except ValidationError:
+            raise ValueError("Enter a valid email address.") from None
 
 
 class JoinInput(Input):

@@ -1,12 +1,22 @@
 /** Builds a CSV file (RFC 4180, with a BOM so Excel reads UTF-8) and downloads it. */
 
-type Cell = string | number | null | undefined;
+/** Text that must stay text, such as phone and roll numbers. Create it with `asText`. */
+type TextCell = { text: string };
+type Cell = string | number | null | undefined | TextCell;
+
+/** Keeps digit strings as text in Excel, so long roll numbers do not turn into 2.3E+12 and leading zeros survive. */
+export function asText(value: string | null | undefined): TextCell {
+  return { text: value ?? "" };
+}
 
 function escapeCell(value: Cell) {
-  let text = value === null || value === undefined ? "" : String(value);
+  const keepText = typeof value === "object" && value !== null;
+  let text = typeof value === "object" && value !== null ? value.text : value === null || value === undefined ? "" : String(value);
   // Stop spreadsheet apps from treating cell text as a formula.
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  // A leading tab (added after the formula check, so it cannot hide one) makes Excel read the cell as text.
+  if (keepText && text) text = `\t${text}`;
+  return /[",\r\n\t]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export function toCsv(header: string[], rows: Cell[][]) {

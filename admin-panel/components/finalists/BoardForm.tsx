@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { api, errorMessage } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import type { FinalistBoard } from "@/lib/admin-types";
 import { categoryTitle, formatDateTime } from "@/lib/format";
 import { DOUBLE_QUOTA_DEPARTMENTS } from "@/lib/rules";
+import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Pill } from "@/components/ui/Pill";
@@ -23,14 +24,24 @@ function initialSelection(board: FinalistBoard): Selection {
 export function BoardForm({
   board,
   onSaved,
+  onConflict,
   justSaved = false,
   onEdit,
+  onDirtyChange,
 }: {
   board: FinalistBoard;
   onSaved: (board: FinalistBoard) => void;
+  /**
+   * The server refused the save because the board changed underneath (409, e.g. results were
+   * published) or no longer validates (422, e.g. a nominated team was withdrawn). The parent
+   * reloads the board, which remounts this form, and shows the message.
+   */
+  onConflict: (message: string) => void;
   /** Set by the parent after a save, since saving remounts this form. */
   justSaved?: boolean;
   onEdit?: () => void;
+  /** Reports whether there are unsaved changes, so the parent can confirm before switching boards. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [selection, setSelection] = useState<Selection>(() => initialSelection(board));
   const [saving, setSaving] = useState(false);
@@ -41,6 +52,23 @@ export function BoardForm({
   const changed = board.categories.filter((c) => [...(selection[c.category] ?? [])].sort().join() !== [...(original[c.category] ?? [])].sort().join());
   const total = board.categories.reduce((sum, c) => sum + (selection[c.category]?.length ?? 0), 0);
   const quotaTotal = board.categories.reduce((sum, c) => sum + (c.teams.length ? Math.min(c.quota, c.teams.length) : 0), 0);
+  const dirty = changed.length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
+
+  // Closing or reloading the tab would lose the selection.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   function toggle(category: number, teamId: string, checked: boolean) {
     onEdit?.();
@@ -54,13 +82,16 @@ export function BoardForm({
     setSaving(true);
     setError(null);
     try {
+      // Only the categories edited here: the server replaces each category it receives, so sending
+      // untouched ones from a stale board would undo another admin's nominations.
       const updated = await api.saveFinalists(
         board.department,
-        board.categories.map((c) => ({ category: c.category, teamIds: selection[c.category] ?? [] })),
+        changed.map((c) => ({ category: c.category, teamIds: selection[c.category] ?? [] })),
       );
       onSaved(updated);
     } catch (err) {
-      setError(errorMessage(err));
+      if (err instanceof ApiError && (err.status === 409 || err.status === 422)) onConflict(err.message);
+      else setError(errorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -139,7 +170,7 @@ export function BoardForm({
                               Led by {team.leaderName} · {team.memberCount} members
                             </span>
                           </label>
-                          <Link href={`/teams/${team.id}`} className="shrink-0 text-xs font-semibold text-brand-700 hover:underline">
+                          <Link href={teamHref(team.id)} className="shrink-0 text-xs font-semibold text-brand-700 hover:underline">
                             View<span className="sr-only"> {team.name}</span>
                           </Link>
                         </div>

@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, Ban, RotateCcw, UserMinus } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { AdminTeam } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categoryTitle, formatDate, formatDateTime, otherMemberDepartments, participantTypeLabels, routeLabels, statusLabels } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
+import { isTeamId } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
 import { AuditList } from "@/components/audit/AuditList";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -64,21 +65,56 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const back = (
+  <Link href="/teams" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline">
+    <ArrowLeft aria-hidden="true" className="size-4" />
+    All teams
+  </Link>
+);
+
+function TeamNotFound({ known }: { known: boolean }) {
+  return (
+    <div className="space-y-4">
+      {back}
+      <EmptyState
+        title="Team not found"
+        action={
+          <ButtonLink href="/teams" size="sm">
+            Back to all teams
+          </ButtonLink>
+        }
+      >
+        {known ? "No team with this ID exists. It may have been deleted by its leader." : "This link does not point to a team."} Find the team in
+        the list instead.
+      </EmptyState>
+    </div>
+  );
+}
+
+/** Renders inside <Suspense> (useSearchParams): the team ID comes from /teams/view/?id=. */
 export function TeamDetail() {
-  const { id } = useParams<{ id: string }>();
+  const id = useSearchParams().get("id");
+  if (!isTeamId(id)) return <TeamNotFound known={false} />;
+  // Keyed so moving between teams (back/forward) starts fresh instead of showing the previous team.
+  return <TeamView key={id} id={id} />;
+}
+
+function TeamView({ id }: { id: string }) {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
-  const team = useQuery(`team:${id}`, () => api.getTeam(id));
+  const [notFound, setNotFound] = useState(false);
+  const team = useQuery(`team:${id}`, () =>
+    api.getTeam(id).catch((error: unknown) => {
+      // The live API answers 422 for an ID that is not a UUID; both mean "no such team".
+      if (error instanceof ApiError && (error.status === 404 || error.status === 422)) setNotFound(true);
+      throw error;
+    }),
+  );
   const history = useQuery(team.data ? `team-audit:${id}` : null, () => api.audit({ teamId: id, limit: 100 }));
   const [action, setAction] = useState<Action | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const back = (
-    <Link href="/teams" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline">
-      <ArrowLeft aria-hidden="true" className="size-4" />
-      All teams
-    </Link>
-  );
+  if (notFound && !team.data) return <TeamNotFound known />;
 
   if (team.error && !team.data) {
     return (

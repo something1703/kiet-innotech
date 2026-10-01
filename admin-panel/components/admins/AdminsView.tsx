@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ShieldAlert, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
-import type { AdminRole, AdminUser } from "@/lib/admin-types";
+import { CONFIGURED_BY_SERVER, type AdminRole, type AdminUser } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { departments } from "@/lib/content";
 import { formatDate, roleLabels } from "@/lib/format";
@@ -180,6 +180,7 @@ export function AdminsView() {
             <tbody>
               {sorted.map((admin) => {
                 const self = admin.email.toLowerCase() === me.email.toLowerCase();
+                const configured = admin.addedBy === CONFIGURED_BY_SERVER;
                 return (
                   <tr key={admin.email}>
                     <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>
@@ -190,10 +191,12 @@ export function AdminsView() {
                       <Pill tone={admin.role === "super_admin" ? "navy" : "cyan"}>{roleLabels[admin.role]}</Pill>
                     </td>
                     <td className={tdClass}>{admin.department ?? <span className="text-muted">All</span>}</td>
-                    <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(admin.addedAt)}</td>
+                    <td className={`${tdClass} whitespace-nowrap text-muted`}>{configured ? "Server configuration" : formatDate(admin.addedAt)}</td>
                     <td className={`${tdClass} text-right`}>
                       {self ? (
                         <span className="text-xs text-muted">Cannot remove yourself</span>
+                      ) : configured ? (
+                        <span className="text-xs text-muted" title="Set in the backend's SUPER_ADMIN_EMAILS">Change on the server</span>
                       ) : (
                         <Button variant="ghost" size="sm" className="text-red-700" onClick={() => setRemoving(admin)}>
                           Remove<span className="sr-only"> {admin.name}</span>

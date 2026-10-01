@@ -87,9 +87,42 @@ def allowed_participant_types(email: str) -> list[ParticipantType]:
     return ["kiet"] if is_kiet_email(email) else ["college", "school"]
 
 
+# Common short forms students type, so "ABES Engg. College" and "ABES Engineering College" compare equal.
+INSTITUTION_ABBREVIATIONS = {
+    "engg": "engineering",
+    "engr": "engineering",
+    "eng": "engineering",
+    "coll": "college",
+    "clg": "college",
+    "univ": "university",
+    "uni": "university",
+    "inst": "institute",
+    "instt": "institute",
+    "tech": "technology",
+    "mgmt": "management",
+    "sr": "senior",
+    "sec": "secondary",
+    "sch": "school",
+    "vidyalay": "vidyalaya",
+    "and": "",
+    "of": "",
+    "the": "",
+}
+
+
 def normalise_institution(name: str) -> str:
-    """So "K.I.E.T. Group" and "kiet group" compare equal."""
-    return re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+    """So "K.I.E.T. Group", "kiet group" and "Kiet Grp" style variants compare equal. Empty if nothing comparable."""
+    # Dots and apostrophes join letters ("K.I.E.T." is "kiet"); anything else separates words.
+    words = re.sub(r"[^a-z0-9]+", " ", re.sub(r"[.'’]", "", name.lower())).split()
+    return " ".join(w for w in (INSTITUTION_ABBREVIATIONS.get(word, word) for word in words) if w)[:200]
+
+
+def institution_key(participant_type: str, institution: str, city: str) -> str:
+    """Teams must share this key. Schools often share a name across cities (e.g. Delhi Public School), so add the city."""
+    key = normalise_institution(institution)
+    if participant_type == "school":
+        key = f"{key} | {normalise_institution(city)}"
+    return key[:200]
 
 
 def normalise_phone(phone: str) -> str:

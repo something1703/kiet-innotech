@@ -36,15 +36,15 @@ Timestamp = DateTime(timezone=True)
 
 
 class User(Base):
-    """Anyone who has signed in with Google through Cognito."""
+    """Anyone who has signed in to the student portal. The email is the identity."""
 
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True)
     name: Mapped[str] = mapped_column(String(200), default="")
-    # Cognito "sub"; unique per account in the user pool.
-    cognito_sub: Mapped[str | None] = mapped_column(String(128), unique=True)
+    # Google account id ("sub") of the last Google sign-in, for support; the email stays the identity.
+    google_sub: Mapped[str | None] = mapped_column(String(128), unique=True)
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
 
@@ -217,3 +217,13 @@ class AuditEntry(Base):
     # KIET department the entry belongs to, so department admins see only their own history. Null = institute-wide.
     department: Mapped[str | None] = mapped_column(String(20), index=True)
     detail: Mapped[str] = mapped_column(Text, default="")
+
+
+class RateLimit(Base):
+    """Fixed-window counters shared by all API workers, e.g. join-code attempts per student."""
+
+    __tablename__ = "rate_limits"
+
+    key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(Timestamp)
+    count: Mapped[int] = mapped_column(Integer)

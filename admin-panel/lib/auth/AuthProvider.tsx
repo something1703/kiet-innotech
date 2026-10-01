@@ -3,12 +3,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AdminUser } from "../admin-types";
 import { api, ApiError, errorMessage } from "../api";
-import { signOutUrl } from "./cognito";
-import { API_MODE, DEV_SIGN_IN, clearSession, devSignIn, hasSession, setMockEmail, signedInEmail } from "./session";
+import { setAuthFailureHandler } from "../api/live";
+import { forgetGoogleAccount } from "./google";
+import { DEV_SIGN_IN, clearSession, hasSession, setMockEmail, signedInEmail } from "./session";
+import { devSignIn } from "./sign-in";
 
 export type AuthState =
   | { status: "loading" }
-  | { status: "signed_out" }
+  /** `expired`: the server rejected the session; `signed_out`: the admin chose to sign out. */
+  | { status: "signed_out"; reason?: "expired" | "signed_out" }
   | { status: "unauthorised"; email: string | null; message: string }
   | { status: "error"; message: string }
   | { status: "signed_in"; admin: AdminUser };
@@ -17,7 +20,7 @@ type AuthContextValue = {
   state: AuthState;
   /** Re-checks the session with GET /admin/me. */
   refresh: () => void;
-  /** Mock mode only: signs in as one of the demo accounts. */
+  /** Mock mode (or live with NEXT_PUBLIC_DEV_SIGN_IN): signs in as one of the demo accounts. */
   signInAsDemo: (email: string, name?: string) => void;
   signOut: () => void;
 };
@@ -31,7 +34,7 @@ async function checkSession(): Promise<AuthState> {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       clearSession();
-      return { status: "signed_out" };
+      return { status: "signed_out", reason: "expired" };
     }
     if (error instanceof ApiError && error.status === 403) {
       return { status: "unauthorised", email: signedInEmail(), message: error.message };
@@ -54,6 +57,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [nonce]);
 
+  // Any API call can end the session: 401 signs out (PanelShell then sends the browser to
+  // /login?next=<this page>), 403 from /admin/me means the account is no longer an admin.
+  useEffect(() => {
+    setAuthFailureHandler((failure) => {
+      if (failure.status === 401) {
+        clearSession();
+        setState({ status: "signed_out", reason: "expired" });
+      } else {
+        setState({ status: "unauthorised", email: signedInEmail(), message: failure.message });
+      }
+    });
+    return () => setAuthFailureHandler(null);
+  }, []);
+
   const refresh = useCallback(() => {
     setState({ status: "loading" });
     setNonce((n) => n + 1);
@@ -68,18 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       devSignIn(email, name)
         .then(refresh)
-        .catch((error: Error) => setState({ status: "error", message: error.message }));
+        .catch((error: unknown) => setState({ status: "error", message: errorMessage(error) }));
     },
     [refresh],
   );
 
+  /** Clears the session; PanelShell (or the login page itself) then shows /login. */
   const signOut = useCallback(() => {
     clearSession();
-    if (API_MODE === "live") {
-      window.location.href = signOutUrl();
-      return;
-    }
-    setState({ status: "signed_out" });
+    forgetGoogleAccount();
+    setState({ status: "signed_out", reason: "signed_out" });
   }, []);
 
   const value = useMemo(() => ({ state, refresh, signInAsDemo, signOut }), [state, refresh, signInAsDemo, signOut]);

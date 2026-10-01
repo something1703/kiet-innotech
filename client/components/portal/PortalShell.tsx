@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { LogOut, RefreshCw } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth/session";
+import { isPath, isUnder } from "@/lib/paths";
 import { useRegistrationState } from "@/lib/registration";
 import { Button, Notice } from "@/components/ui/form";
 import { PortalProvider } from "./PortalProvider";
@@ -28,7 +29,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const session = useSession();
   const registration = useRegistrationState();
-  const onboarding = pathname === "/onboarding";
+  const onboarding = isPath(pathname, "/onboarding");
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
@@ -38,7 +39,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             <Image src="/images/brand/kiet-logo.png" alt="KIET Deemed to be University" width={624} height={269} priority className="h-8 w-auto sm:h-9" />
             <span className="h-8 w-px bg-line" aria-hidden="true" />
             <span className="flex items-center gap-2">
-              <Image src="/images/brand/innotech-emblem.png" alt="" width={476} height={476} priority className="h-8 w-8 sm:h-9 sm:w-9" />
+              <Image src="/images/brand/innotech-emblem.png" alt="" width={160} height={160} priority className="h-8 w-8 sm:h-9 sm:w-9" />
               <span className="hidden font-display text-lg font-bold leading-none text-navy-900 min-[400px]:inline">
                 InnoTech<span className="text-brand-500">&apos;26</span>
               </span>
@@ -69,7 +70,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           <nav aria-label="Portal" className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <ul className="-mb-px flex gap-1">
               {tabs.map((tab) => {
-                const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+                const active = isUnder(pathname, tab.href);
                 return (
                   <li key={tab.href}>
                     <Link
@@ -97,7 +98,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       )}
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-        <PortalProvider loading={<PortalLoading />} failed={(retry) => <PortalFailed retry={retry} />}>
+        <PortalProvider loading={<PortalLoading />} failed={(message, retry) => <PortalFailed message={message} retry={retry} />}>
           {children}
         </PortalProvider>
       </main>
@@ -127,11 +128,11 @@ function PortalLoading() {
   );
 }
 
-function PortalFailed({ retry }: { retry: () => void }) {
+function PortalFailed({ message, retry }: { message: string; retry: () => void }) {
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <Notice tone="error" title="We could not load your details">
-        Check your internet connection and try again. If this keeps happening, contact the InnoTech help desk.
+        {message} If this keeps happening, contact the InnoTech help desk.
       </Notice>
       <Button variant="dark" onClick={retry}>
         <RefreshCw size={16} aria-hidden="true" />

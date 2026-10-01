@@ -13,9 +13,14 @@ export type AdminUser = {
   role: AdminRole;
   /** The KIET department an admin is scoped to. Always null for a super admin. */
   department: string | null;
-  addedAt?: string;
+  /** Null for super admins set in the server configuration. */
+  addedAt?: string | null;
+  /** An admin's email, or CONFIGURED_BY_SERVER. */
   addedBy?: string | null;
 };
+
+/** `addedBy` of super admins listed in the backend's configuration. They cannot be removed from the panel. */
+export const CONFIGURED_BY_SERVER = "server configuration";
 
 export type AdminInput = Pick<AdminUser, "email" | "name" | "role" | "department">;
 
