@@ -113,8 +113,12 @@ Resources:
           echo "ECR_REPOSITORY=${ApiRepository.RepositoryUri}" >> /opt/innotech/bootstrap.env
           echo "AWS_REGION=${AWS::Region}" >> /opt/innotech/bootstrap.env
 
+  # The address KIET's DNS points at. Kept even if the stack is deleted, so it never changes by accident; it moves
+  # to a new instance if the instance is ever replaced. deploy.sh refuses changes that would replace it.
   ApiAddress:
     Type: AWS::EC2::EIP
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       InstanceId: !Ref ApiInstance
       Tags: [{ Key: Name, Value: innotech-api }]
@@ -214,6 +218,8 @@ Outputs:
     Value: !Ref ApiInstance
   PublicIp:
     Value: !Ref ApiAddress
+  EipAllocationId:
+    Value: !GetAtt ApiAddress.AllocationId
   # Until the kiet.edu subdomain is delegated: hostnames that resolve to the Elastic IP (sslip.io), so Caddy can
   # get free Let's Encrypt certificates for them.
   ApiHost:

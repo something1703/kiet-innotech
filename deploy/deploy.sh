@@ -64,6 +64,7 @@ remote() {
 }
 
 current_ami() {
+  [ -n "${AMI_ID:-}" ] && { echo "$AMI_ID"; return; }
   local instance
   instance="$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text 2>/dev/null || true)"
   if [ -n "$instance" ] && [ "$instance" != "None" ]; then
@@ -73,11 +74,57 @@ current_ami() {
   fi
 }
 
+# Resources whose replacement would change the public IP, lose the server's disk or lose the backups.
+PROTECTED="ApiInstance ApiAddress OpsBucket"
+
 deploy_stack() {
-  aws cloudformation deploy --stack-name "$STACK" --template-file "$DEPLOY_DIR/cloudformation.yml" \
-    --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
-    --parameter-overrides InstanceType="${INSTANCE_TYPE:-t4g.medium}" AlertEmail="${ALERT_EMAIL:-}" AmiId="$(current_ami)" ${CHANGESET_ONLY:+--no-execute-changeset}
+  local name type changes risky reason
+  name="deploy-$(date +%s)"
+  type=UPDATE
+  aws cloudformation describe-stacks --stack-name "$STACK" >/dev/null 2>&1 || type=CREATE
+  aws cloudformation create-change-set --stack-name "$STACK" --change-set-name "$name" --change-set-type "$type" \
+    --template-body "file://$DEPLOY_DIR/cloudformation.yml" --capabilities CAPABILITY_IAM \
+    --parameters "$(jq -n --arg t "${INSTANCE_TYPE:-t4g.medium}" --arg e "${ALERT_EMAIL:-}" --arg a "$(current_ami)" \
+      '[{ParameterKey:"InstanceType",ParameterValue:$t},{ParameterKey:"AlertEmail",ParameterValue:$e},{ParameterKey:"AmiId",ParameterValue:$a}]')" >/dev/null
+  if ! aws cloudformation wait change-set-create-complete --stack-name "$STACK" --change-set-name "$name" 2>/dev/null; then
+    reason="$(aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name "$name" --query StatusReason --output text)"
+    aws cloudformation delete-change-set --stack-name "$STACK" --change-set-name "$name"
+    case "$reason" in *"didn't contain changes"* | *"No updates"*) echo "No infrastructure changes."; status; return ;; esac
+    echo "Change set failed: $reason" >&2
+    exit 1
+  fi
+  changes="$(aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name "$name" \
+    --query 'Changes[].ResourceChange.[LogicalResourceId,Action,Replacement]' --output text)"
+  echo "Planned changes (resource, action, replacement):"
+  printf '  %s\n' "${changes:-(template only)}"
+  risky="$(echo "$changes" | awk -v p=" $PROTECTED " 'index(p, " " $1 " ") && ($2 == "Remove" || $3 == "True" || $3 == "Conditional") {print $1}')"
+  if [ -n "$risky" ] && [ "$type" = UPDATE ] && [ "${ALLOW_REPLACE:-}" != "yes" ]; then
+    aws cloudformation delete-change-set --stack-name "$STACK" --change-set-name "$name"
+    echo "Refusing: this would replace or remove $(echo "$risky" | tr '\n' ' ')(new IP / lost disk / lost backups)." >&2
+    echo "If that is really intended, take a backup first and run again with ALLOW_REPLACE=yes." >&2
+    exit 1
+  fi
+  aws cloudformation execute-change-set --stack-name "$STACK" --change-set-name "$name"
+  if [ "$type" = CREATE ]; then
+    aws cloudformation wait stack-create-complete --stack-name "$STACK"
+  else
+    aws cloudformation wait stack-update-complete --stack-name "$STACK"
+  fi
   status
+}
+
+# Extra hostnames (KIET subdomain) go live only once they resolve to our IP; otherwise Caddy would keep failing to get
+# certificates for them and could hit Let's Encrypt's rate limits.
+check_dns() {
+  local ip host resolved
+  ip="$(output PublicIp)"
+  for host in $(echo "$*" | tr ',' ' '); do
+    resolved="$(dig +short A "$host" @1.1.1.1 | tail -1)"
+    if [ "$resolved" != "$ip" ]; then
+      echo "$host resolves to '${resolved:-nothing}', not $ip. Wait for KIET's DNS record, then deploy again." >&2
+      exit 1
+    fi
+  done
 }
 
 wait_for_instance() {
@@ -98,6 +145,7 @@ wait_for_instance() {
 deploy_api() {
   : "${GOOGLE_CLIENT_IDS:?Set GOOGLE_CLIENT_IDS in production.env}" "${SUPER_ADMIN_EMAILS:?Set SUPER_ADMIN_EMAILS in production.env}"
   local repo tag ops portal admin api_host
+  check_dns "${PORTAL_EXTRA_HOSTS:-}" "${ADMIN_EXTRA_HOSTS:-}" "${API_EXTRA_HOSTS:-}"
   repo="$(output EcrRepository)"
   ops="$(output OpsBucket)"
   portal="${PORTAL_ORIGIN:-https://$(output PortalHost)}"
@@ -114,7 +162,7 @@ deploy_api() {
   config="$(mktemp)"
   cat > "$config" <<EOF
 ENVIRONMENT=production
-CORS_ORIGINS=$portal,$admin${EXTRA_CORS_ORIGINS:+,$EXTRA_CORS_ORIGINS}
+CORS_ORIGINS=$portal,$admin,https://$(output PortalHost),https://$(output AdminHost)${EXTRA_CORS_ORIGINS:+,$EXTRA_CORS_ORIGINS}
 GOOGLE_CLIENT_IDS=$GOOGLE_CLIENT_IDS
 SUPER_ADMIN_EMAILS=$SUPER_ADMIN_EMAILS
 REGISTRATION_OPENS=${REGISTRATION_OPENS:-2026-10-03T00:00:00+05:30}
@@ -187,6 +235,8 @@ destroy() {
   aws cloudformation delete-stack --stack-name "$STACK"
   aws cloudformation wait stack-delete-complete --stack-name "$STACK"
   echo "Deleted. Backups remain in the ops bucket until you empty and delete it."
+  echo "The public IP $(aws ec2 describe-addresses --filters Name=tag:aws:cloudformation:stack-name,Values="$STACK" --query 'Addresses[0].PublicIp' --output text 2>/dev/null) is kept (about \$3.65/month)."
+  echo "Release it once KIET has removed the DNS records: aws ec2 release-address --allocation-id <id from the EC2 console>"
 }
 
 check_account
