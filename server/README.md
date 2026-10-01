@@ -1,4 +1,4 @@
-# InnoTech'26 API
+# InnoTech26 API
 
 FastAPI backend for the student portal (`client/`) and the admin panel (`admin-panel/`).
 PostgreSQL for data (in Docker on the same EC2 instance), Google sign-in verified by this API, Amazon SES for emails.

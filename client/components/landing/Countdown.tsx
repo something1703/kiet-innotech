@@ -35,7 +35,7 @@ export function Countdown({ to, endsAt }: { to: string; endsAt: string }) {
     const live = now < end;
     return (
       <div role="status">
-        <p className="text-sm font-semibold uppercase tracking-widest text-brand-300">{live ? "Happening now" : "InnoTech'26 has concluded"}</p>
+        <p className="text-sm font-semibold uppercase tracking-widest text-brand-300">{live ? "Happening now" : "InnoTech26 has concluded"}</p>
         <p className="mt-5 flex items-center gap-3 font-display text-2xl font-bold text-white sm:text-3xl">
           {live && <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-accent-500" aria-hidden="true" />}
           {live ? "The Grand Finale is on at KIET" : "Thank you for being part of it"}

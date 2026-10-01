@@ -77,7 +77,7 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
               className="h-9 w-9 sm:h-11 sm:w-11"
             />
             <span className="font-display text-lg font-bold leading-none text-navy-900 sm:text-xl">
-              InnoTech<span className="text-brand-500">&apos;26</span>
+              InnoTech<span className="text-brand-500">26</span>
             </span>
           </span>
         </Link>

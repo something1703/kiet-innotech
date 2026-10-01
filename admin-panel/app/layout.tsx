@@ -15,10 +15,10 @@ const headingFont = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: {
-    default: "Admin | InnoTech'26",
-    template: "%s | InnoTech'26 Admin",
+    default: "Admin | InnoTech26",
+    template: "%s | InnoTech26 Admin",
   },
-  description: "Organiser panel for InnoTech'26 at KIET Deemed to be University.",
+  description: "Organiser panel for InnoTech26 at KIET Deemed to be University.",
   robots: { index: false, follow: false },
 };
 

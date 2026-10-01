@@ -8,7 +8,7 @@ export function Gallery() {
     <Section id="campus" className="bg-surface">
       <SectionHeading
         eyebrow="The venue"
-        title="Life at KIET"
+        title="For InnoTech"
         description="The Grand Finale takes place on the KIET campus in Delhi-NCR, Ghaziabad."
       />
       <ul className="grid grid-flow-row-dense auto-rows-[180px] grid-cols-2 gap-3 sm:auto-rows-[220px] sm:gap-4 lg:grid-cols-4">

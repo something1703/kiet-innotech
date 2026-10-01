@@ -398,7 +398,7 @@ export function createSeed(): MockDb {
       category: plan.category,
       domain: domains[pick(categoryDomains[plan.category])],
       projectTitle: idea.title,
-      abstract: `${idea.title} addresses ${idea.problem}. The team is building ${idea.solution}, and will demonstrate a working version with measurable results at InnoTech'26.`,
+      abstract: `${idea.title} addresses ${idea.problem}. The team is building ${idea.solution}, and will demonstrate a working version with measurable results at InnoTech26.`,
       participantType: plan.type,
       institution: plan.institution.name,
       department: plan.department,

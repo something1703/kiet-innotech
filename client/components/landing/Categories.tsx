@@ -76,18 +76,9 @@ function CategoryCard({ category }: { category: Category }) {
         aria-hidden="true"
       />
 
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <span className="font-display text-5xl font-bold leading-none text-navy-900/10 transition-colors group-hover:text-brand-500/30">
-          {String(category.number).padStart(2, "0")}
-        </span>
-        <div className="flex flex-wrap justify-end gap-1.5">
-          <Tag tone={category.isPoster ? "accent" : "brand"}>
-            {category.isPoster ? "Poster" : "Project"}
-          </Tag>
-          {category.openToSchools && <Tag tone="navy">Schools</Tag>}
-          {category.firstYearOnly && <Tag tone="navy">First year</Tag>}
-        </div>
-      </div>
+      <span className="mb-5 block font-display text-5xl font-bold leading-none text-navy-900/10 transition-colors group-hover:text-brand-500/30">
+        {String(category.number).padStart(2, "0")}
+      </span>
 
       <p className="text-xs font-bold uppercase tracking-widest text-muted">Category {category.number}</p>
       <h3 className="mt-1 font-display text-xl font-bold leading-snug text-ink">{category.title}</h3>
@@ -107,19 +98,5 @@ function CategoryCard({ category }: { category: Category }) {
         ))}
       </ul>
     </article>
-  );
-}
-
-const tagTones = {
-  brand: "bg-brand-50 text-brand-700",
-  accent: "bg-accent-50 text-accent-600",
-  navy: "bg-navy-900 text-white",
-};
-
-function Tag({ tone, children }: { tone: keyof typeof tagTones; children: React.ReactNode }) {
-  return (
-    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tagTones[tone]}`}>
-      {children}
-    </span>
   );
 }

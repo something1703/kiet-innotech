@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PortalShell } from "@/components/portal/PortalShell";
 
 export const metadata: Metadata = {
-  title: "Student Portal | InnoTech'26",
+  title: "Student Portal | InnoTech26",
   robots: { index: false },
 };
 

@@ -18,10 +18,10 @@ export function NotAuthorised({ email, message, onSignOut }: { email: string | n
         <p className="mt-3 text-sm text-muted">
           {email ? (
             <>
-              <span className="font-semibold break-all text-navy-900">{email}</span> is signed in, but it is not on the InnoTech&apos;26 admin list.
+              <span className="font-semibold break-all text-navy-900">{email}</span> is signed in, but it is not on the InnoTech26 admin list.
             </>
           ) : (
-            "Your account is not on the InnoTech'26 admin list."
+            "Your account is not on the InnoTech26 admin list."
           )}{" "}
           If you are an organiser, ask the super admin to add this email. Students should use the student portal instead.
         </p>

@@ -26,7 +26,7 @@ export function TeamStatusNotice({ team }: { team: Team }) {
   if (team.status === "withdrawn" || team.status === "disqualified") {
     return (
       <Notice tone="error" title={team.status === "withdrawn" ? "Team withdrawn" : "Team disqualified"}>
-        This team is no longer considered for InnoTech&apos;26. Contact the organising team if you have questions.
+        This team is no longer considered for InnoTech26. Contact the organising team if you have questions.
       </Notice>
     );
   }

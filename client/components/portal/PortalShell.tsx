@@ -35,13 +35,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col bg-surface">
       <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="InnoTech'26 home">
+          <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="InnoTech26 home">
             <Image src="/images/brand/kiet-logo.png" alt="KIET Deemed to be University" width={624} height={269} priority className="h-8 w-auto sm:h-9" />
             <span className="h-8 w-px bg-line" aria-hidden="true" />
             <span className="flex items-center gap-2">
               <Image src="/images/brand/innotech-emblem.png" alt="" width={160} height={160} priority className="h-8 w-8 sm:h-9 sm:w-9" />
               <span className="hidden font-display text-lg font-bold leading-none text-navy-900 min-[400px]:inline">
-                InnoTech<span className="text-brand-500">&apos;26</span>
+                InnoTech<span className="text-brand-500">26</span>
               </span>
             </span>
           </Link>
@@ -105,7 +105,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-line bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <p>InnoTech&apos;26, KIET Deemed to be University</p>
+          <p>InnoTech26, KIET Deemed to be University</p>
           <p className="flex gap-5">
             <Link href="/guidelines" className="font-semibold text-navy-800 hover:text-accent-500">Guidelines</Link>
             <Link href="/#faq" className="font-semibold text-navy-800 hover:text-accent-500">FAQ</Link>

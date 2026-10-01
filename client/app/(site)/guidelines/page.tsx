@@ -5,21 +5,20 @@ import { ArrowRight } from "lucide-react";
 import {
   categories,
   departmentPrizes,
-  domains,
   institutePrizes,
   participantTracks,
+  prizeHeadline,
+  prizePools,
   registrationSteps,
-  rubrics,
-  selectionNotes,
   teamRules,
   timeline,
 } from "@/lib/content";
 import { formatINR } from "@/lib/format";
-import { DOUBLE_QUOTA_DEPARTMENTS, TEAM_MAX_SIZE, TEAM_MIN_SIZE } from "@/lib/rules";
+import { TEAM_MAX_SIZE, TEAM_MIN_SIZE } from "@/lib/rules";
 
 export const metadata: Metadata = {
-  title: "Guidelines | InnoTech'26",
-  description: "Eligibility, team rules, categories, judging rubrics, finalist selection, prizes and dates for InnoTech'26 at KIET.",
+  title: "Guidelines | InnoTech26",
+  description: "Eligibility, team rules, categories, prizes and dates for InnoTech26 at KIET.",
 };
 
 const contents = [
@@ -27,14 +26,9 @@ const contents = [
   { id: "registration", label: "How to register" },
   { id: "team-rules", label: "Team rules" },
   { id: "categories", label: "Categories" },
-  { id: "domains", label: "Focus domains" },
-  { id: "judging", label: "Judging rubrics" },
-  { id: "selection", label: "Finalist selection" },
   { id: "prizes", label: "Prizes" },
   { id: "dates", label: "Important dates" },
 ];
-
-const MARKS_PER_CRITERION = 10;
 
 const eligibilityRows: { label: string; values: [string, string, string] }[] = [
   { label: "Sign in with", values: ["Official @kiet.edu Google account", "Any Google account", "Any Google account"] },
@@ -55,10 +49,9 @@ export default function GuidelinesPage() {
             <span className="h-px w-6 bg-current" />
             Guidelines
           </p>
-          <h1 className="max-w-3xl font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">Rules and guidelines for InnoTech&apos;26</h1>
+          <h1 className="max-w-3xl font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">Rules and guidelines for InnoTech26</h1>
           <p className="mt-4 max-w-2xl text-base text-slate-300 sm:text-lg">
-            Everything you need before you register: who can take part, how teams work, the eight categories, how projects are judged and what you
-            can win.
+            Everything you need before you register: who can take part, how teams work, the eight categories and what you can win.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -93,7 +86,7 @@ export default function GuidelinesPage() {
         <div className="min-w-0 space-y-16">
           <Block id="eligibility" title="Who can participate">
             <p>
-              InnoTech&apos;26 is open to students of KIET, students of other colleges and school students. KIET teams compete at the department
+              InnoTech26 is open to students of KIET, students of other colleges and school students. KIET teams compete at the department
               level first; teams from other colleges and schools go straight to the Grand Finale on 30 October 2026.
             </p>
             <div className="mt-6 overflow-x-auto rounded-2xl ring-1 ring-line">
@@ -175,96 +168,27 @@ export default function GuidelinesPage() {
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-3 text-xs text-muted">
-                      Judged on the <a href="#judging" className="font-semibold text-accent-600 hover:underline">{rubrics[category.rubric].label} rubric</a>
-                    </p>
                   </div>
                 </section>
               ))}
             </div>
           </Block>
 
-          <Block id="domains" title="Focus domains">
-            <p>Choose the domain closest to your project when you create your team. Ideas outside these domains are welcome too.</p>
-            <ol className="mt-6 grid gap-x-8 gap-y-3 sm:grid-cols-2">
-              {domains.map((domain, index) => (
-                <li key={domain} className="flex gap-3 border-b border-line pb-3 text-navy-800">
-                  <span className="w-6 shrink-0 text-sm font-semibold text-muted">{String(index + 1).padStart(2, "0")}</span>
-                  {domain}
-                </li>
-              ))}
-            </ol>
-          </Block>
-
-          <Block id="judging" title="Judging rubrics">
-            <p>
-              Every project is marked out of 50: five criteria worth {MARKS_PER_CRITERION} marks each. Criteria with two parts give 5 marks to each
-              part. The same rubric is used at the department and institute level.
-            </p>
-            <div className="mt-6 space-y-3">
-              {Object.values(rubrics).map((rubric, index) => (
-                <details key={rubric.label} open={index === 0} className="group rounded-2xl bg-white ring-1 ring-line">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 [&::-webkit-details-marker]:hidden">
-                    <span>
-                      <span className="block font-display text-lg font-bold text-ink">{rubric.label}</span>
-                      <span className="text-sm text-muted">{rubric.appliesTo}</span>
-                    </span>
-                    <span className="shrink-0 text-2xl leading-none text-accent-500 transition-transform group-open:rotate-45" aria-hidden="true">
-                      +
-                    </span>
-                  </summary>
-                  <table className="w-full border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-y border-line text-xs uppercase tracking-wider text-muted">
-                        <th scope="col" className="px-5 py-2 font-bold">Criterion</th>
-                        <th scope="col" className="px-5 py-2 text-right font-bold">Marks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {rubric.criteria.map((criterion) => (
-                        <tr key={criterion.title}>
-                          <td className="px-5 py-3">
-                            <span className="font-semibold text-ink">{criterion.title}</span>
-                            {criterion.parts && <span className="mt-0.5 block text-muted">{criterion.parts.map((part) => `${part} (5)`).join(", ")}</span>}
-                          </td>
-                          <td className="px-5 py-3 text-right font-semibold text-ink">{MARKS_PER_CRITERION}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-navy-900 text-white">
-                        <td className="rounded-bl-2xl px-5 py-3 font-semibold">Total</td>
-                        <td className="rounded-br-2xl px-5 py-3 text-right font-display text-lg font-bold">{rubric.criteria.length * MARKS_PER_CRITERION}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </details>
-              ))}
-            </div>
-          </Block>
-
-          <Block id="selection" title="Finalist selection">
-            <ul className="space-y-3">
-              {selectionNotes.map((note) => (
-                <li key={note} className="flex gap-3 text-navy-800">
-                  <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" aria-hidden="true" />
-                  {note}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-6 rounded-2xl bg-surface p-4 text-sm text-muted">
-              Two teams in Categories 1 to 4: <span className="font-semibold text-ink">{DOUBLE_QUOTA_DEPARTMENTS.join(", ")}</span>. Every other
-              department, and every other category, nominates one team.
-            </p>
-          </Block>
-
           <Block id="prizes" title="Prizes">
-            <p>Institute level winners receive cash prizes, trophies and certificates. Every participant receives an e-certificate.</p>
+            <p>
+              Cash prizes worth {prizeHeadline.cash} from a prize pool of {prizeHeadline.pool}. Winners also receive trophies and certificates, and
+              every participant receives an e-certificate.
+            </p>
             <div className="mt-6 overflow-x-auto rounded-2xl ring-1 ring-line">
               <table className="w-full min-w-[30rem] border-collapse text-left text-sm">
                 <thead className="bg-navy-900 text-white">
                   <tr>
-                    <th scope="col" className="p-4 font-display font-bold">Institute level</th>
+                    <th scope="col" className="p-4 font-display font-bold">
+                      Institute level{" "}
+                      <span className="font-sans text-xs font-semibold text-slate-300">
+                        (₹{formatINR(prizePools.institute)} pool, per category)
+                      </span>
+                    </th>
                     <th scope="col" className="p-4 text-right font-semibold">1st</th>
                     <th scope="col" className="p-4 text-right font-semibold">2nd</th>
                   </tr>
@@ -283,7 +207,12 @@ export default function GuidelinesPage() {
                 </tbody>
               </table>
             </div>
-            <h3 className="mt-8 font-display text-lg font-bold text-ink">Department level, 1st position</h3>
+            <h3 className="mt-8 font-display text-lg font-bold text-ink">
+              Department level, 1st position{" "}
+              <span className="text-sm font-semibold text-muted">
+                (₹{formatINR(prizePools.department)} prize pool)
+              </span>
+            </h3>
             <ul className="mt-3 divide-y divide-line">
               {departmentPrizes.map((prize) => (
                 <li key={prize.categories} className="flex justify-between gap-4 py-3">

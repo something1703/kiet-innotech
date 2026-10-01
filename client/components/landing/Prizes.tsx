@@ -1,5 +1,5 @@
 import { Medal, Trophy } from "lucide-react";
-import { departmentPrizes, departments, institutePrizes } from "@/lib/content";
+import { departmentPrizes, departments, institutePrizes, prizeHeadline, prizePools } from "@/lib/content";
 import { formatINR } from "@/lib/format";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
@@ -9,11 +9,11 @@ export function Prizes() {
     <Section id="prizes" className="bg-surface">
       <SectionHeading
         eyebrow="Awards and cash prizes"
-        title="Prizes worth ₹3.38 lakh"
-        description="Winners at the institute level receive cash prizes, trophies and certificates. Department winners are awarded in every department."
+        title={`Cash prizes worth ${prizeHeadline.cash}`}
+        description={`A prize pool of ${prizeHeadline.pool}, with trophies and certificates, awarded at the department round and the Grand Finale.`}
       />
 
-      <h3 className="mb-6 font-display text-lg font-bold text-navy-800">Institute level</h3>
+      <LevelHeading title="Institute level" pool={prizePools.institute} note="Grand Finale, amounts per category" />
       <ul className="grid gap-5 md:grid-cols-3">
         {institutePrizes.map((prize, index) => (
           <Reveal as="li" key={prize.title} delay={index * 100}>
@@ -37,9 +37,14 @@ export function Prizes() {
           <div>
             <h3 className="flex items-center gap-2 font-display text-lg font-bold text-navy-800">
               <Medal size={22} className="text-brand-500" aria-hidden="true" />
-              Department level (1st position)
+              Department level
             </h3>
-            <p className="mt-1 text-sm text-muted">Awarded in each of the {departments.length} departments.</p>
+            <p className="mt-1 text-sm text-muted">
+              1st position in every category, awarded in each of the {departments.length} departments.
+            </p>
+            <p className="mt-3 font-display text-2xl font-bold text-accent-600">
+              ₹{formatINR(prizePools.department)} <span className="text-sm font-semibold text-muted">prize pool</span>
+            </p>
           </div>
           <dl className="grid gap-4 sm:grid-cols-2">
             {departmentPrizes.map((prize) => (
@@ -50,15 +55,21 @@ export function Prizes() {
             ))}
           </dl>
         </div>
-        <ul className="mt-6 flex flex-wrap gap-2 border-t border-line pt-6" aria-label="Participating departments">
-          {departments.map((department) => (
-            <li key={department} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-navy-800">
-              {department}
-            </li>
-          ))}
-        </ul>
       </Reveal>
     </Section>
+  );
+}
+
+function LevelHeading({ title, pool, note }: { title: string; pool: number; note: string }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+      <h3 className="font-display text-lg font-bold text-navy-800">
+        {title} <span className="text-sm font-medium text-muted">({note})</span>
+      </h3>
+      <p className="font-display text-2xl font-bold text-accent-600">
+        ₹{formatINR(pool)} <span className="text-sm font-semibold text-muted">prize pool</span>
+      </p>
+    </div>
   );
 }
 

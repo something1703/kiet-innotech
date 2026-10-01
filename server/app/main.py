@@ -18,7 +18,7 @@ def create_app() -> FastAPI:
     production = settings.environment == "production"
 
     app = FastAPI(
-        title="InnoTech'26 API",
+        title="InnoTech26 API",
         version="1.0.0",
         # Interactive docs only outside production.
         docs_url=None if production else "/docs",

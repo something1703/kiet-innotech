@@ -1,10 +1,10 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { Check } from "lucide-react";
-import { timeline, type Milestone } from "@/lib/content";
+import { useSyncExternalStore, type ComponentType } from "react";
+import { ClipboardCheck, ClipboardPen, Lock, Megaphone, Trophy, type LucideProps } from "lucide-react";
+import { event, timeline, type Milestone } from "@/lib/content";
 import { Reveal } from "@/components/ui/Reveal";
-import { Section, SectionHeading } from "@/components/ui/Section";
+import { Section } from "@/components/ui/Section";
 
 type Status = "done" | "current" | "upcoming";
 
@@ -22,66 +22,122 @@ function getTodayInIndia() {
 
 const noSubscription = () => () => {};
 
+/** One colour and icon per milestone, in timeline order. Full class strings so Tailwind can find them. */
+const stages: { icon: ComponentType<LucideProps>; text: string; bg: string; border: string }[] = [
+  { icon: ClipboardPen, text: "text-orange-500", bg: "bg-orange-500", border: "border-orange-500" },
+  { icon: Lock, text: "text-amber-500", bg: "bg-amber-500", border: "border-amber-500" },
+  { icon: ClipboardCheck, text: "text-green-500", bg: "bg-green-500", border: "border-green-500" },
+  { icon: Megaphone, text: "text-cyan-500", bg: "bg-cyan-500", border: "border-cyan-500" },
+  { icon: Trophy, text: "text-violet-600", bg: "bg-violet-600", border: "border-violet-600" },
+];
+
+const number = (index: number) => String(index + 1).padStart(2, "0");
+
 export function Timeline() {
   // Read the visitor's clock on the client only; the server render shows every milestone as upcoming.
   const today = useSyncExternalStore(noSubscription, getTodayInIndia, () => null);
-
-  const statuses = timeline.map((milestone) =>
-    today === null ? "upcoming" : getStatus(milestone, today),
-  );
-  const completed = statuses.filter((status) => status === "done").length;
-  const progress = (completed / (timeline.length - 1)) * 100;
+  const statuses = timeline.map((milestone) => (today === null ? "upcoming" : getStatus(milestone, today)));
 
   return (
-    <Section id="timeline">
-      <SectionHeading
-        eyebrow="Timeline"
-        title="The road to the Grand Finale"
-        description="Mark these dates. Registrations close on 12 October 2026."
-      />
+    <Section id="timeline" className="bg-[#fdfcfb]">
+      <Reveal className="mb-14 text-center lg:mb-10">
+        <h2 className="font-display text-6xl font-black uppercase tracking-tight text-navy-900 sm:text-7xl lg:text-8xl">Timeline</h2>
+        <p className="mt-2 font-display text-base font-bold uppercase tracking-wide text-ink sm:text-xl lg:text-2xl">
+          Of the {event.name} journey to the Grand Finale
+        </p>
+      </Reveal>
 
-      <div className="relative">
-        {/* Track line: horizontal on desktop, vertical on mobile and tablet */}
-        <div className="absolute left-5 top-0 h-full w-1 rounded-full bg-line lg:left-0 lg:top-5 lg:h-1 lg:w-full" aria-hidden="true">
-          <div
-            className="h-[var(--progress)] w-full rounded-full bg-gradient-to-b from-brand-500 to-accent-500 transition-all duration-1000 lg:h-full lg:w-[var(--progress)] lg:bg-gradient-to-r"
-            style={{ "--progress": `${Math.min(progress, 100)}%` } as React.CSSProperties}
-          />
-        </div>
-
-        <ol className="relative grid gap-10 lg:grid-cols-5 lg:gap-6">
-          {timeline.map((milestone, index) => (
-            <Reveal as="li" key={milestone.title} delay={index * 100} className="relative pl-16 lg:pl-0 lg:pt-16">
-              <MilestoneDot status={statuses[index]} number={index + 1} />
-              <p className="text-sm font-bold uppercase tracking-widest text-accent-500">{milestone.dateLabel}</p>
-              <h3 className="mt-1 font-display text-xl font-bold text-ink">{milestone.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{milestone.description}</p>
-              {statuses[index] === "current" && (
-                <span className="mt-3 inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
-                  Happening now
-                </span>
-              )}
+      {/* Desktop: horizontal line, icons alternating above and below */}
+      <ol className="hidden grid-cols-5 lg:grid">
+        {timeline.map((milestone, index) => {
+          const iconAbove = index % 2 === 1;
+          return (
+            <Reveal as="li" key={milestone.title} delay={index * 100} className="grid grid-rows-[15rem_0.75rem_15rem]">
+              <div className="flex flex-col justify-end">
+                {iconAbove ? <IconStem index={index} above /> : <StageText milestone={milestone} index={index} status={statuses[index]} className="pb-7" />}
+              </div>
+              <div className={`relative ${stages[index].bg}`}>
+                <span
+                  className={`absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-[5px] ${stages[index].border} ${
+                    statuses[index] === "upcoming" ? "bg-white" : stages[index].bg
+                  }`}
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="flex flex-col">
+                {iconAbove ? <StageText milestone={milestone} index={index} status={statuses[index]} className="pt-7" /> : <IconStem index={index} />}
+              </div>
             </Reveal>
-          ))}
-        </ol>
-      </div>
+          );
+        })}
+      </ol>
+
+      {/* Phones and tablets: vertical line */}
+      <ol className="mx-auto max-w-xl lg:hidden">
+        {timeline.map((milestone, index) => {
+          const Stage = stages[index].icon;
+          return (
+            <Reveal as="li" key={milestone.title} delay={index * 80} className="flex gap-5">
+              <div className="flex flex-col items-center">
+                <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[7px] bg-white ${stages[index].border}`}>
+                  <Stage size={24} className="text-navy-900" aria-hidden="true" />
+                </span>
+                {index < timeline.length - 1 && <span className={`w-1.5 flex-1 ${stages[index].bg}`} aria-hidden="true" />}
+              </div>
+              <StageText milestone={milestone} index={index} status={statuses[index]} className="pb-10 pt-2 text-left" />
+            </Reveal>
+          );
+        })}
+      </ol>
     </Section>
   );
 }
 
-function MilestoneDot({ status, number }: { status: Status; number: number }) {
-  const styles: Record<Status, string> = {
-    done: "border-brand-500 bg-brand-500 text-white",
-    current: "animate-pulse-ring border-brand-500 bg-white text-brand-600",
-    upcoming: "border-line bg-white text-muted",
-  };
-
-  return (
-    <span
-      className={`absolute left-0 top-0 flex h-11 w-11 items-center justify-center rounded-full border-4 font-display text-sm font-bold ${styles[status]}`}
-      aria-hidden="true"
-    >
-      {status === "done" ? <Check size={18} strokeWidth={3} /> : number}
+/** The big ring icon on a stem, with the stage number beside the stem. */
+function IconStem({ index, above = false }: { index: number; above?: boolean }) {
+  const stage = stages[index];
+  const Stage = stage.icon;
+  const ring = (
+    <span className={`flex h-32 w-32 shrink-0 items-center justify-center rounded-full border-[16px] bg-white shadow-[0_12px_30px_-12px_rgb(11_22_51/0.35)] ${stage.border}`}>
+      <Stage size={44} strokeWidth={2.25} className="text-navy-900" aria-hidden="true" />
     </span>
+  );
+  const stem = (
+    <span className="relative w-2.5 flex-1">
+      <span className={`absolute inset-0 ${stage.bg}`} />
+      <span className={`absolute left-6 top-1/2 -translate-y-1/2 font-display text-4xl font-black ${stage.text}`} aria-hidden="true">
+        {number(index)}
+      </span>
+    </span>
+  );
+  return (
+    <div className="flex h-full flex-col items-center" aria-hidden="true">
+      {above ? (
+        <>
+          {ring}
+          {stem}
+        </>
+      ) : (
+        <>
+          {stem}
+          {ring}
+        </>
+      )}
+    </div>
+  );
+}
+
+function StageText({ milestone, index, status, className = "" }: { milestone: Milestone; index: number; status: Status; className?: string }) {
+  return (
+    <div className={`px-3 text-center ${className}`}>
+      <h3 className="font-display text-xl font-black uppercase leading-tight text-navy-900">
+        <span className={stages[index].text}>{number(index)}</span> {milestone.title}
+      </h3>
+      <p className="mt-1.5 text-sm font-bold text-ink">{milestone.dateLabel}</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{milestone.description}</p>
+      {status === "current" && (
+        <span className="mt-3 inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">Happening now</span>
+      )}
+    </div>
   );
 }

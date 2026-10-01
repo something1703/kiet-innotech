@@ -1,5 +1,5 @@
 /**
- * InnoTech'26 registration rules, kept in one place so the pages and the mock API agree.
+ * InnoTech26 registration rules, kept in one place so the pages and the mock API agree.
  * The FastAPI backend must enforce the same rules; the frontend only uses them to guide students.
  */
 import { categories, departments } from "./content";

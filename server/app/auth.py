@@ -126,7 +126,7 @@ def sign_in(db: Session, identity: Identity, app: App, settings: Settings, googl
     """Checks the account may use `app`, records the sign-in and issues a session."""
     if app == "admin":
         if find_admin(db, identity.email, settings) is None:
-            raise ApiError("This account is not an InnoTech'26 organiser.", 403)
+            raise ApiError("This account is not an InnoTech26 organiser.", 403)
     else:
         user = _get_or_create_user(db, identity)
         if google_sub and user.google_sub != google_sub:
@@ -223,7 +223,7 @@ def get_current_admin(
 ) -> Admin:
     admin = find_admin(db, identity.email, settings)
     if admin is None:
-        raise ApiError("This account is not an InnoTech'26 organiser.", 403)
+        raise ApiError("This account is not an InnoTech26 organiser.", 403)
     return admin
 
 

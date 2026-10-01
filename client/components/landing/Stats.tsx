@@ -15,7 +15,7 @@ export function Stats() {
             }`}
           >
             <div className="font-display text-3xl font-bold text-navy-900 sm:text-4xl">
-              <CountUp value={stat.value} prefix={stat.prefix} format={stat.format} />
+              <CountUp value={stat.value} prefix={stat.prefix} suffix={stat.suffix} format={stat.format} />
             </div>
             <div className="mt-1 text-xs font-semibold uppercase tracking-widest text-muted sm:text-sm">
               {stat.label}

@@ -106,7 +106,7 @@ function Frame({ admin, onSignOut, children }: { admin: AdminUser; onSignOut: ()
       {/* Top bar and slide-down menu, below lg */}
       <header className="sticky top-0 z-30 bg-navy-950 lg:hidden">
         <div className="flex h-14 items-center justify-between gap-3 px-4">
-          <Link href="/" onClick={closeMenu} aria-label="InnoTech'26 admin overview">
+          <Link href="/" onClick={closeMenu} aria-label="InnoTech26 admin overview">
             <Brand />
           </Link>
           <button

@@ -1,5 +1,5 @@
 """
-InnoTech'26 registration rules. The server is the authority; client/lib/rules.ts mirrors these
+InnoTech26 registration rules. The server is the authority; client/lib/rules.ts mirrors these
 for guidance in the browser, so keep the two in step.
 """
 
