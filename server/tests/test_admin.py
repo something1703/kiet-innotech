@@ -168,6 +168,25 @@ def test_stats_are_scoped(world):
     assert len(cse["recent_submissions"]) == 3
 
 
+def test_chart_stats_add_up(world):
+    for who in ("root", "cse"):
+        stats = world[who].get("/admin/stats").json()
+        active = stats["teams"]["draft"] + stats["teams"]["submitted"]
+        # Every record lands on exactly one day of the timeline, so the days add up to the totals.
+        assert sum(day["students"] for day in stats["timeline"]) == stats["students"]
+        assert sum(day["teams"] for day in stats["timeline"]) == stats["teams"]["total"]
+        assert [day["date"] for day in stats["timeline"]] == sorted(day["date"] for day in stats["timeline"])
+        assert sum(row["students"] for row in stats["by_year"]) == stats["students"]
+        assert [row["size"] for row in stats["team_sizes"]] == [1, 2, 3, 4, 5]
+        assert sum(row["teams"] for row in stats["team_sizes"]) == active
+        assert sum(row["teams"] for row in stats["by_domain"]) == active
+        counts = [row["teams"] for row in stats["by_domain"]]
+        assert counts == sorted(counts, reverse=True)
+    root = world["root"].get("/admin/stats").json()
+    assert root["top_institutions"] and all(row["participant_type"] != "kiet" for row in root["top_institutions"])
+    assert world["cse"].get("/admin/stats").json()["top_institutions"] is None
+
+
 def test_audit_is_scoped(world):
     it_actions = world["it"].get("/admin/audit", params={"limit": 200}).json()
     assert it_actions and all(entry["department"] == "IT" for entry in it_actions)

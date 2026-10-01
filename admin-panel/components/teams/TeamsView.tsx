@@ -3,22 +3,26 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, X } from "lucide-react";
-import { api, DEFAULT_PAGE_SIZE, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
-import type { TeamQuery, TeamSort } from "@/lib/admin-types";
+import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
+import type { AdminTeam, TeamQuery, TeamSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departments } from "@/lib/content";
-import { downloadTeams } from "@/lib/export";
+import { downloadTeams, downloadTeamsExcel } from "@/lib/export";
 import { formatDate, otherMemberDepartments, plural, routeLabels, statusLabels, typeShortLabels } from "@/lib/format";
 import type { ParticipantType, TeamRoute, TeamStatus } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
-import { intParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { useSelection } from "@/lib/use-selection";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { ExportDialog, type ExportFormat, type ExportScope } from "@/components/ui/ExportDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Select } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { lastPage, Pagination } from "@/components/ui/Pagination";
+import { lastPage, PageSizeSelect, Pagination } from "@/components/ui/Pagination";
+import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { numClass, SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
@@ -27,14 +31,17 @@ const statuses: TeamStatus[] = ["draft", "submitted", "withdrawn", "disqualified
 const types: ParticipantType[] = ["kiet", "college", "school"];
 const routes: TeamRoute[] = ["department", "finale"];
 const sorts: TeamSort[] = ["code", "name", "category", "department", "status", "members", "submitted_at"];
+const teamKey = (team: AdminTeam) => team.id;
 
 export function TeamsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [selectError, setSelectError] = useState<string | null>(null);
+  const selection = useSelection(teamKey);
 
   const query: TeamQuery = {
     department: isSuper ? pickParam(params, "department", departments) : undefined,
@@ -46,7 +53,7 @@ export function TeamsView() {
     sort: pickParam(params, "sort", sorts) ?? "code",
     order: params.get("order") === "desc" ? "desc" : "asc",
     page: intParam(params, "page", 1, 10_000) ?? 1,
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: pageSizeParam(params),
   };
   const key = JSON.stringify(query);
   const { data, error, loading } = useQuery(key, () => api.listTeams(query));
@@ -56,16 +63,32 @@ export function TeamsView() {
     update({ sort, order: query.sort === sort && query.order === "asc" ? "desc" : "asc" });
   }
 
-  async function exportCsv() {
-    setExporting(true);
-    setExportError(null);
+  // Every page of the current filters, in the current order: what "all matching" means for selecting and exporting.
+  const allMatching = () => api.exportTeams({ ...query, page: undefined, pageSize: undefined });
+
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    setSelectError(null);
     try {
-      downloadTeams(await api.exportTeams({ ...query, page: undefined, pageSize: undefined }));
+      selection.replace(await allMatching());
     } catch (err) {
-      setExportError(errorMessage(err));
+      setSelectError(errorMessage(err));
     } finally {
-      setExporting(false);
+      setSelectingAll(false);
     }
+  }
+
+  async function exportRows(scope: ExportScope, format: ExportFormat) {
+    const rows =
+      scope === "selected"
+        ? selection.rows
+        : scope === "page"
+          ? (data?.items ?? [])
+          : scope === "matching"
+            ? await allMatching()
+            : await api.exportTeams({ sort: query.sort, order: query.order });
+    if (format === "xlsx") await downloadTeamsExcel(rows);
+    else downloadTeams(rows);
   }
 
   const sortProps = { sort: query.sort ?? "code", order: query.order ?? "asc", onSort } as const;
@@ -81,9 +104,9 @@ export function TeamsView() {
             : `Teams whose leader is a ${admin.department} student. Members may come from other branches.`
         }
         actions={
-          <Button variant="secondary" onClick={exportCsv} pending={exporting} disabled={!data || data.total === 0}>
-            {!exporting && <Download aria-hidden="true" className="size-4" />}
-            Export CSV
+          <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
+            <Download aria-hidden="true" className="size-4" />
+            Export
           </Button>
         }
       />
@@ -158,22 +181,34 @@ export function TeamsView() {
             "Loading teams…"
           )}
         </p>
-        {filtered && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchKey((k) => k + 1);
-              reset();
-            }}
-          >
-            <X aria-hidden="true" className="size-3.5" />
-            Clear filters
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {filtered && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchKey((k) => k + 1);
+                reset();
+              }}
+            >
+              <X aria-hidden="true" className="size-3.5" />
+              Clear filters
+            </Button>
+          )}
+          <PageSizeSelect value={query.pageSize ?? 25} onChange={(size) => update({ size })} />
+        </div>
       </div>
 
-      {exportError && <Notice tone="error">{exportError}</Notice>}
+      <SelectionBar
+        count={selection.size}
+        noun={{ one: "team", many: "teams" }}
+        matching={data?.total ?? 0}
+        selectingAll={selectingAll}
+        onSelectAll={selectAllMatching}
+        onClear={selection.clear}
+        onExport={() => setExportOpen(true)}
+      />
+      {selectError && <Notice tone="error">{selectError}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
       {!data && !error && <Loading label="Loading teams" />}
 
@@ -198,6 +233,14 @@ export function TeamsView() {
             <TableFrame label="Teams" minWidth="min-w-[920px]">
               <thead>
                 <tr>
+                  <Th className="w-10">
+                    <Checkbox
+                      label="Select all teams on this page"
+                      checked={data.items.every(selection.has)}
+                      indeterminate={data.items.some(selection.has)}
+                      onChange={(on) => selection.setMany(data.items, on)}
+                    />
+                  </Th>
                   <SortableTh label="Code" sortKey="code" {...sortProps} />
                   <SortableTh label="Team" sortKey="name" {...sortProps} />
                   <SortableTh label="Cat." sortKey="category" {...sortProps} />
@@ -212,7 +255,10 @@ export function TeamsView() {
                 {data.items.map((team) => {
                   const leader = team.members.find((m) => m.role === "leader");
                   return (
-                    <tr key={team.id} className="hover:bg-surface/70">
+                    <tr key={team.id} className={selection.has(team) ? "bg-brand-50/70" : "hover:bg-surface/70"}>
+                      <td className={tdClass}>
+                        <Checkbox label={`Select team ${team.name}`} checked={selection.has(team)} onChange={() => selection.toggle(team)} />
+                      </td>
                       <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>
                         <Link href={teamHref(team.id)} className="font-semibold text-brand-700 hover:underline">
                           {team.code}
@@ -262,6 +308,17 @@ export function TeamsView() {
           )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
+      )}
+
+      {exportOpen && data && (
+        <ExportDialog
+          noun={{ one: "team", many: "teams" }}
+          counts={{ selected: selection.size, page: data.items.length, matching: data.total }}
+          filtered={filtered}
+          formatNote="Two sheets: Teams (one row per team, with the leader's contact) and Members (one row per member)."
+          onExport={exportRows}
+          onClose={() => setExportOpen(false)}
+        />
       )}
     </div>
   );

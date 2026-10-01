@@ -20,10 +20,11 @@ import {
   type StudentQuery,
   type TeamQuery,
   type TeamSummary,
+  type TimelinePoint,
 } from "../admin-types";
 import { getMockEmail } from "../auth/session";
 import { categories, departments } from "../content";
-import { finalistQuota, TEAM_MIN_SIZE } from "../rules";
+import { finalistQuota, normaliseInstitution, REGISTRATION_CLOSES, REGISTRATION_OPENS, TEAM_MIN_SIZE } from "../rules";
 import type { ParticipantType, TeamStatus } from "../types";
 import { ApiError, DEFAULT_PAGE_SIZE, type AdminApi } from "./contract";
 import { createSeed, MOCK_DB_VERSION, type MockDb, type StudentRecord } from "./seed";
@@ -352,6 +353,54 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---------- API ----------
 
+function tally<T>(items: T[], key: (item: T) => string) {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
+  return counts;
+}
+
+const istDay = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/** Daily counts in IST from the first record (or registration opening) to today, like the server. */
+function timelineOf(students: StudentRecord[], teams: AdminTeam[]): TimelinePoint[] {
+  const perDay = {
+    students: tally(students, (s) => istDay(s.createdAt)),
+    teams: tally(teams, (t) => istDay(t.createdAt)),
+    submitted: tally(teams.filter((t) => t.submittedAt), (t) => istDay(t.submittedAt!)),
+  };
+  const days = [...perDay.students.keys(), ...perDay.teams.keys(), ...perDay.submitted.keys(), istDay(REGISTRATION_OPENS)].sort();
+  const today = istDay(new Date().toISOString());
+  const last = [days[days.length - 1], today < istDay(REGISTRATION_CLOSES) ? today : istDay(REGISTRATION_CLOSES)].sort()[1];
+  const points: TimelinePoint[] = [];
+  for (let day = new Date(`${days[0]}T00:00:00Z`); points.length < 120; day.setUTCDate(day.getUTCDate() + 1)) {
+    const date = day.toISOString().slice(0, 10);
+    if (date > last) break;
+    points.push({ date, students: perDay.students.get(date) ?? 0, teams: perDay.teams.get(date) ?? 0, submitted: perDay.submitted.get(date) ?? 0 });
+  }
+  return points;
+}
+
+function topInstitutionsOf(students: StudentRecord[], active: AdminTeam[]) {
+  const groups = new Map<string, StudentRecord[]>();
+  for (const s of students) {
+    if (s.participantType === "kiet") continue;
+    const key = `${s.participantType}|${normaliseInstitution(s.institution)}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  const teamCounts = tally(active, (t) => `${t.participantType}|${normaliseInstitution(t.institution)}`);
+  const mostCommon = (values: string[]) => [...tally(values, (v) => v)].sort((a, b) => b[1] - a[1])[0][0];
+  return [...groups]
+    .map(([key, members]) => ({
+      institution: mostCommon(members.map((m) => m.institution)),
+      participantType: members[0].participantType,
+      city: mostCommon(members.map((m) => m.city)),
+      students: members.length,
+      teams: teamCounts.get(key) ?? 0,
+    }))
+    .sort((a, b) => b.students - a.students || b.teams - a.teams || a.institution.localeCompare(b.institution))
+    .slice(0, 10);
+}
+
 export const mockApi: AdminApi = {
   mode: "mock",
 
@@ -368,6 +417,7 @@ export const mockApi: AdminApi = {
     const students = db.students.filter((s) => canSeeStudent(admin, s));
     const isSuper = admin.role === "super_admin";
     const types: ParticipantType[] = ["kiet", "college", "school"];
+    const active = teams.filter((t) => t.status === "draft" || t.status === "submitted");
     const stats: Stats = {
       department: isSuper ? null : admin.department,
       students: students.length,
@@ -396,6 +446,18 @@ export const mockApi: AdminApi = {
         .slice(0, 8)
         .map(summary),
       resultsPublishedAt: db.publishedAt,
+      timeline: timelineOf(students, teams),
+      byYear: [...tally(students, (s) => `${s.participantType}|${s.year}`)]
+        .map(([key, count]) => {
+          const [participantType, year] = key.split("|");
+          return { participantType: participantType as ParticipantType, year: Number(year), students: count };
+        })
+        .sort((a, b) => a.participantType.localeCompare(b.participantType) || a.year - b.year),
+      teamSizes: [1, 2, 3, 4, 5].map((size) => ({ size, teams: active.filter((t) => t.members.length === size).length })),
+      byDomain: [...tally(active, (t) => t.domain)]
+        .map(([domain, count]) => ({ domain, teams: count }))
+        .sort((a, b) => b.teams - a.teams || a.domain.localeCompare(b.domain)),
+      topInstitutions: isSuper ? topInstitutionsOf(students, active) : null,
     };
     return stats;
   },

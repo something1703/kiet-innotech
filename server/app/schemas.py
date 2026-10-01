@@ -1,7 +1,7 @@
 """Request and response bodies. JSON is snake_case; the frontends convert to camelCase."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError, field_validator, model_validator
@@ -357,6 +357,39 @@ class DepartmentStats(StatusCounts):
     students: int
 
 
+class TimelinePoint(BaseModel):
+    """One day (IST): profiles completed, teams created and teams submitted that day."""
+
+    date: date
+    students: int
+    teams: int
+    submitted: int
+
+
+class YearStats(BaseModel):
+    participant_type: str
+    year: int
+    students: int
+
+
+class SizeStats(BaseModel):
+    size: int
+    teams: int
+
+
+class DomainStats(BaseModel):
+    domain: str
+    teams: int
+
+
+class InstitutionStats(BaseModel):
+    institution: str
+    participant_type: str
+    city: str
+    students: int
+    teams: int
+
+
 class StatsOut(BaseModel):
     department: str | None
     students: int
@@ -368,6 +401,14 @@ class StatsOut(BaseModel):
     by_department: list[DepartmentStats] | None
     recent_submissions: list[TeamSummaryOut]
     results_published_at: datetime | None
+    timeline: list[TimelinePoint]
+    by_year: list[YearStats]
+    # Active teams (draft or submitted) by number of members.
+    team_sizes: list[SizeStats]
+    # Active teams by project domain, most popular first.
+    by_domain: list[DomainStats]
+    # Super admin only: other colleges and schools with the most registered students.
+    top_institutions: list[InstitutionStats] | None
 
 
 class FinalistCategoryOut(BaseModel):

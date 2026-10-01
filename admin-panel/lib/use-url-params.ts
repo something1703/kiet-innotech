@@ -44,3 +44,11 @@ export function intParam(params: URLSearchParams, key: string, min: number, max:
   const value = Number(params.get(key));
   return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
 }
+
+export const PAGE_SIZES = [25, 50, 100] as const;
+
+/** Rows per page from the `size` query parameter: 25 (default), 50 or 100 (the API's maximum). */
+export function pageSizeParam(params: URLSearchParams): number {
+  const value = Number(params.get("size"));
+  return (PAGE_SIZES as readonly number[]).includes(value) ? value : PAGE_SIZES[0];
+}

@@ -24,7 +24,11 @@ export function toCsv(header: string[], rows: Cell[][]) {
 }
 
 export function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" });
+  downloadBlob(filename, new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
+}
+
+/** Saves a file the browser built, e.g. an export. */
+export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

@@ -3,37 +3,44 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, X } from "lucide-react";
-import { api, DEFAULT_PAGE_SIZE, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
-import type { StudentQuery, StudentSort } from "@/lib/admin-types";
+import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
+import type { AdminStudent, StudentQuery, StudentSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { departments } from "@/lib/content";
-import { downloadStudents } from "@/lib/export";
+import { downloadStudents, downloadStudentsExcel } from "@/lib/export";
 import { formatDate, plural, typeShortLabels } from "@/lib/format";
 import { collegeYears, schoolClasses, yearLabel } from "@/lib/rules";
 import type { ParticipantType } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
-import { intParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
+import { useSelection } from "@/lib/use-selection";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { ExportDialog, type ExportFormat, type ExportScope } from "@/components/ui/ExportDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Select } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { lastPage, Pagination } from "@/components/ui/Pagination";
+import { lastPage, PageSizeSelect, Pagination } from "@/components/ui/Pagination";
+import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Pill, StatusPill } from "@/components/ui/Pill";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
 
 const types: ParticipantType[] = ["kiet", "college", "school"];
 const sorts: StudentSort[] = ["name", "email", "department", "year", "institution", "created_at"];
+const studentKey = (student: AdminStudent) => student.userId;
 
 export function StudentsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [selectError, setSelectError] = useState<string | null>(null);
+  const selection = useSelection(studentKey);
 
   const inTeam = params.get("team");
   const query: StudentQuery = {
@@ -45,7 +52,7 @@ export function StudentsView() {
     sort: pickParam(params, "sort", sorts) ?? "name",
     order: params.get("order") === "desc" ? "desc" : "asc",
     page: intParam(params, "page", 1, 10_000) ?? 1,
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: pageSizeParam(params),
   };
   const { data, error, loading } = useQuery(JSON.stringify(query), () => api.listStudents(query));
   const filtered = Boolean(query.type || query.department || query.year || query.inTeam || query.q);
@@ -54,16 +61,32 @@ export function StudentsView() {
     update({ sort, order: query.sort === sort && query.order === "asc" ? "desc" : "asc" });
   }
 
-  async function exportCsv() {
-    setExporting(true);
-    setExportError(null);
+  // Every page of the current filters, in the current order: what "all matching" means for selecting and exporting.
+  const allMatching = () => api.exportStudents({ ...query, page: undefined, pageSize: undefined });
+
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    setSelectError(null);
     try {
-      downloadStudents(await api.exportStudents({ ...query, page: undefined, pageSize: undefined }));
+      selection.replace(await allMatching());
     } catch (err) {
-      setExportError(errorMessage(err));
+      setSelectError(errorMessage(err));
     } finally {
-      setExporting(false);
+      setSelectingAll(false);
     }
+  }
+
+  async function exportRows(scope: ExportScope, format: ExportFormat) {
+    const rows =
+      scope === "selected"
+        ? selection.rows
+        : scope === "page"
+          ? (data?.items ?? [])
+          : scope === "matching"
+            ? await allMatching()
+            : await api.exportStudents({ sort: query.sort, order: query.order });
+    if (format === "xlsx") await downloadStudentsExcel(rows);
+    else downloadStudents(rows);
   }
 
   const sortProps = { sort: query.sort ?? "name", order: query.order ?? "asc", onSort } as const;
@@ -81,9 +104,9 @@ export function StudentsView() {
             : `KIET students registered in ${admin.department}, including those in teams led by other departments.`
         }
         actions={
-          <Button variant="secondary" onClick={exportCsv} pending={exporting} disabled={!data || data.total === 0}>
-            {!exporting && <Download aria-hidden="true" className="size-4" />}
-            Export CSV
+          <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
+            <Download aria-hidden="true" className="size-4" />
+            Export
           </Button>
         }
       />
@@ -146,22 +169,34 @@ export function StudentsView() {
             "Loading students…"
           )}
         </p>
-        {filtered && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchKey((k) => k + 1);
-              reset();
-            }}
-          >
-            <X aria-hidden="true" className="size-3.5" />
-            Clear filters
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {filtered && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchKey((k) => k + 1);
+                reset();
+              }}
+            >
+              <X aria-hidden="true" className="size-3.5" />
+              Clear filters
+            </Button>
+          )}
+          <PageSizeSelect value={query.pageSize ?? 25} onChange={(size) => update({ size })} />
+        </div>
       </div>
 
-      {exportError && <Notice tone="error">{exportError}</Notice>}
+      <SelectionBar
+        count={selection.size}
+        noun={{ one: "student", many: "students" }}
+        matching={data?.total ?? 0}
+        selectingAll={selectingAll}
+        onSelectAll={selectAllMatching}
+        onClear={selection.clear}
+        onExport={() => setExportOpen(true)}
+      />
+      {selectError && <Notice tone="error">{selectError}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
       {!data && !error && <Loading label="Loading students" />}
 
@@ -186,6 +221,14 @@ export function StudentsView() {
             <TableFrame label="Students" minWidth="min-w-[1000px]">
               <thead>
                 <tr>
+                  <Th className="w-10">
+                    <Checkbox
+                      label="Select all students on this page"
+                      checked={data.items.every(selection.has)}
+                      indeterminate={data.items.some(selection.has)}
+                      onChange={(on) => selection.setMany(data.items, on)}
+                    />
+                  </Th>
                   <SortableTh label="Name" sortKey="name" {...sortProps} />
                   <SortableTh label="Email" sortKey="email" {...sortProps} />
                   <Th>Phone</Th>
@@ -200,7 +243,10 @@ export function StudentsView() {
                 {data.items.map((s) => {
                   const teamVisible = s.team && (isSuper || s.team.department === admin.department);
                   return (
-                    <tr key={s.userId} className="hover:bg-surface/70">
+                    <tr key={s.userId} className={selection.has(s) ? "bg-brand-50/70" : "hover:bg-surface/70"}>
+                      <td className={tdClass}>
+                        <Checkbox label={`Select ${s.fullName}`} checked={selection.has(s)} onChange={() => selection.toggle(s)} />
+                      </td>
                       <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>{s.fullName}</td>
                       <td className={`${tdClass} break-all`}>{s.email}</td>
                       <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
@@ -248,6 +294,17 @@ export function StudentsView() {
           )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
+      )}
+
+      {exportOpen && data && (
+        <ExportDialog
+          noun={{ one: "student", many: "students" }}
+          counts={{ selected: selection.size, page: data.items.length, matching: data.total }}
+          filtered={filtered}
+          formatNote="One Students sheet with contact details, institution, year and team."
+          onExport={exportRows}
+          onClose={() => setExportOpen(false)}
+        />
       )}
     </div>
   );

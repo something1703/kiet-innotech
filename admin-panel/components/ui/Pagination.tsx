@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { Button } from "./Button";
+import { PAGE_SIZES } from "@/lib/use-url-params";
 
 /** The last page number for a paged response (1 when it is empty). */
 export function lastPage({ total, pageSize }: { total: number; pageSize: number }) {
@@ -50,5 +51,25 @@ export function Pagination({
         </Button>
       </div>
     </nav>
+  );
+}
+
+/** Rows per page; changing it goes back to page 1. */
+export function PageSizeSelect({ value, onChange }: { value: number; onChange: (size: number) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-xs text-muted">
+      Rows per page
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-8 rounded-full bg-white px-3 text-xs font-semibold text-navy-900 ring-1 ring-inset ring-line focus-visible:outline-2 focus-visible:outline-brand-500"
+      >
+        {PAGE_SIZES.map((size) => (
+          <option key={size} value={size}>
+            {size}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

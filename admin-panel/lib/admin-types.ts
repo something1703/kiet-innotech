@@ -141,6 +141,26 @@ export type Stats = {
   byDepartment: ({ department: string; students: number } & StatusCounts)[] | null;
   recentSubmissions: TeamSummary[];
   resultsPublishedAt: string | null;
+  /** One entry per day (IST), oldest first, from registration opening to today. */
+  timeline: TimelinePoint[];
+  byYear: { participantType: ParticipantType; year: number; students: number }[];
+  /** Active teams (draft or submitted) by number of members, sizes 1 to 5. */
+  teamSizes: { size: number; teams: number }[];
+  /** Active teams by project domain, most popular first. */
+  byDomain: { domain: string; teams: number }[];
+  /** Super admin only: other colleges and schools with the most registered students. */
+  topInstitutions: { institution: string; participantType: ParticipantType; city: string; students: number; teams: number }[] | null;
+};
+
+export type TimelinePoint = {
+  /** "2026-10-03" */
+  date: string;
+  /** Profiles completed that day. */
+  students: number;
+  /** Teams created that day. */
+  teams: number;
+  /** Teams submitted that day. */
+  submitted: number;
 };
 
 /** A compact team row used in stats and finalist lists. */

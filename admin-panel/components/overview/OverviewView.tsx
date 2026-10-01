@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { api } from "@/lib/api";
-import type { Stats } from "@/lib/admin-types";
+import { useState } from "react";
+import { FileSpreadsheet } from "lucide-react";
+import { api, errorMessage } from "@/lib/api";
+import type { Stats, StatusCounts } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, timeline } from "@/lib/content";
+import { timeline } from "@/lib/content";
+import { downloadOverviewExcel } from "@/lib/export";
 import { categoryTitle, formatDate, formatDateTime, formatNumber, typeShortLabels } from "@/lib/format";
-import { REGISTRATION_CLOSES, REGISTRATION_OPENS, registrationState } from "@/lib/rules";
+import { REGISTRATION_CLOSES, REGISTRATION_OPENS, registrationState, yearLabel } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
 import { teamHref } from "@/lib/routes";
 import { AuditList } from "@/components/audit/AuditList";
@@ -14,7 +17,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Pill, StatusPill } from "@/components/ui/Pill";
-import { numClass, TableFrame, tdClass, Th } from "@/components/ui/Table";
+import { ChartCard, DataTable, Segmented } from "@/components/charts/ChartCard";
+import { Columns } from "@/components/charts/Columns";
+import { Donut } from "@/components/charts/Donut";
+import { Meter } from "@/components/charts/Meter";
+import { accent, categorical, statusSeries, typeColors, type Series } from "@/components/charts/palette";
+import { StackedBars } from "@/components/charts/StackedBars";
+import { TrendChart, type TrendPoint } from "@/components/charts/TrendChart";
+import { Button } from "@/components/ui/Button";
 
 function Headline({ stats }: { stats: Stats }) {
   const out = stats.teams.withdrawn + stats.teams.disqualified;
@@ -41,7 +51,8 @@ function Headline({ stats }: { stats: Stats }) {
 function WindowStrip({ publishedAt }: { publishedAt: string | null }) {
   const state = registrationState();
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = timeline.find((m) => m.end >= today);
+  // Once registration is open, its opening date is no longer "next", even if it opened earlier than planned.
+  const upcoming = timeline.find((m) => m.end >= today && !(state !== "upcoming" && /registrations? open/i.test(m.title)));
   const label =
     state === "open"
       ? `Open until ${formatDate(REGISTRATION_CLOSES)}`
@@ -80,9 +91,24 @@ export function OverviewView() {
   const stats = useQuery("stats", () => api.stats());
   const activity = useQuery("audit-recent", () => api.audit({ limit: 8 }));
   const data = stats.data;
+  const [reporting, setReporting] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  async function downloadReport() {
+    if (!data) return;
+    setReporting(true);
+    setReportError(null);
+    try {
+      await downloadOverviewExcel(data);
+    } catch (err) {
+      setReportError(errorMessage(err));
+    } finally {
+      setReporting(false);
+    }
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={isSuper ? "All departments, colleges and schools" : `${admin.department} department`}
         title="Overview"
@@ -91,8 +117,15 @@ export function OverviewView() {
             ? "Registrations across InnoTech26. Department admins see the same page for their own department."
             : `Registrations of ${admin.department} students and teams led by ${admin.department} students.`
         }
+        actions={
+          <Button variant="secondary" onClick={downloadReport} pending={reporting} disabled={!data}>
+            {!reporting && <FileSpreadsheet aria-hidden="true" className="size-4" />}
+            Download report
+          </Button>
+        }
       />
 
+      {reportError && <Notice tone="error">{reportError}</Notice>}
       {stats.error && <Notice tone="error">{stats.error}</Notice>}
       {!data && !stats.error && <Loading label="Loading numbers" />}
 
@@ -102,106 +135,9 @@ export function OverviewView() {
           <section aria-label="Headline numbers">
             <Headline stats={data} />
           </section>
+          <Charts stats={data} />
 
-          {data.byType && (
-            <section aria-labelledby="by-type">
-              <SectionTitle id="by-type" title="By participant type" meta="KIET teams take the department round; others go straight to the finale" />
-              <TableFrame label="Registrations by participant type" minWidth="min-w-[480px]">
-                <thead>
-                  <tr>
-                    <Th>Participant type</Th>
-                    <Th className={numClass}>Students</Th>
-                    <Th className={numClass}>Teams</Th>
-                    <Th className={numClass}>Submitted</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.byType.map((row) => (
-                    <tr key={row.type}>
-                      <td className={tdClass}>
-                        <Link href={`/teams?type=${row.type}`} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
-                          {typeShortLabels[row.type]}
-                        </Link>
-                      </td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.students)}</td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.teams)}</td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.submitted)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableFrame>
-            </section>
-          )}
-
-          <section aria-labelledby="by-category">
-            <SectionTitle id="by-category" title="Teams per category" />
-            <TableFrame label="Teams per category" minWidth="min-w-[600px]">
-              <thead>
-                <tr>
-                  <Th>Category</Th>
-                  <Th className={numClass}>Draft</Th>
-                  <Th className={numClass}>Submitted</Th>
-                  <Th className={numClass}>Withdrawn</Th>
-                  <Th className={numClass}>Total</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byCategory.map((row) => (
-                  <tr key={row.category}>
-                    <td className={tdClass}>
-                      <Link href={`/teams?category=${row.category}`} className="group inline-flex gap-2 hover:text-brand-700">
-                        <span className="w-4 font-display font-bold text-brand-600">{row.category}</span>
-                        <span className="font-medium text-navy-900 group-hover:underline">{categoryTitle(row.category)}</span>
-                      </Link>
-                    </td>
-                    <td className={`${tdClass} ${numClass}`}>{formatNumber(row.draft)}</td>
-                    <td className={`${tdClass} ${numClass} font-semibold`}>{formatNumber(row.submitted)}</td>
-                    <td className={`${tdClass} ${numClass}`}>{formatNumber(row.withdrawn + row.disqualified)}</td>
-                    <td className={`${tdClass} ${numClass}`}>{formatNumber(row.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableFrame>
-            <p className="mt-2 text-xs text-muted">
-              School teams can enter only Categories {categories.filter((c) => c.openToSchools).map((c) => c.number).join(" and ")}; Category 6 is for first-year teams.
-            </p>
-          </section>
-
-          {data.byDepartment && (
-            <section aria-labelledby="by-department">
-              <SectionTitle id="by-department" title="KIET teams per department" meta="A team belongs to its leader's department" />
-              <TableFrame label="KIET teams per department" minWidth="min-w-[640px]">
-                <thead>
-                  <tr>
-                    <Th>Department</Th>
-                    <Th className={numClass}>Students</Th>
-                    <Th className={numClass}>Draft</Th>
-                    <Th className={numClass}>Submitted</Th>
-                    <Th className={numClass}>Withdrawn</Th>
-                    <Th className={numClass}>Teams</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.byDepartment.map((row) => (
-                    <tr key={row.department}>
-                      <td className={tdClass}>
-                        <Link href={`/teams?department=${encodeURIComponent(row.department)}`} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
-                          {row.department}
-                        </Link>
-                      </td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.students)}</td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.draft)}</td>
-                      <td className={`${tdClass} ${numClass} font-semibold`}>{formatNumber(row.submitted)}</td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.withdrawn + row.disqualified)}</td>
-                      <td className={`${tdClass} ${numClass}`}>{formatNumber(row.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableFrame>
-            </section>
-          )}
-
-          <div className="grid gap-8 xl:grid-cols-2">
+          <div className="grid gap-8 pt-2 xl:grid-cols-2">
             <section aria-labelledby="recent-submissions" className="min-w-0">
               <SectionTitle id="recent-submissions" title="Recent submissions" meta={<Link href="/teams?status=submitted&sort=submitted_at&order=desc" className="font-semibold text-brand-700 hover:underline">All submitted teams</Link>} />
               {data.recentSubmissions.length === 0 ? (
@@ -237,6 +173,207 @@ export function OverviewView() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const trendSeries: Series<"students" | "teams" | "submitted">[] = [
+  { key: "students", label: "Students registered", color: categorical[0] },
+  { key: "teams", label: "Teams created", color: categorical[1] },
+  { key: "submitted", label: "Teams submitted", color: categorical[2] },
+];
+const single = (label: string): Series<"value">[] => [{ key: "value", label, color: accent }];
+const statusTable = (rows: (StatusCounts & { label: string })[]) => (
+  <DataTable
+    head={["", ...statusSeries.map((s) => s.label), "Total"]}
+    rows={rows.map((r) => [r.label, ...statusSeries.map((s) => r[s.key]), r.total])}
+  />
+);
+
+/** The dashboard: every chart has a table view, and bars, slices and rows link to the matching filtered list. */
+function Charts({ stats }: { stats: Stats }) {
+  const [trendMode, setTrendMode] = useState<"cumulative" | "daily">("cumulative");
+  const running = { students: 0, teams: 0, submitted: 0 };
+  const trend: TrendPoint<"students" | "teams" | "submitted">[] = stats.timeline.map((day) => {
+    if (trendMode === "daily") return { date: day.date, values: { students: day.students, teams: day.teams, submitted: day.submitted } };
+    running.students += day.students;
+    running.teams += day.teams;
+    running.submitted += day.submitted;
+    return { date: day.date, values: { ...running } };
+  });
+
+  const statusSlices = statusSeries.map((s) => ({ key: s.key, label: s.label, color: s.color, value: stats.teams[s.key], href: `/teams?status=${s.key}` }));
+  const collegeYears = [1, 2, 3, 4].map((year) => ({
+    key: String(year),
+    label: yearLabel(year),
+    value: stats.byYear.filter((r) => r.participantType !== "school" && r.year === year).reduce((sum, r) => sum + r.students, 0),
+  }));
+  const schoolYears = stats.byYear.filter((r) => r.participantType === "school");
+  const domainRows = stats.byDomain.map((d) => ({ key: d.domain, label: d.domain, values: { value: d.teams } }));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ChartCard
+          className="lg:col-span-2"
+          title="Registrations over time"
+          description={trendMode === "cumulative" ? "Running totals by day (IST)" : "New each day (IST)"}
+          controls={
+            <Segmented
+              label="Totals or per day"
+              value={trendMode}
+              onChange={setTrendMode}
+              options={[
+                { value: "cumulative", label: "Running total" },
+                { value: "daily", label: "Per day" },
+              ]}
+            />
+          }
+          table={
+            <DataTable
+              head={["Date", "Students", "Teams created", "Teams submitted"]}
+              rows={stats.timeline.map((d) => [formatDate(`${d.date}T12:00:00+05:30`), d.students, d.teams, d.submitted])}
+            />
+          }
+        >
+          <TrendChart height={360} points={trend} series={trendSeries} label={`Registrations over time, ${trendMode === "daily" ? "per day" : "running totals"}`} />
+        </ChartCard>
+
+        <ChartCard
+          title="Team status"
+          description="Click a status to see those teams"
+          table={statusTable([{ label: "All teams", ...stats.teams }])}
+        >
+          <Donut slices={statusSlices} centerLabel="teams" />
+          <div className="mt-5 border-t border-line pt-4">
+            <Meter label="Students already in a team" value={stats.studentsInTeams} total={stats.students} note={`${formatNumber(stats.pendingInvitations)} invitations pending`} />
+          </div>
+        </ChartCard>
+      </div>
+
+      <ChartCard
+        title="Teams per category"
+        description="Click a category to open its teams"
+        table={statusTable(stats.byCategory.map((r) => ({ ...r, label: `${r.category}. ${categoryTitle(r.category)}` })))}
+      >
+        <StackedBars
+          series={statusSeries}
+          labelWidth="17rem"
+          rows={stats.byCategory.map((r) => ({
+            key: String(r.category),
+            label: `${r.category}. ${categoryTitle(r.category)}`,
+            href: `/teams?category=${r.category}`,
+            values: { submitted: r.submitted, draft: r.draft, withdrawn: r.withdrawn, disqualified: r.disqualified },
+          }))}
+        />
+      </ChartCard>
+
+      {stats.byDepartment && (
+        <ChartCard
+          title="KIET teams by department"
+          description="A team belongs to its leader's department. Click a department to open its teams."
+          table={
+            <DataTable
+              head={["Department", "Students", ...statusSeries.map((s) => s.label), "Teams"]}
+              rows={stats.byDepartment.map((r) => [r.department, r.students, ...statusSeries.map((s) => r[s.key]), r.total])}
+            />
+          }
+        >
+          <StackedBars
+            series={statusSeries}
+            labelWidth="7rem"
+            rows={stats.byDepartment.map((r) => ({
+              key: r.department,
+              label: r.department,
+              hint: `${formatNumber(r.students)} students`,
+              href: `/teams?department=${encodeURIComponent(r.department)}`,
+              values: { submitted: r.submitted, draft: r.draft, withdrawn: r.withdrawn, disqualified: r.disqualified },
+            }))}
+          />
+        </ChartCard>
+      )}
+
+      <div className={`grid gap-4 ${stats.byType ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+        {stats.byType && (
+          <ChartCard
+            title="Students by participant type"
+            description="KIET teams take the department round; others go straight to the finale"
+            table={<DataTable head={["Type", "Students", "Teams", "Submitted"]} rows={stats.byType.map((r) => [typeShortLabels[r.type], r.students, r.teams, r.submitted])} />}
+          >
+            <Donut
+              centerLabel="students"
+              slices={stats.byType.map((r) => ({ key: r.type, label: typeShortLabels[r.type], color: typeColors[r.type], value: r.students, href: `/students?type=${r.type}` }))}
+            />
+          </ChartCard>
+        )}
+        <ChartCard
+          title="Year of study"
+          description="KIET and college students"
+          table={<DataTable head={["Year / class", "Students"]} rows={[...collegeYears.map((c) => [c.label, c.value]), ...schoolYears.map((r) => [yearLabel(r.year, "school"), r.students])]} />}
+        >
+          <Columns columns={collegeYears} unit="students" />
+          {schoolYears.length > 0 && (
+            <p className="mt-3 text-xs text-muted">
+              School students: {schoolYears.map((r) => `${yearLabel(r.year, "school")}: ${formatNumber(r.students)}`).join(" · ")}
+            </p>
+          )}
+        </ChartCard>
+        <ChartCard
+          title="Team sizes"
+          description="Active teams by number of members; 2 to 5 can submit"
+          table={<DataTable head={["Members", "Active teams"]} rows={stats.teamSizes.map((r) => [r.size, r.teams])} />}
+        >
+          <Columns
+            columns={stats.teamSizes.map((r) => ({ key: String(r.size), label: String(r.size), note: `${r.size} ${r.size === 1 ? "member" : "members"}`, value: r.teams }))}
+            unit="active teams"
+            axisLabel="Members in the team"
+          />
+        </ChartCard>
+      </div>
+
+      <div className={`grid gap-4 ${stats.topInstitutions ? "xl:grid-cols-2" : ""}`}>
+        <ChartCard
+          title="Most popular domains"
+          description="Active teams by project domain"
+          table={<DataTable head={["Domain", "Active teams"]} rows={stats.byDomain.map((r) => [r.domain, r.teams])} />}
+        >
+          {domainRows.length ? (
+            <StackedBars series={single("Active teams")} rows={domainRows} labelWidth="14rem" sortable={false} legend={false} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted">No active teams yet.</p>
+          )}
+        </ChartCard>
+        {stats.topInstitutions && (
+          <ChartCard
+            title="Top colleges and schools"
+            description="Outside KIET, by registered students"
+            table={
+              <DataTable
+                head={["Institution", "City", "Students", "Active teams"]}
+                rows={stats.topInstitutions.map((r) => [`${r.institution} (${typeShortLabels[r.participantType]})`, r.city, r.students, r.teams])}
+              />
+            }
+          >
+            {stats.topInstitutions.length ? (
+              <StackedBars
+                series={single("Students")}
+                labelWidth="14rem"
+                sortable={false}
+                legend={false}
+                rows={stats.topInstitutions.map((r) => ({
+                  key: `${r.participantType}-${r.institution}`,
+                  label: r.institution,
+                  hint: `${typeShortLabels[r.participantType]} · ${r.city} · ${formatNumber(r.teams)} active ${r.teams === 1 ? "team" : "teams"}`,
+                  href: `/students?q=${encodeURIComponent(r.institution.slice(0, 100))}`,
+                  values: { value: r.students },
+                }))}
+              />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted">No students from other colleges or schools yet.</p>
+            )}
+          </ChartCard>
+        )}
+      </div>
     </div>
   );
 }

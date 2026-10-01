@@ -21,8 +21,9 @@ export function Pill({ tone = "slate", children }: { tone?: PillTone; children: 
   );
 }
 
+// Matches the chart colours: drafts in blue (in progress), submitted green, out of the event red.
 const statusTones: Record<TeamStatus, PillTone> = {
-  draft: "slate",
+  draft: "cyan",
   submitted: "green",
   withdrawn: "red",
   disqualified: "red",

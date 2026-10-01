@@ -5,7 +5,9 @@ KIET teams and students of their own department; a super admin sees everything.
 
 import uuid
 from collections import Counter, defaultdict
+from datetime import date, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, String, and_, cast, delete, exists, func, or_, select, update
@@ -14,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import rules
-from ..config import Settings
+from ..config import Settings, get_settings
 from ..errors import ApiError
 from ..models import Admin, AppState, AuditEntry, FinalistNomination, Invitation, Profile, Team, TeamMember, User, utcnow
 from ..schemas import (
@@ -26,18 +28,23 @@ from ..schemas import (
     AuditOut,
     CategoryStats,
     DepartmentStats,
+    DomainStats,
     FinalistBoardOut,
     FinalistCategoryOut,
     FinalistSummaryOut,
+    InstitutionStats,
     MatrixCell,
     MatrixRow,
     NominationsInput,
     PublishOut,
+    SizeStats,
     StatsOut,
     StatusCounts,
     StudentTeamRef,
     TeamSummaryOut,
+    TimelinePoint,
     TypeStats,
+    YearStats,
 )
 from . import audit
 from .serializers import invitation_out, profile_out
@@ -422,13 +429,68 @@ def _counts(statuses: list[str]) -> dict[str, int]:
     return {"total": len(statuses), **{status: tally.get(status, 0) for status in STATUSES}}
 
 
+IST = ZoneInfo("Asia/Kolkata")
+ACTIVE = ("draft", "submitted")
+# A guard on the timeline length, should the registration dates ever be misconfigured.
+TIMELINE_MAX_DAYS = 120
+
+
+def _ist_day(moment: datetime) -> date:
+    return moment.astimezone(IST).date()
+
+
+def _timeline(profile_times: list[datetime], team_times: list[datetime], submit_times: list[datetime]) -> list[TimelinePoint]:
+    """Daily counts in IST, from registration opening (or the first record) to today, with empty days filled in."""
+    settings = get_settings()
+    students = Counter(_ist_day(t) for t in profile_times)
+    teams = Counter(_ist_day(t) for t in team_times)
+    submitted = Counter(_ist_day(t) for t in submit_times)
+    days = set(students) | set(teams) | set(submitted)
+    start = min([_ist_day(settings.registration_opens), *days])
+    end = max([min(_ist_day(utcnow()), _ist_day(settings.registration_closes)), *days])
+    if end < start:
+        return []
+    start = max(start, end - timedelta(days=TIMELINE_MAX_DAYS - 1))
+    return [
+        TimelinePoint(date=day, students=students[day], teams=teams[day], submitted=submitted[day])
+        for day in (start + timedelta(days=offset) for offset in range((end - start).days + 1))
+    ]
+
+
 def stats(db: Session, admin: Admin) -> StatsOut:
-    teams = db.execute(select(Team.status, Team.category, Team.participant_type, Team.department).where(team_scope(admin))).all()
+    teams = db.execute(
+        select(
+            Team.id,
+            Team.status,
+            Team.category,
+            Team.participant_type,
+            Team.department,
+            Team.domain,
+            Team.institution_key,
+            Team.created_at,
+            Team.submitted_at,
+        ).where(team_scope(admin))
+    ).all()
     students = db.execute(
         select(
-            Profile.participant_type, Profile.department, exists(select(TeamMember.user_id).where(TeamMember.user_id == Profile.user_id))
+            Profile.participant_type,
+            Profile.department,
+            exists(select(TeamMember.user_id).where(TeamMember.user_id == Profile.user_id)).label("in_team"),
+            Profile.year,
+            Profile.institution,
+            Profile.institution_key,
+            Profile.city,
+            Profile.created_at,
         ).where(student_scope(admin))
     ).all()
+    sizes = dict(
+        db.execute(
+            select(TeamMember.team_id, func.count())
+            .join(Team, Team.id == TeamMember.team_id)
+            .where(team_scope(admin))
+            .group_by(TeamMember.team_id)
+        ).all()
+    )
     pending = db.scalar(
         select(func.count())
         .select_from(Invitation)
@@ -438,11 +500,12 @@ def stats(db: Session, admin: Admin) -> StatsOut:
     recent = list(db.scalars(select(Team).where(team_scope(admin), Team.status == "submitted").order_by(Team.submitted_at.desc()).limit(8)))
     published = _results_published(db)
     is_super = _is_super(admin)
+    active = [t for t in teams if t.status in ACTIVE]
 
     return StatsOut(
         department=None if is_super else admin.department,
         students=len(students),
-        students_in_teams=sum(1 for s in students if s[2]),
+        students_in_teams=sum(1 for s in students if s.in_team),
         pending_invitations=pending or 0,
         teams=StatusCounts(**_counts([t.status for t in teams])),
         by_type=[
@@ -471,7 +534,44 @@ def stats(db: Session, admin: Admin) -> StatsOut:
         else None,
         recent_submissions=summaries(db, recent),
         results_published_at=published.updated_at if published else None,
+        timeline=_timeline(
+            [s.created_at for s in students], [t.created_at for t in teams], [t.submitted_at for t in teams if t.submitted_at]
+        ),
+        by_year=[
+            YearStats(participant_type=kind, year=year, students=count)
+            for (kind, year), count in sorted(Counter((s.participant_type, s.year) for s in students).items())
+        ],
+        team_sizes=[
+            SizeStats(size=size, teams=sum(1 for t in active if sizes.get(t.id, 0) == size)) for size in range(1, rules.TEAM_MAX_SIZE + 1)
+        ],
+        by_domain=[
+            DomainStats(domain=domain, teams=count)
+            for domain, count in sorted(Counter(t.domain for t in active).items(), key=lambda item: (-item[1], item[0]))
+        ],
+        top_institutions=_top_institutions(students, teams) if is_super else None,
     )
+
+
+def _top_institutions(students: list, teams: list, limit: int = 10) -> list[InstitutionStats]:
+    """Other colleges and schools with the most students. Spellings vary, so they are grouped by the matching key."""
+    groups: dict[tuple[str, str], list] = defaultdict(list)
+    for student in students:
+        if student.participant_type != "kiet" and student.institution_key:
+            groups[(student.participant_type, student.institution_key)].append(student)
+    team_counts = Counter((t.participant_type, t.institution_key) for t in teams if t.status in ACTIVE)
+    rows = [
+        InstitutionStats(
+            # The spelling most of its students used.
+            institution=Counter(s.institution for s in members).most_common(1)[0][0],
+            participant_type=kind,
+            city=Counter(s.city for s in members).most_common(1)[0][0],
+            students=len(members),
+            teams=team_counts[(kind, key)],
+        )
+        for (kind, key), members in groups.items()
+    ]
+    rows.sort(key=lambda row: (-row.students, -row.teams, row.institution.lower()))
+    return rows[:limit]
 
 
 # ---------- Finalists ----------
