@@ -34,7 +34,7 @@ export const navLinks = [
 ];
 
 export const liveUpdates = [
-  "Registrations open from 3 to 12 October 2026",
+  "Registrations are open until 12 October 2026",
   "No registration fee for any participant",
   "Grand Finale on 30 October 2026 at KIET",
 ];

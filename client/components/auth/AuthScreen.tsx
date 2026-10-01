@@ -25,7 +25,7 @@ function safeNext(next: string | null) {
 }
 
 const facts = [
-  { icon: CalendarDays, label: "Registration 3 to 12 October 2026" },
+  { icon: CalendarDays, label: "Registration open until 12 October 2026" },
   { icon: MapPin, label: `Grand Finale ${event.finaleLabel}, KIET` },
   { icon: Ticket, label: "No registration fee" },
 ];

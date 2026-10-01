@@ -156,6 +156,7 @@ upload_site() {
   # Hashed assets first, then pages, so a page never points at a missing file; the instance then mirrors the folder.
   aws s3 sync --quiet "$ROOT/$app/out/_next/static" "s3://$ops/sites/$site/_next/static"
   aws s3 sync --quiet "$ROOT/$app/out" "s3://$ops/sites/$site" --delete
+  aws s3 cp --quiet "$DEPLOY_DIR/remote/sync-sites.sh" "s3://$ops/release/sync-sites.sh"
   remote "aws s3 cp --quiet s3://$ops/release/sync-sites.sh /opt/innotech/sync-sites.sh && chmod 700 /opt/innotech/sync-sites.sh && /opt/innotech/sync-sites.sh $site"
 }
 

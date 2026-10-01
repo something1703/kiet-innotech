@@ -22,5 +22,5 @@ export function RegisterCta({ label, className }: { label: string; className: st
 export function RegistrationNote() {
   return useRegistrationState() === "closed"
     ? "Registration closed on 12 October 2026. Registered students can sign in to see their team and results."
-    : "Registrations are open from 3 to 12 October 2026. It is free, and it takes just a few minutes.";
+    : "Registrations are open until 12 October 2026. It is free, and it takes just a few minutes.";
 }

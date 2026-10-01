@@ -6,5 +6,7 @@ source bootstrap.env
 export AWS_REGION
 site="${1:?usage: sync-sites.sh portal|admin}"
 mkdir -p "sites/$site"
-aws s3 sync --quiet --delete "s3://$OPS_BUCKET/sites/$site" "sites/$site"
+# --exact-timestamps: rebuilt pages often keep the same size (only hashed file names change), and the default
+# size-and-newer check then silently keeps the old copy.
+aws s3 sync --quiet --delete --exact-timestamps "s3://$OPS_BUCKET/sites/$site" "sites/$site"
 echo "$site: $(find "sites/$site" -type f | wc -l) files"
