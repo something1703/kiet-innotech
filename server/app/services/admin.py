@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, String, and_, cast, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from .. import rules
 from ..config import Settings
@@ -362,7 +362,10 @@ def _student_query(admin: Admin, f: StudentFilters):
         conditions.append(Profile.participant_type == f.type)
     if f.year:
         conditions.append(Profile.year == f.year)
-    in_team = exists(select(TeamMember.user_id).where(TeamMember.user_id == Profile.user_id))
+    # An alias: the student list also joins team_members itself, and a subquery on the same table would be
+    # merged into that join ("no FROM clauses due to auto-correlation").
+    member = aliased(TeamMember)
+    in_team = exists(select(member.user_id).where(member.user_id == Profile.user_id))
     if f.in_team == "yes":
         conditions.append(in_team)
     elif f.in_team == "no":
