@@ -45,7 +45,8 @@ export type AuditAction =
   | "team.code_reset"
   | "schedule.updated"
   | "schedule.opened"
-  | "schedule.closed";
+  | "schedule.closed"
+  | "results.unpublished";
 
 export type AuditEntry = {
   id: string;
@@ -243,6 +244,9 @@ export type NominationInput = { category: number; teamIds: string[] }[];
 export type FinalistSummary = {
   publishedAt: string | null;
   publishedBy: string | null;
+  nominationsDeadline: string | null;
+  /** Why results cannot be published right now (null = they can). Decided by the server. */
+  publishBlocked: string | null;
   matrix: {
     department: string;
     categories: { category: number; quota: number; nominated: number; eligible: number }[];

@@ -19,6 +19,7 @@ from ..schemas import (
     FinalistSummaryOut,
     NominationsInput,
     OpenNowInput,
+    PublishInput,
     PublishOut,
     ReasonInput,
     ScheduleInput,
@@ -90,8 +91,8 @@ def export_students(admin: CurrentAdmin, db: Db, filters: Annotated[StudentFilte
 
 
 @router.get("/finalists/summary")
-def finalist_summary(admin: CurrentAdmin, db: Db) -> FinalistSummaryOut:
-    return service.finalist_summary(db, admin)
+def finalist_summary(admin: CurrentAdmin, db: Db, settings: AppSettings) -> FinalistSummaryOut:
+    return service.finalist_summary(db, admin, settings)
 
 
 @router.get("/finalists")
@@ -110,8 +111,8 @@ def save_finalists(
 
 
 @router.post("/results/publish")
-def publish_results(admin: CurrentAdmin, db: Db) -> PublishOut:
-    return service.publish_results(db, admin)
+def publish_results(data: PublishInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> PublishOut:
+    return service.publish_results(db, admin, settings, data)
 
 
 @router.get("/schedule")

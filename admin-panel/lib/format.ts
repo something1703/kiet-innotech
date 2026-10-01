@@ -101,6 +101,7 @@ export const auditLabels: Record<AuditAction, string> = {
   "schedule.updated": "Schedule changed",
   "schedule.opened": "Registration opened",
   "schedule.closed": "Registration closed",
+  "results.unpublished": "Results un-published (corrected)",
 };
 
 export { participantTypeLabels };

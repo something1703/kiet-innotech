@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./Button";
-import { Field, Textarea } from "./Field";
+import { Field, Input, Textarea } from "./Field";
 import { errorMessage } from "@/lib/api";
 
 /**
@@ -81,6 +81,7 @@ export function ConfirmDialog({
   confirmLabel,
   tone = "primary",
   reasonLabel,
+  typeToConfirm,
   onConfirm,
   onClose,
   children,
@@ -91,6 +92,8 @@ export function ConfirmDialog({
   tone?: "primary" | "danger";
   /** When set, a reason of at least 5 characters is required. */
   reasonLabel?: string;
+  /** When set, the confirm button stays disabled until this exact phrase is typed (for actions that cannot be undone). */
+  typeToConfirm?: string;
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
   children?: ReactNode;
@@ -98,9 +101,13 @@ export function ConfirmDialog({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
   const reasonId = useId();
+  const phraseId = useId();
+  const phraseOk = !typeToConfirm || typed.trim() === typeToConfirm;
 
   async function confirm() {
+    if (!phraseOk) return;
     if (reasonLabel && reason.trim().length < 5) {
       setError("Give a reason of at least 5 characters. It is saved in the audit log.");
       return;
@@ -126,13 +133,20 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button variant={tone} onClick={confirm} pending={pending}>
+          <Button variant={tone} onClick={confirm} pending={pending} disabled={!phraseOk}>
             {confirmLabel}
           </Button>
         </>
       }
     >
       {children}
+      {typeToConfirm && (
+        <div className="mt-4">
+          <Field label={`Type ${typeToConfirm} to confirm`} htmlFor={phraseId}>
+            <Input id={phraseId} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono tracking-widest" />
+          </Field>
+        </div>
+      )}
       {reasonLabel && (
         <Field label={reasonLabel} htmlFor={reasonId} hint="Required. Saved in the audit log with your email.">
           <Textarea

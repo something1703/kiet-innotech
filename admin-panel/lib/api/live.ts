@@ -108,7 +108,9 @@
  *            matrix: [{ department, categories: [{ category, quota, nominated, eligible }] }],
  *            direct_teams: TeamSummary[] }  (submitted other-college and school teams)
  *
- *   POST   /admin/results/publish          (super_admin only, once)
+ *   POST   /admin/results/publish          (super_admin only, once)   body { confirm: "PUBLISH" }
+ *          422 without the phrase; 409 before the nominations deadline or when nobody is nominated (the reason is
+ *          also in GET /admin/finalists/summary as publish_blocked)
  *          Every submitted route "department" team becomes result "finalist" if nominated, else
  *          "not_selected". Finale-route teams are unchanged. Locks nominations. 409 if already published.
  *          → PublishResult { published_at, finalists, not_selected }
@@ -286,7 +288,8 @@ export const liveApi: AdminApi = {
   saveFinalists: (department, nominations) =>
     request<FinalistBoard>("PUT", `/admin/finalists/${id(department)}`, { nominations }),
   finalistSummary: () => request<FinalistSummary>("GET", "/admin/finalists/summary"),
-  publishResults: () => request<PublishResult>("POST", "/admin/results/publish"),
+  // The server insists on the typed phrase too, so a stray request cannot publish.
+  publishResults: () => request<PublishResult>("POST", "/admin/results/publish", { confirm: "PUBLISH" }),
 
   listAdmins: () => request<AdminUser[]>("GET", "/admin/admins"),
   addAdmin: (input: AdminInput) => request<AdminUser>("POST", "/admin/admins", input),

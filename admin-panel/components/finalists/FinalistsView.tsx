@@ -190,12 +190,17 @@ function SuperAdminFinalists() {
                   setPublishError(null);
                   setPublishing(true);
                 }}
-                disabled={summary.loading}
+                disabled={summary.loading || data.publishBlocked !== null}
               >
                 <Send aria-hidden="true" className="size-4" />
                 Publish results
               </Button>
             </div>
+          )}
+          {!data.publishedAt && data.publishBlocked && (
+            <Notice tone="info" title="Results cannot be published yet">
+              {data.publishBlocked}
+            </Notice>
           )}
           {published && <Notice tone="success">{published}</Notice>}
           {publishError && <Notice tone="error">{publishError}</Notice>}
@@ -266,6 +271,7 @@ function SuperAdminFinalists() {
           title="Publish department round results?"
           description="This cannot be undone from the panel."
           confirmLabel="Publish results"
+          typeToConfirm="PUBLISH"
           onClose={() => setPublishing(false)}
           onConfirm={publish}
         >

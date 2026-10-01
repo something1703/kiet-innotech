@@ -350,3 +350,62 @@ def test_college_students_are_held_to_the_same_window(root, student, as_user, re
     outsider = as_user("someone@gmail.com")
     assert outsider.put("/me/profile", college_profile()).status_code == 403
     assert outsider.get("/me").json()["registration"]["state"] == "closed"
+
+
+# ---------- Publishing results is one-way, so it is guarded ----------
+
+
+def two_nominated(root, student, team_of):
+    team = submitted_cse_team(student, team_of)
+    assert nominate(root, team["id"]).status_code == 200
+    return team
+
+
+def test_publishing_needs_the_typed_confirmation(root, student, team_of, real_window):
+    two_nominated(root, student, team_of)
+    real_window.nominations_deadline = datetime.now(UTC) - timedelta(minutes=1)
+    for body in (None, {}, {"confirm": ""}, {"confirm": "yes"}, {"confirm": "publish now"}):
+        response = root.post("/admin/results/publish", body)
+        assert response.status_code == 422, (body, response.text)
+    # Nothing was published by any of those.
+    assert root.get("/admin/finalists/summary").json()["published_at"] is None
+    assert root.post("/admin/results/publish", {"confirm": "PUBLISH"}).status_code == 200
+
+
+def test_publishing_waits_for_the_nominations_deadline(root, student, team_of, real_window):
+    two_nominated(root, student, team_of)
+    real_window.nominations_deadline = datetime.now(UTC) + timedelta(days=3)
+    summary = root.get("/admin/finalists/summary").json()
+    assert "nominate finalists until" in summary["publish_blocked"] and summary["nominations_deadline"]
+    refused = root.post("/admin/results/publish", {"confirm": "PUBLISH"})
+    assert refused.status_code == 409 and "cannot be published yet" in refused.json()["detail"]
+    assert root.get("/admin/finalists/summary").json()["published_at"] is None
+
+    # A super admin can move the deadline on purpose, and then it works.
+    dates = {**window(timedelta(days=-1), timedelta(days=5)), "nominations_deadline": iso(datetime.now(UTC) - timedelta(minutes=1))}
+    assert root.put("/admin/schedule", dates).status_code == 200
+    assert root.get("/admin/finalists/summary").json()["publish_blocked"] is None
+    assert root.post("/admin/results/publish", {"confirm": "PUBLISH"}).status_code == 200
+
+
+def test_publishing_is_allowed_when_there_is_no_deadline(root, student, team_of, real_window):
+    two_nominated(root, student, team_of)
+    dates = {**window(timedelta(days=-1), timedelta(days=5)), "nominations_deadline": None}
+    root.put("/admin/schedule", dates)
+    assert root.post("/admin/results/publish", {"confirm": "PUBLISH"}).status_code == 200
+
+
+def test_publishing_with_nobody_nominated_is_refused(root, student, team_of, real_window):
+    submitted_cse_team(student, team_of)  # submitted, but nobody nominated
+    real_window.nominations_deadline = datetime.now(UTC) - timedelta(minutes=1)
+    summary = root.get("/admin/finalists/summary").json()
+    assert "No finalists have been nominated" in summary["publish_blocked"]
+    refused = root.post("/admin/results/publish", {"confirm": "PUBLISH"})
+    assert refused.status_code == 409 and "nothing to publish" in refused.json()["detail"]
+    # And with no teams at all, the same: the mistake that happened on the live site (0 finalists, 0 not selected).
+    assert root.get("/admin/finalists/summary").json()["published_at"] is None
+
+
+def test_only_a_super_admin_can_publish_even_with_the_phrase(dept_admin, real_window):
+    real_window.nominations_deadline = datetime.now(UTC) - timedelta(minutes=1)
+    assert dept_admin.post("/admin/results/publish", {"confirm": "PUBLISH"}).status_code == 403

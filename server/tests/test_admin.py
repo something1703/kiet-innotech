@@ -1,6 +1,14 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from conftest import college_profile, kiet_profile, school_profile, team_input
+
+
+def publish(root, settings, confirm="PUBLISH"):
+    """Publishes the way an organiser does after the nominations deadline has passed."""
+    settings.nominations_deadline = datetime.now(UTC) - timedelta(minutes=1)
+    return root.post("/admin/results/publish", {"confirm": confirm})
 
 
 @pytest.fixture
@@ -102,7 +110,7 @@ def test_withdraw_disqualify_restore(world):
     assert actions[:3] == ["team.disqualified", "team.restored", "team.withdrawn"]
 
 
-def test_finalist_quota_and_publish(world, as_user):
+def test_finalist_quota_and_publish(world, as_user, settings):
     cse, it, root = world["cse"], world["it"], world["root"]
     teams = world["teams"]
     board = cse.get("/admin/finalists", params={"department": "CSE"}).json()
@@ -121,12 +129,12 @@ def test_finalist_quota_and_publish(world, as_user):
     assert root.get("/admin/finalists", params={"department": "CSE(CS)"}).json()["categories"][0]["quota"] == 1
     assert root.get("/admin/finalists", params={"department": "NOPE"}).status_code == 404
 
-    assert cse.post("/admin/results/publish").status_code == 403
+    assert cse.post("/admin/results/publish", {"confirm": "PUBLISH"}).status_code == 403
     summary = root.get("/admin/finalists/summary").json()
     assert {t["name"] for t in summary["direct_teams"]} == {"ABES Team", "DPS Team"}
-    result = root.post("/admin/results/publish").json()
+    result = publish(root, settings).json()
     assert (result["finalists"], result["not_selected"]) == (2, 2)
-    assert root.post("/admin/results/publish").status_code == 409
+    assert publish(root, settings).status_code == 409
     assert cse.put("/admin/finalists/CSE", {"nominations": [{"category": 1, "team_ids": []}]}).status_code == 409
 
     # Students see their result; direct-to-finale teams are unchanged.
@@ -203,10 +211,10 @@ def test_student_actions_blocked_on_withdrawn_team(world, as_user, student):
     assert leader.post("/teams", team_input(name="Fresh start")).status_code == 409
 
 
-def test_withdraw_and_restore_after_publishing_keep_result_consistent(world, as_user):
+def test_withdraw_and_restore_after_publishing_keep_result_consistent(world, as_user, settings):
     root, cse, teams = world["root"], world["cse"], world["teams"]
     cse.put("/admin/finalists/CSE", {"nominations": [{"category": 1, "team_ids": [teams["cse_a"]["id"]]}]})
-    root.post("/admin/results/publish")
+    publish(root, settings)
 
     withdrawn = root.post(f"/admin/teams/{teams['cse_a']['id']}/withdraw", {"reason": "Team could not attend."}).json()
     assert (withdrawn["status"], withdrawn["result"]) == ("withdrawn", "not_selected")

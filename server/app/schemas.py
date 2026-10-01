@@ -484,8 +484,16 @@ class MatrixRow(BaseModel):
 class FinalistSummaryOut(BaseModel):
     published_at: datetime | None
     published_by: str | None
+    nominations_deadline: datetime | None = None
+    # Why results cannot be published right now (None = they can). The server decides, the panel only shows it.
+    publish_blocked: str | None = None
     matrix: list[MatrixRow]
     direct_teams: list[TeamSummaryOut]
+
+
+class PublishInput(Input):
+    # The panel asks the organiser to type this; requiring it here too stops a stray click or script from publishing.
+    confirm: str = Field(max_length=20)
 
 
 class PublishOut(BaseModel):

@@ -36,6 +36,7 @@ from ..schemas import (
     MatrixCell,
     MatrixRow,
     NominationsInput,
+    PublishInput,
     PublishOut,
     SizeStats,
     StatsOut,
@@ -635,16 +636,16 @@ def _lock_state(db: Session, key: str, default: str = "") -> AppState:
 def save_finalists(db: Session, admin: Admin, department: str, data: NominationsInput, settings: Settings) -> FinalistBoardOut:
     _board_access(admin, department)
     window = schedule.load(db, settings)
+    # Same lock as publishing, so nominations cannot change while results are being published.
+    _lock_state(db, f"{RESULTS_KEY}_lock")
+    if _results_published(db):
+        raise ApiError("Results have been published, so nominations can no longer change.", 409)
     if window.nominations_closed() and not _is_super(admin):
         raise ApiError(
             f"The nomination deadline passed on {window.nominations_deadline.astimezone(rules.IST):%d %B %Y, %I:%M %p} IST. "  # type: ignore[union-attr]
             "Ask a super admin to change the nominations.",
             403,
         )
-    # Same lock as publishing, so nominations cannot change while results are being published.
-    _lock_state(db, f"{RESULTS_KEY}_lock")
-    if _results_published(db):
-        raise ApiError("Results have been published, so nominations can no longer change.", 409)
     state = _lock_state(db, f"finalists:{department}")
 
     eligible = {t.id: t for t in _eligible(db, department, lock=True)}
@@ -679,7 +680,7 @@ def save_finalists(db: Session, admin: Admin, department: str, data: Nominations
     return finalist_board(db, admin, department, settings)
 
 
-def finalist_summary(db: Session, admin: Admin) -> FinalistSummaryOut:
+def finalist_summary(db: Session, admin: Admin, settings: Settings) -> FinalistSummaryOut:
     _require_super(admin, "see every department's finalists")
     eligible = _eligible(db)
     eligible_count = Counter((t.department, t.category) for t in eligible)
@@ -690,6 +691,8 @@ def finalist_summary(db: Session, admin: Admin) -> FinalistSummaryOut:
     return FinalistSummaryOut(
         published_at=published.updated_at if published else None,
         published_by=published.value if published else None,
+        nominations_deadline=schedule.load(db, settings).nominations_deadline,
+        publish_blocked=None if published else publish_blocker(db, settings),
         matrix=[
             MatrixRow(
                 department=department,
@@ -709,11 +712,33 @@ def finalist_summary(db: Session, admin: Admin) -> FinalistSummaryOut:
     )
 
 
-def publish_results(db: Session, admin: Admin) -> PublishOut:
+PUBLISH_PHRASE = "PUBLISH"
+
+
+def publish_blocker(db: Session, settings: Settings) -> str | None:
+    """Why results cannot be published right now, or None. Publishing is one-way and locks every department's nominations."""
+    window = schedule.load(db, settings)
+    if window.nominations_deadline is not None and not window.nominations_closed():
+        due = window.nominations_deadline.astimezone(rules.IST)
+        return (
+            f"Department admins can nominate finalists until {due:%d %B %Y, %I:%M %p} IST, so results cannot be published yet. "
+            "Move or clear the nominations deadline on the Schedule page if you really need to publish earlier."
+        )
+    eligible_ids = {t.id for t in _eligible(db)}
+    if not any(n.team_id in eligible_ids for n in db.scalars(select(FinalistNomination))):
+        return "No finalists have been nominated yet, so there is nothing to publish."
+    return None
+
+
+def publish_results(db: Session, admin: Admin, settings: Settings, data: PublishInput) -> PublishOut:
     _require_super(admin, "publish results")
+    if data.confirm.strip() != PUBLISH_PHRASE:
+        raise ApiError(f"Type {PUBLISH_PHRASE} to confirm. Publishing cannot be undone from the panel.", 422)
     _lock_state(db, f"{RESULTS_KEY}_lock")
     if _results_published(db):
         raise ApiError("Results have already been published.", 409)
+    if blocked := publish_blocker(db, settings):
+        raise ApiError(blocked, 409)
 
     nominated = set(db.scalars(select(FinalistNomination.team_id)))
     finalists = not_selected = 0

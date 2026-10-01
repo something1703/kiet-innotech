@@ -338,10 +338,21 @@ function checkBoardAccess(admin: AdminUser, department: string) {
   }
 }
 
+/** Mirrors server/app/services/admin.py publish_blocker. */
+function publishBlocker(db: MockDb): string | null {
+  if (db.schedule.deadline !== null && !deadlinePassed(db)) {
+    return `Department admins can nominate finalists until ${formatIst(db.schedule.deadline)}, so results cannot be published yet. Move or clear the nominations deadline on the Schedule page if you really need to publish earlier.`;
+  }
+  const anyNominated = db.nominations.some((n) => n.teamIds.length > 0);
+  return anyNominated ? null : "No finalists have been nominated yet, so there is nothing to publish.";
+}
+
 function finalistSummaryOf(db: MockDb): FinalistSummary {
   return {
     publishedAt: db.publishedAt,
     publishedBy: db.publishedBy,
+    nominationsDeadline: db.schedule.deadline,
+    publishBlocked: db.publishedAt ? null : publishBlocker(db),
     matrix: departments.map((department) => ({
       department,
       categories: categories.map((c) => ({
@@ -703,6 +714,8 @@ export const mockApi: AdminApi = {
     const admin = actor(db);
     requireSuper(admin, "publish results");
     if (db.publishedAt) throw new ApiError(409, "Results have already been published.");
+    const blocked = publishBlocker(db);
+    if (blocked) throw new ApiError(409, blocked);
     let finalists = 0;
     let notSelected = 0;
     for (const team of db.teams) {
