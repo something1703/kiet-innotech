@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Ban, RotateCcw, UserMinus } from "lucide-react";
+import { ArrowLeft, Ban, RotateCcw, ShieldX, UserMinus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { AdminTeam } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categoryTitle, formatDate, formatDateTime, otherMemberDepartments, participantTypeLabels, routeLabels, statusLabels } from "@/lib/format";
+import { categoryTitle, formatDate, formatDateTime, otherMemberDepartments, participantTypeLabels, routeLabels, statusLabels, typeShortLabels } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
 import { isTeamId } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
@@ -20,7 +20,7 @@ import { SectionTitle } from "@/components/ui/PageHeader";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { TableFrame, tdClass, Th } from "@/components/ui/Table";
 
-type Action = "withdraw" | "disqualify" | "restore";
+type Action = "withdraw" | "disqualify" | "restore" | "ban";
 
 const actionCopy: Record<Action, { title: string; confirm: string; tone: "primary" | "danger"; description: (team: AdminTeam) => ReactNode }> = {
   withdraw: {
@@ -40,6 +40,17 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
     description: (team) => (
       <>
         <strong className="text-navy-900">{team.name}</strong> ({team.code}) will be disqualified from InnoTech26. Only the super admin can restore it.
+      </>
+    ),
+  },
+  ban: {
+    title: "Ban team",
+    confirm: "Ban team",
+    tone: "danger",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) is disqualified from InnoTech26. You can also ban every member, so they can no
+        longer use the portal or join another team.
       </>
     ),
   },
@@ -112,6 +123,7 @@ function TeamView({ id }: { id: string }) {
   );
   const history = useQuery(team.data ? `team-audit:${id}` : null, () => api.audit({ teamId: id, limit: 100 }));
   const [action, setAction] = useState<Action | null>(null);
+  const [banMembers, setBanMembers] = useState(true);
   const [done, setDone] = useState<string | null>(null);
 
   if (notFound && !team.data) return <TeamNotFound known />;
@@ -132,6 +144,7 @@ function TeamView({ id }: { id: string }) {
   const canWithdraw = t.status === "draft" || t.status === "submitted";
   const canDisqualify = isSuper && canWithdraw;
   const canRestore = isSuper && (t.status === "withdrawn" || t.status === "disqualified");
+  const canBan = isSuper;
 
   async function run(kind: Action, reason: string) {
     const updated =
@@ -139,11 +152,17 @@ function TeamView({ id }: { id: string }) {
         ? await api.withdrawTeam(t.id, reason)
         : kind === "disqualify"
           ? await api.disqualifyTeam(t.id, reason)
-          : await api.restoreTeam(t.id, reason);
+          : kind === "ban"
+            ? await api.banTeam(t.id, reason, banMembers)
+            : await api.restoreTeam(t.id, reason);
     team.setData(updated);
     history.reload();
     setAction(null);
-    setDone(`${updated.code} is now ${statusLabels[updated.status].toLowerCase()}.`);
+    setDone(
+      kind === "ban"
+        ? `${updated.code} is banned (disqualified)${banMembers ? " and its members can no longer use the portal" : ""}.`
+        : `${updated.code} is now ${statusLabels[updated.status].toLowerCase()}.`,
+    );
   }
 
   const leader = t.members.find((m) => m.role === "leader");
@@ -164,7 +183,7 @@ function TeamView({ id }: { id: string }) {
               {otherDepartments.length > 0 && <Pill tone="navy">Mixed departments</Pill>}
             </div>
           </div>
-          {(canWithdraw || canDisqualify || canRestore) && (
+          {(canWithdraw || canDisqualify || canRestore || canBan) && (
             <div className="flex flex-wrap gap-2">
               {canWithdraw && (
                 <Button variant="secondary" onClick={() => setAction("withdraw")}>
@@ -176,6 +195,12 @@ function TeamView({ id }: { id: string }) {
                 <Button variant="danger" onClick={() => setAction("disqualify")}>
                   <Ban aria-hidden="true" className="size-4" />
                   Disqualify
+                </Button>
+              )}
+              {canBan && (
+                <Button variant="danger" onClick={() => setAction("ban")}>
+                  <ShieldX aria-hidden="true" className="size-4" />
+                  Ban team
                 </Button>
               )}
               {canRestore && (
@@ -239,7 +264,7 @@ function TeamView({ id }: { id: string }) {
               <Th>Email</Th>
               <Th>Phone</Th>
               <Th>Roll no.</Th>
-              <Th>Department</Th>
+              <Th>{t.participantType === "kiet" ? "Department" : "Institution"}</Th>
               <Th>Course</Th>
               <Th>Year</Th>
               <Th>Joined</Th>
@@ -263,8 +288,13 @@ function TeamView({ id }: { id: string }) {
                 </td>
                 <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{m.rollNumber || "—"}</td>
                 <td className={tdClass}>
-                  {m.department ?? "—"}
+                  {m.department ?? <span className="block max-w-56">{m.institution}</span>}
                   {t.department && m.department && m.department !== t.department && <span className="block text-xs text-muted">Other branch</span>}
+                  {t.participantType !== "kiet" && (
+                    <span className="mt-0.5 block">
+                      <Pill tone="cyan">{typeShortLabels[t.participantType]}</Pill>
+                    </span>
+                  )}
                 </td>
                 <td className={`${tdClass} whitespace-nowrap`}>{m.course}</td>
                 <td className={`${tdClass} whitespace-nowrap`}>{yearLabel(m.year, t.participantType)}</td>
@@ -313,7 +343,17 @@ function TeamView({ id }: { id: string }) {
           reasonLabel="Reason"
           onConfirm={(reason) => run(action, reason)}
           onClose={() => setAction(null)}
-        />
+        >
+          {action === "ban" && (
+            <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-xl bg-red-50 px-3 py-3 text-sm">
+              <input type="checkbox" checked={banMembers} onChange={(e) => setBanMembers(e.target.checked)} className="mt-0.5 size-4 accent-red-600" />
+              <span>
+                <span className="font-semibold text-navy-900">Also ban all {t.members.length} members</span>
+                <span className="block text-xs text-muted">They are signed out of the portal and cannot join or create another team. A super admin can lift each ban.</span>
+              </span>
+            </label>
+          )}
+        </ConfirmDialog>
       )}
     </div>
   );

@@ -49,6 +49,10 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(String(128), unique=True)
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    # Set when an organiser bans the student: they can no longer use the portal or be added to a team.
+    banned_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    banned_reason: Mapped[str | None] = mapped_column(Text)
+    banned_by: Mapped[str | None] = mapped_column(String(320))
 
     profile: Mapped["Profile | None"] = relationship(back_populates="user", uselist=False)
     membership: Mapped["TeamMember | None"] = relationship(back_populates="user", uselist=False)

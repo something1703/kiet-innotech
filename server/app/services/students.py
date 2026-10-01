@@ -330,6 +330,8 @@ def invite(db: Session, user: User, team_id: uuid.UUID, email: str, settings: Se
     if row is None:
         raise ApiError("No registered student uses this email. Ask them to sign in and complete their profile first.", 422)
     invitee, invitee_profile = row
+    if invitee.banned_at is not None:
+        raise ApiError("This student cannot take part in InnoTech26.", 422)
 
     invitee_membership = _membership(db, invitee.id)
     if invitee_membership is not None:

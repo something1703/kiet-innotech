@@ -39,6 +39,7 @@ from ..schemas import (
     AdminInput,
     AdminMemberOut,
     AdminOut,
+    AdminStudentInput,
     AdminStudentOut,
     AdminTeamInput,
     AdminTeamOut,
@@ -459,6 +460,8 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     for email in emails:
         if email not in found:
             raise ApiError(f"No registered student uses {email}. They must sign in and complete their profile first.", 422)
+        if found[email][0].banned_at is not None:
+            raise ApiError(f"{email} is banned, so they cannot be in a team.", 422)
     leader_user, leader = found[data.leader_email]
     if not can_see_profile(admin, leader):
         raise ApiError(
@@ -525,6 +528,146 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     return admin_teams(db, [team])[0]
 
 
+# ---------- Banning ----------
+
+
+def _ban(db: Session, admin: Admin, user: User, reason: str) -> str:
+    """Bans one student; returns what happened to their team, for the audit entry."""
+    from .students import _decline_pending_invitations
+
+    user.banned_at, user.banned_reason, user.banned_by = utcnow(), reason, admin.email
+    _decline_pending_invitations(db, user.email)
+    membership = db.scalar(select(TeamMember).where(TeamMember.user_id == user.id))
+    if membership is None:
+        return ""
+    team = db.scalar(select(Team).where(Team.id == membership.team_id).with_for_update())
+    assert team is not None
+    if membership.role == "member" and team.status == "draft":
+        # A member of a team still being built leaves it, so the rest of the team can carry on.
+        db.delete(membership)
+        audit.record(db, admin.email, "member.removed", team, f"{user.email} was banned")
+        return f" Removed from draft team {team.code}."
+    return f" Still in team {team.code} ({team.status}); withdraw or ban the team if it should not take part."
+
+
+def ban_student(db: Session, admin: Admin, user_id: uuid.UUID, reason: str) -> AdminStudentOut:
+    _require_super(admin, "ban students")
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    profile = db.get(Profile, user_id)
+    if user is None or profile is None:
+        raise ApiError("Student not found.", 404)
+    if user.banned_at is not None:
+        raise ApiError("This student is already banned.", 409)
+    note = _ban(db, admin, user, reason)
+    audit.record(db, admin.email, "student.banned", detail=f"{user.email}: {reason}.{note}", department=profile.department)
+    db.commit()
+    return _one_student(db, admin, user_id)
+
+
+def unban_student(db: Session, admin: Admin, user_id: uuid.UUID, reason: str) -> AdminStudentOut:
+    _require_super(admin, "lift bans")
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    profile = db.get(Profile, user_id)
+    if user is None or profile is None:
+        raise ApiError("Student not found.", 404)
+    if user.banned_at is None:
+        raise ApiError("This student is not banned.", 409)
+    user.banned_at = user.banned_reason = user.banned_by = None
+    audit.record(db, admin.email, "student.unbanned", detail=f"{user.email}: {reason}", department=profile.department)
+    db.commit()
+    return _one_student(db, admin, user_id)
+
+
+def ban_team(db: Session, admin: Admin, team_id: uuid.UUID, reason: str, ban_members: bool) -> AdminTeamOut:
+    """Disqualifies a team (it leaves the competition) and, if asked, bans every member from the portal."""
+    _require_super(admin, "ban teams")
+    team = _visible_team(db, admin, team_id)
+    if team.status in ("draft", "submitted"):
+        change_status(db, admin, team_id, "disqualify", f"Banned: {reason}")
+    elif not ban_members:
+        raise ApiError(f"This team is already {team.status}.", 409)
+    if ban_members:
+        members = db.scalars(
+            select(User).join(TeamMember, TeamMember.user_id == User.id).where(TeamMember.team_id == team_id).with_for_update(of=User)
+        ).all()
+        banned = [m.email for m in members if m.banned_at is None]
+        for member in members:
+            if member.banned_at is None:
+                member.banned_at, member.banned_reason, member.banned_by = utcnow(), reason, admin.email
+        if banned:
+            audit.record(db, admin.email, "student.banned", team, f"With team {team.code}: {', '.join(banned)}. {reason}")
+        db.commit()
+    return admin_teams(db, [team])[0]
+
+
+# ---------- Registering a student ----------
+
+
+def create_student(db: Session, admin: Admin, data: AdminStudentInput) -> AdminStudentOut:
+    """An organiser registers a student (help desk), whatever the registration window says. Same rules as the portal."""
+    from .students import _commit
+
+    if data.participant_type not in rules.allowed_participant_types(data.email):
+        raise ApiError(
+            "A @kiet.edu email registers as a KIET student."
+            if rules.is_kiet_email(data.email)
+            else "KIET students are registered with their official @kiet.edu email.",
+            422,
+        )
+    if _is_outside(admin) and data.participant_type == "kiet":
+        raise ApiError("You can only register students from other colleges and schools.", 403)
+    if admin.role == "admin" and (data.participant_type != "kiet" or data.department != admin.department):
+        raise ApiError(f"You can only register {admin.department} students.", 403)
+
+    user = db.scalar(select(User).where(User.email == data.email).with_for_update())
+    if user is None:
+        user = User(email=data.email, name=data.full_name)
+        db.add(user)
+        db.flush()
+    elif user.banned_at is not None:
+        raise ApiError("This email belongs to a banned student. Lift the ban first.", 409)
+    if db.get(Profile, user.id) is not None:
+        raise ApiError("This student is already registered.", 409)
+    db.add(
+        Profile(
+            user_id=user.id,
+            full_name=data.full_name,
+            phone=data.phone,
+            participant_type=data.participant_type,
+            institution=data.institution,
+            institution_key=rules.institution_key(data.participant_type, data.institution, data.city),
+            city=data.city,
+            department=data.department,
+            course=data.course,
+            year=data.year,
+            roll_number=data.roll_number,
+        )
+    )
+    audit.record(
+        db,
+        admin.email,
+        "student.created",
+        detail=f"{data.email} ({data.full_name}), registered by an organiser",
+        department=data.department,
+    )
+    _commit(
+        db,
+        {
+            "uq_profiles_kiet_roll_number": ("This roll number is already registered to another student.", 409),
+            "uq_users_email": ("This student was registered a moment ago. Reload the list.", 409),
+        },
+    )
+    return _one_student(db, admin, user.id)
+
+
+def _one_student(db: Session, admin: Admin, user_id: uuid.UUID) -> AdminStudentOut:
+    statement, _ = _student_query(admin, StudentFilters())
+    rows = db.execute(statement.where(Profile.user_id == user_id).execution_options(populate_existing=True)).all()
+    if not rows:
+        raise ApiError("This student is outside your scope.", 403)
+    return _student_rows(rows)[0]
+
+
 # ---------- Students ----------
 
 
@@ -533,6 +676,7 @@ class StudentFilters(Paging):
     type: rules.ParticipantType | None = None
     year: int | None = Field(default=None, ge=1, le=12)
     in_team: Literal["yes", "no"] | None = None
+    banned: Literal["yes", "no"] | None = None
     q: str | None = Field(default=None, max_length=100)
     sort: Literal["name", "email", "department", "year", "institution", "created_at"] = "name"
     order: Literal["asc", "desc"] = "asc"
@@ -555,6 +699,10 @@ def _student_query(admin: Admin, f: StudentFilters):
         conditions.append(in_team)
     elif f.in_team == "no":
         conditions.append(~in_team)
+    if f.banned == "yes":
+        conditions.append(User.banned_at.is_not(None))
+    elif f.banned == "no":
+        conditions.append(User.banned_at.is_(None))
     if f.q and f.q.strip():
         pattern = _escape_like(f.q.strip())
         conditions.append(
@@ -575,7 +723,7 @@ def _student_query(admin: Admin, f: StudentFilters):
     }[f.sort]
     ordered = sort_column.desc() if f.order == "desc" else sort_column.asc()
     statement = (
-        select(Profile, User.email, TeamMember, Team)
+        select(Profile, User.email, TeamMember, Team, User.banned_at, User.banned_reason, User.banned_by)
         .join(User, User.id == Profile.user_id)
         .outerjoin(TeamMember, TeamMember.user_id == Profile.user_id)
         .outerjoin(Team, Team.id == TeamMember.team_id)
@@ -588,14 +736,14 @@ def _student_query(admin: Admin, f: StudentFilters):
 
 def _student_rows(rows) -> list[AdminStudentOut]:
     result = []
-    for profile, email, membership, team in rows:
+    for profile, email, membership, team, banned_at, banned_reason, banned_by in rows:
         base = profile_out(profile, email).model_dump()
         ref = (
             StudentTeamRef(id=team.id, code=team.code, name=team.name, status=team.status, department=team.department, role=membership.role)
             if team is not None
             else None
         )
-        result.append(AdminStudentOut(**base, team=ref))
+        result.append(AdminStudentOut(**base, team=ref, banned_at=banned_at, banned_reason=banned_reason, banned_by=banned_by))
     return result
 
 
@@ -1104,7 +1252,7 @@ def audit_log(db: Session, admin: Admin, team_id: uuid.UUID | None, limit: int) 
     return [_audit_out(entry) for entry in db.scalars(statement)]
 
 
-ActivityKind = Literal["team", "member", "invitation", "finalists", "results", "admin", "schedule", "judging"]
+ActivityKind = Literal["team", "member", "invitation", "finalists", "results", "admin", "schedule", "judging", "student"]
 
 
 class ActivityFilters(Paging):

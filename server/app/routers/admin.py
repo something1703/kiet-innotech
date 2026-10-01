@@ -15,6 +15,7 @@ from ..rules import JudgingRound
 from ..schemas import (
     AdminInput,
     AdminOut,
+    AdminStudentInput,
     AdminStudentOut,
     AdminTeamInput,
     AdminTeamOut,
@@ -42,6 +43,7 @@ from ..schemas import (
     ScheduleOut,
     StatsOut,
     StudentPage,
+    TeamBanInput,
     TeamPage,
     TentsInput,
     UnpublishInput,
@@ -108,6 +110,27 @@ def disqualify_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, 
 @router.post("/teams/{team_id}/restore")
 def restore_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
     return service.change_status(db, admin, team_id, "restore", data.reason)
+
+
+@router.post("/students", status_code=status.HTTP_201_CREATED)
+def create_student(data: AdminStudentInput, admin: CurrentAdmin, db: Db) -> AdminStudentOut:
+    """Registers a student for them (help desk), whether or not registration is open."""
+    return service.create_student(db, admin, data)
+
+
+@router.post("/students/{user_id}/ban")
+def ban_student(user_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> AdminStudentOut:
+    return service.ban_student(db, admin, user_id, data.reason)
+
+
+@router.post("/students/{user_id}/unban")
+def unban_student(user_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> AdminStudentOut:
+    return service.unban_student(db, admin, user_id, data.reason)
+
+
+@router.post("/teams/{team_id}/ban")
+def ban_team(team_id: uuid.UUID, data: TeamBanInput, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
+    return service.ban_team(db, admin, team_id, data.reason, data.ban_members)
 
 
 @router.get("/students")

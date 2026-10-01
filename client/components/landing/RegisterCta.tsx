@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useDisplayedRegistrationState, useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { useRegistrationRange } from "@/lib/schedule-content";
+import { useSession } from "@/lib/auth/session";
 import { longDate } from "@/lib/format";
 
 /**
@@ -12,9 +13,12 @@ import { longDate } from "@/lib/format";
  */
 export function RegisterCta({ label, className }: { label: string; className: string }) {
   const closed = useRegistrationState() === "closed";
+  // Signed-in students already registered: take them to their dashboard instead.
+  const signedIn = Boolean(useSession());
+  const href = signedIn ? "/dashboard" : closed ? "/login?next=/team" : "/register";
   return (
-    <Link href={closed ? "/login?next=/team" : "/register"} className={className}>
-      {closed ? "View your team" : label}
+    <Link href={href} className={className}>
+      {signedIn ? "Go to your dashboard" : closed ? "View your team" : label}
       <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />
     </Link>
   );

@@ -278,6 +278,9 @@ function filterStudents(db: MockDb, admin: AdminUser, query: StudentQuery) {
     if (query.year && s.year !== query.year) return false;
     if (query.inTeam === "yes" && !s.teamId) return false;
     if (query.inTeam === "no" && s.teamId) return false;
+    const banned = Boolean((s as { bannedAt?: string | null }).bannedAt);
+    if (query.banned === "yes" && !banned) return false;
+    if (query.banned === "no" && banned) return false;
     if (q && ![s.fullName, s.email, s.rollNumber, s.institution, s.phone].some((v) => v.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -972,6 +975,72 @@ export const mockApi: AdminApi = {
     db.publishedBy = null;
     log(db, { actorEmail: admin.email, action: "results.unpublished", department: null, detail: `${reverted} team results back to pending. Reason: ${text}` });
     save(db);
+  },
+
+  async createStudent(input) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    const email = input.email.trim().toLowerCase();
+    if (db.students.some((s) => s.email.toLowerCase() === email)) throw new ApiError(409, "This student is already registered.");
+    const student: StudentRecord = {
+      userId: `u-new-${db.seq + 1}`,
+      email,
+      fullName: input.fullName,
+      phone: input.phone,
+      participantType: input.participantType,
+      institution: input.participantType === "kiet" ? "KIET Deemed to be University" : input.institution,
+      city: input.participantType === "kiet" ? "Ghaziabad" : input.city,
+      department: input.department,
+      course: input.participantType === "school" ? "School" : input.course,
+      year: input.year,
+      rollNumber: input.rollNumber,
+      createdAt: now(db),
+      teamId: null,
+    };
+    if (!canSeeStudent(admin, student)) throw new ApiError(403, "You can only register students in your scope.");
+    db.students.push(student);
+    log(db, { actorEmail: admin.email, action: "student.created", department: student.department, detail: `${email} (${input.fullName}), registered by an organiser` });
+    save(db);
+    return clone(studentRow(db, student));
+  },
+
+  async banStudent(userId, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "ban students");
+    const student = db.students.find((s) => s.userId === userId);
+    if (!student) throw new ApiError(404, "Student not found.");
+    const record = student as StudentRecord & { bannedAt?: string | null; bannedReason?: string | null; bannedBy?: string | null };
+    record.bannedAt = now(db);
+    record.bannedReason = requireReason(reason);
+    record.bannedBy = admin.email;
+    log(db, { actorEmail: admin.email, action: "student.banned", department: student.department, detail: `${student.email}: ${reason}` });
+    save(db);
+    return clone(studentRow(db, student));
+  },
+
+  async unbanStudent(userId, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "lift bans");
+    const student = db.students.find((s) => s.userId === userId) as (StudentRecord & { bannedAt?: string | null }) | undefined;
+    if (!student) throw new ApiError(404, "Student not found.");
+    student.bannedAt = null;
+    log(db, { actorEmail: admin.email, action: "student.unbanned", department: student.department, detail: `${student.email}: ${requireReason(reason)}` });
+    save(db);
+    return clone(studentRow(db, student));
+  },
+
+  async banTeam(teamId, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "ban teams");
+    const team = findTeam(db, admin, teamId);
+    return setStatus(db, admin, team, "disqualified", "team.disqualified", `Banned: ${requireReason(reason)}`);
   },
 
   judging: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),

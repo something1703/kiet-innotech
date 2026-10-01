@@ -129,6 +129,10 @@
  *          (same institution, category eligibility, 1-5 members or 2-5 to submit, unique name); the leader must be in the
  *          caller's scope. → AdminTeam (201)
  *
+ *   POST   /admin/students    body ProfileInput + { email } → AdminStudent (201). Scoped like the student list.
+ *   POST   /admin/students/{user_id}/ban | /unban   (super_admin) body { reason } → AdminStudent
+ *   POST   /admin/teams/{id}/ban   (super_admin) body { reason, ban_members } → AdminTeam (disqualified)
+ *
  *   POST   /admin/results/unpublish   (super_admin) body { confirm: "UNPUBLISH", reason } → 204
  *          409 when not published, or once the finale is being prepared (tents or finale panels for finalists, final
  *          judging open or scored).
@@ -311,6 +315,10 @@ export const liveApi: AdminApi = {
   listStudents: (query: StudentQuery) => request<Page<AdminStudent>>("GET", `/admin/students${queryString(query)}`),
   exportStudents: (query: StudentQuery) =>
     request<AdminStudent[]>("GET", `/admin/students/export${queryString(withoutPaging(query))}`),
+  createStudent: (input) => request<AdminStudent>("POST", "/admin/students", input),
+  banStudent: (userId, reason) => request<AdminStudent>("POST", `/admin/students/${id(userId)}/ban`, { reason }),
+  unbanStudent: (userId, reason) => request<AdminStudent>("POST", `/admin/students/${id(userId)}/unban`, { reason }),
+  banTeam: (teamId, reason, banMembers) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/ban`, { reason, banMembers }),
 
   getSchedule: () => request<Schedule>("GET", "/admin/schedule"),
   saveSchedule: (input: ScheduleInput) => request<Schedule>("PUT", "/admin/schedule", input),

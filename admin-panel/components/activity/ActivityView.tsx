@@ -21,6 +21,7 @@ import { SearchBox } from "@/components/ui/SearchBox";
 const kinds: { value: ActivityKind; label: string }[] = [
   { value: "team", label: "Teams (created, submitted, withdrawn…)" },
   { value: "member", label: "Members joining and leaving" },
+  { value: "student", label: "Students registered or banned by organisers" },
   { value: "invitation", label: "Invitations" },
   { value: "finalists", label: "Finalist nominations" },
   { value: "results", label: "Results" },

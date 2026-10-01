@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { LayoutDashboard, Menu, X } from "lucide-react";
+import { useSession } from "@/lib/auth/session";
 import { navLinks } from "@/lib/content";
 import { useRegistrationState } from "@/lib/registration";
 
@@ -13,6 +14,9 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // Once registration has closed there is nothing left to register for; Login is how students get back to their team.
   const closed = useRegistrationState() === "closed";
+  // Signed in: the header offers the dashboard instead of Login and Register.
+  const session = useSession();
+  const firstName = session ? (session.name || session.email).split(/[\s@]/)[0] : "";
   const [activeId, setActiveId] = useState("");
 
   // Add a shadow once the page is scrolled.
@@ -103,19 +107,35 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/login"
-            className="hidden rounded-full border border-navy-800/15 px-5 py-2.5 text-sm font-semibold text-navy-800 transition hover:border-navy-800 sm:inline-flex"
-          >
-            Login
-          </Link>
-          {!closed && (
+          {session ? (
             <Link
-              href="/register"
-              className="hidden rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/25 transition hover:-translate-y-0.5 hover:bg-accent-600 sm:inline-flex"
+              href="/dashboard"
+              className="hidden items-center gap-2.5 rounded-full border border-navy-800/15 py-1.5 pl-1.5 pr-5 text-sm font-semibold text-navy-800 transition hover:border-navy-800 sm:inline-flex"
             >
-              Register
+              <span className="flex size-8 items-center justify-center rounded-full bg-navy-900 font-display text-sm font-bold uppercase text-white" aria-hidden="true">
+                {firstName.charAt(0)}
+              </span>
+              <span className="max-w-32 truncate">{firstName}</span>
+              <span className="text-muted" aria-hidden="true">·</span>
+              <span className="text-accent-600">Dashboard</span>
             </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="hidden rounded-full border border-navy-800/15 px-5 py-2.5 text-sm font-semibold text-navy-800 transition hover:border-navy-800 sm:inline-flex"
+              >
+                Login
+              </Link>
+              {!closed && (
+                <Link
+                  href="/register"
+                  className="hidden rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/25 transition hover:-translate-y-0.5 hover:bg-accent-600 sm:inline-flex"
+                >
+                  Register
+                </Link>
+              )}
+            </>
           )}
           <button
             type="button"
@@ -153,6 +173,18 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
               </li>
             ))}
           </ul>
+          {session ? (
+            <div className="mt-4 border-t border-line pt-4">
+              <Link
+                href="/dashboard"
+                onClick={closeMenu}
+                className="flex items-center justify-center gap-2 rounded-full bg-navy-900 py-3 text-center text-sm font-semibold text-white"
+              >
+                <LayoutDashboard size={16} aria-hidden="true" />
+                Go to your dashboard
+              </Link>
+            </div>
+          ) : (
           <div className={`mt-4 grid gap-3 border-t border-line pt-4 ${closed ? "grid-cols-1" : "grid-cols-2"}`}>
             <Link
               href="/login"
@@ -171,6 +203,7 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
               </Link>
             )}
           </div>
+          )}
         </nav>
       </div>
     </header>

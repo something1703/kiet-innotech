@@ -61,9 +61,12 @@ export type AuditAction =
   | "judging.teams_allotted"
   | "judging.judges_assigned"
   | "judging.tents_allotted"
-  | "judging.scored";
+  | "judging.scored"
+  | "student.created"
+  | "student.banned"
+  | "student.unbanned";
 
-export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging";
+export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging" | "student";
 
 export type ActivityQuery = {
   kind?: ActivityKind;
@@ -98,6 +101,10 @@ export type AdminTeam = Omit<Team, "members"> & {
 
 /** A registered student plus a short reference to their team, if any. */
 export type AdminStudent = Profile & {
+  /** Set when an organiser has banned the student from the portal. */
+  bannedAt?: string | null;
+  bannedReason?: string | null;
+  bannedBy?: string | null;
   team: {
     id: string;
     code: string;
@@ -145,6 +152,8 @@ export type StudentQuery = {
   year?: number;
   /** "yes" = in a team (any status), "no" = not in a team. */
   inTeam?: "yes" | "no";
+  /** "yes" = banned students only, "no" = everyone else. */
+  banned?: "yes" | "no";
   q?: string;
   sort?: StudentSort;
   order?: SortOrder;
@@ -452,3 +461,17 @@ export type JudgePanel = {
 };
 
 export type JudgeView = { email: string; name: string; panels: JudgePanel[] };
+
+/** An organiser registers a student: the portal's profile fields plus the student's Google email. */
+export type AdminStudentInput = {
+  email: string;
+  fullName: string;
+  phone: string;
+  participantType: ParticipantType;
+  institution: string;
+  city: string;
+  department: string | null;
+  course: string;
+  year: number;
+  rollNumber: string;
+};

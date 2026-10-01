@@ -37,6 +37,7 @@ App = Literal["portal", "admin"]
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 SESSION_ISSUER = "innotech-api"
+BANNED = "Your InnoTech26 account has been suspended by the organisers. Contact the help desk if you think this is a mistake."
 # Writing last_seen_at on every request would double the write load; once every few minutes is enough.
 LAST_SEEN_RESOLUTION = timedelta(minutes=5)
 
@@ -130,6 +131,8 @@ def sign_in(db: Session, identity: Identity, app: App, settings: Settings, googl
             raise ApiError("This account is not an InnoTech26 organiser or judge.", 403)
     else:
         user = _get_or_create_user(db, identity)
+        if user.banned_at is not None:
+            raise ApiError(BANNED, 403)
         if google_sub and user.google_sub != google_sub:
             user.google_sub = google_sub
         if identity.name:
@@ -208,6 +211,8 @@ def get_current_user(
 ) -> User:
     """The signed-in student's account, created on their first request."""
     user = _get_or_create_user(db, identity)
+    if user.banned_at is not None:
+        raise ApiError(BANNED, 403)
     if utcnow() - user.last_seen_at > LAST_SEEN_RESOLUTION:
         user.last_seen_at = utcnow()
         db.commit()

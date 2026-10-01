@@ -12,7 +12,7 @@ import { tones } from "./tones";
  * scales as one piece. Smaller screens get a stacked layout instead.
  */
 const W = 1200;
-const H = 740;
+const H = 760;
 const u = (n: number) => `${(n / W) * 100}cqw`;
 const place = (x: number, y: number, w: number, h: number): CSSProperties => ({
   left: `${(x / W) * 100}%`,
@@ -21,17 +21,19 @@ const place = (x: number, y: number, w: number, h: number): CSSProperties => ({
   height: `${(h / H) * 100}%`,
 });
 
-const TITLE = { x: 40, y: 320, w: 470, h: 170 };
+// Three cards above the title card, four below, on a symmetric grid; every connector is a straight run with
+// at most one rounded corner, leaving the title card from its nearest side.
+const TITLE = { x: 350, y: 300, w: 500, h: 180 };
 
 // One entry per benefit, in content order: card box, connector path, and the two dot positions.
 const layout = [
-  { box: [60, 85, 270, 215], path: "M60 190 H34 Q20 190 20 204 V391 Q20 405 34 405 H40", dots: [[60, 190], [40, 405]] },
-  { box: [520, 30, 270, 170], path: "M510 350 H636 Q650 350 650 336 V200", dots: [[510, 350], [650, 200]] },
-  { box: [860, 130, 280, 190], path: "M510 378 H986 Q1000 378 1000 364 V320", dots: [[510, 378], [1000, 320]] },
-  { box: [110, 530, 240, 195], path: "M80 490 V613 Q80 627 94 627 H110", dots: [[80, 490], [110, 627]] },
-  { box: [380, 530, 240, 195], path: "M510 462 H636 Q650 462 650 476 V613 Q650 627 636 627 H620", dots: [[510, 462], [620, 627]] },
-  { box: [680, 530, 240, 195], path: "M510 434 H786 Q800 434 800 448 V530", dots: [[510, 434], [800, 530]] },
-  { box: [950, 530, 240, 195], path: "M510 406 H1056 Q1070 406 1070 420 V530", dots: [[510, 406], [1070, 530]] },
+  { box: [60, 40, 330, 200], path: "M350 345 H239 Q225 345 225 331 V240", dots: [[350, 345], [225, 240]] },
+  { box: [435, 40, 330, 200], path: "M600 300 V240", dots: [[600, 300], [600, 240]] },
+  { box: [810, 40, 330, 200], path: "M850 345 H961 Q975 345 975 331 V240", dots: [[850, 345], [975, 240]] },
+  { box: [60, 550, 255, 200], path: "M350 435 H202 Q188 435 188 449 V550", dots: [[350, 435], [188, 550]] },
+  { box: [345, 550, 255, 200], path: "M473 480 V550", dots: [[473, 480], [473, 550]] },
+  { box: [630, 550, 255, 200], path: "M758 480 V550", dots: [[758, 480], [758, 550]] },
+  { box: [915, 550, 255, 200], path: "M850 435 H1029 Q1043 435 1043 449 V550", dots: [[850, 435], [1043, 550]] },
 ] as const;
 
 const words = ["Learn", "Connect", "Create", "Make an impact"];
@@ -40,7 +42,7 @@ export function Benefits() {
   return (
     <Section id="benefits">
       {/* Desktop: connected diagram */}
-      <Reveal className="@container relative mx-auto hidden aspect-[1200/740] w-full max-w-[1200px] xl:block">
+      <Reveal className="@container relative mx-auto hidden aspect-[1200/760] w-full max-w-[1200px] xl:block">
         <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" aria-hidden="true" fill="none">
           {layout.map((item, index) => {
             const stroke = tones[benefits[index].tone].stroke;
@@ -56,13 +58,13 @@ export function Benefits() {
         </svg>
 
         <div
-          className="absolute flex flex-col justify-center rounded-3xl bg-white shadow-[0_20px_50px_-20px_rgb(11_22_51/0.25)] ring-1 ring-line"
+          className="absolute flex flex-col items-center justify-center rounded-3xl bg-white text-center shadow-[0_20px_50px_-20px_rgb(11_22_51/0.25)] ring-1 ring-line"
           style={{ ...place(TITLE.x, TITLE.y, TITLE.w, TITLE.h), paddingInline: u(44) }}
         >
           <h2 className="font-display font-bold leading-[1.05] tracking-tight text-ink" style={{ fontSize: u(46) }}>
             Participation Benefits
           </h2>
-          <Words size={u(12.5)} gap={u(11)} className="mt-[1.4cqw] flex-nowrap whitespace-nowrap" />
+          <Words size={u(12.5)} gap={u(11)} className="mt-[1.4cqw] flex-nowrap justify-center whitespace-nowrap" />
         </div>
 
         {benefits.map((benefit, index) => {

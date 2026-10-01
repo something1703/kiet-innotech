@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, ShieldCheck, ShieldX, UserPlus, X } from "lucide-react";
 import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminStudent, StudentQuery, StudentSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -17,6 +17,8 @@ import { useSelection } from "@/lib/use-selection";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { AddStudentDialog } from "./AddStudentDialog";
 import { ExportDialog, type ExportFormat, type ExportScope } from "@/components/ui/ExportDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Select } from "@/components/ui/Field";
@@ -45,19 +47,24 @@ export function StudentsView() {
   const selection = useSelection(studentKey);
 
   const inTeam = params.get("team");
+  const bannedParam = params.get("banned");
+  const [adding, setAdding] = useState(false);
+  const [banning, setBanning] = useState<{ student: AdminStudent; lift: boolean } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const query: StudentQuery = {
     type: typeChoices.length ? pickParam(params, "type", typeChoices) : undefined,
     department: isSuper ? pickParam(params, "department", departments) : undefined,
     year: intParam(params, "year", 1, 12),
     inTeam: inTeam === "yes" || inTeam === "no" ? inTeam : undefined,
+    banned: bannedParam === "yes" || bannedParam === "no" ? bannedParam : undefined,
     q: params.get("q")?.trim().slice(0, MAX_SEARCH_LENGTH) || undefined,
     sort: pickParam(params, "sort", sorts) ?? "name",
     order: params.get("order") === "desc" ? "desc" : "asc",
     page: intParam(params, "page", 1, 10_000) ?? 1,
     pageSize: pageSizeParam(params),
   };
-  const { data, error, loading } = useQuery(JSON.stringify(query), () => api.listStudents(query));
-  const filtered = Boolean(query.type || query.department || query.year || query.inTeam || query.q);
+  const { data, error, loading, reload } = useQuery(JSON.stringify(query), () => api.listStudents(query));
+  const filtered = Boolean(query.type || query.department || query.year || query.inTeam || query.banned || query.q);
 
   function onSort(sort: StudentSort) {
     update({ sort, order: query.sort === sort && query.order === "asc" ? "desc" : "asc" });
@@ -108,12 +115,19 @@ export function StudentsView() {
             : `KIET students registered in ${admin.department}, including those in teams led by other departments.`
         }
         actions={
-          <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
-            <Download aria-hidden="true" className="size-4" />
-            Export
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
+              <Download aria-hidden="true" className="size-4" />
+              Export
+            </Button>
+            <Button onClick={() => setAdding(true)}>
+              <UserPlus aria-hidden="true" className="size-4" />
+              Add student
+            </Button>
+          </>
         }
       />
+      {message && <Notice tone="success">{message}</Notice>}
 
       <form role="search" onSubmit={(e) => e.preventDefault()} className="space-y-3">
         <SearchBox
@@ -159,6 +173,15 @@ export function StudentsView() {
               <option value="no">Not in a team</option>
             </Select>
           </Field>
+          {isSuper && (
+            <Field label="Access" htmlFor="filter-banned">
+              <Select id="filter-banned" value={query.banned ?? ""} onChange={(e) => update({ banned: e.target.value })}>
+                <option value="">Everyone</option>
+                <option value="no">Active</option>
+                <option value="yes">Banned</option>
+              </Select>
+            </Field>
+          )}
         </div>
       </form>
 
@@ -241,6 +264,11 @@ export function StudentsView() {
                   <Th>Roll no.</Th>
                   <Th>Team</Th>
                   <SortableTh label="Registered" sortKey="created_at" {...sortProps} />
+                  {isSuper && (
+                    <Th>
+                      <span className="sr-only">Actions</span>
+                    </Th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -251,7 +279,14 @@ export function StudentsView() {
                       <td className={tdClass}>
                         <Checkbox label={`Select ${s.fullName}`} checked={selection.has(s)} onChange={() => selection.toggle(s)} />
                       </td>
-                      <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>{s.fullName}</td>
+                      <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>
+                        {s.fullName}
+                        {s.bannedAt && (
+                          <span className="mt-0.5 block" title={s.bannedReason ?? undefined}>
+                            <Pill tone="red">Banned</Pill>
+                          </span>
+                        )}
+                      </td>
                       <td className={`${tdClass} break-all`}>{s.email}</td>
                       <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
                       <td className={tdClass}>
@@ -290,6 +325,21 @@ export function StudentsView() {
                         )}
                       </td>
                       <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(s.createdAt)}</td>
+                      {isSuper && (
+                        <td className={`${tdClass} text-right`}>
+                          {s.bannedAt ? (
+                            <Button size="sm" variant="ghost" onClick={() => setBanning({ student: s, lift: true })}>
+                              <ShieldCheck aria-hidden="true" className="size-3.5" />
+                              Lift ban<span className="sr-only"> for {s.fullName}</span>
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setBanning({ student: s, lift: false })}>
+                              <ShieldX aria-hidden="true" className="size-3.5" />
+                              Ban<span className="sr-only"> {s.fullName}</span>
+                            </Button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -298,6 +348,48 @@ export function StudentsView() {
           )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
+      )}
+
+      {adding && (
+        <AddStudentDialog
+          admin={admin}
+          onClose={() => setAdding(false)}
+          onCreated={(student) => {
+            setAdding(false);
+            setMessage(`${student.fullName} (${student.email}) is registered. They can sign in with Google using this email.`);
+            reload();
+          }}
+        />
+      )}
+
+      {banning && (
+        <ConfirmDialog
+          title={banning.lift ? `Lift the ban on ${banning.student.fullName}?` : `Ban ${banning.student.fullName}?`}
+          description={
+            banning.lift ? (
+              <>They can sign in to the portal again. Their team is not restored automatically.</>
+            ) : (
+              <>
+                <strong className="text-navy-900">{banning.student.email}</strong> is signed out of the portal and cannot join or create a team.
+                {banning.student.team
+                  ? banning.student.team.role === "member" && banning.student.team.status === "draft"
+                    ? ` They are removed from the draft team ${banning.student.team.code}.`
+                    : ` They stay in team ${banning.student.team.code} (${banning.student.team.status}); withdraw or ban that team if it should not take part.`
+                  : ""}
+              </>
+            )
+          }
+          confirmLabel={banning.lift ? "Lift ban" : "Ban student"}
+          tone={banning.lift ? "primary" : "danger"}
+          reasonLabel="Reason"
+          onClose={() => setBanning(null)}
+          onConfirm={async (reason) => {
+            const updated = banning.lift ? await api.unbanStudent(banning.student.userId, reason) : await api.banStudent(banning.student.userId, reason);
+            setBanning(null);
+            setMessage(banning.lift ? `${updated.fullName} can use the portal again.` : `${updated.fullName} is banned.`);
+            reload();
+          }}
+        />
       )}
 
       {exportOpen && data && (

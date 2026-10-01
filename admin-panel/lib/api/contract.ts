@@ -1,6 +1,7 @@
 import type {
   ActivityQuery,
   AdminInput,
+  AdminStudentInput,
   AdminTeamInput,
   AttendanceSheet,
   JudgeView,
@@ -49,6 +50,13 @@ export interface AdminApi {
 
   listStudents(query: StudentQuery): Promise<Page<AdminStudent>>;
   exportStudents(query: StudentQuery): Promise<AdminStudent[]>;
+  /** Registers a student for them (help desk), whether or not registration is open. */
+  createStudent(input: AdminStudentInput): Promise<AdminStudent>;
+  /** Super admin: the student can no longer use the portal or be put in a team. */
+  banStudent(userId: string, reason: string): Promise<AdminStudent>;
+  unbanStudent(userId: string, reason: string): Promise<AdminStudent>;
+  /** Super admin: disqualifies the team and, optionally, bans all its members. */
+  banTeam(teamId: string, reason: string, banMembers: boolean): Promise<AdminTeam>;
 
   /** Registration window and nominations deadline. Any admin can read it; only a super admin can change it. */
   getSchedule(): Promise<Schedule>;

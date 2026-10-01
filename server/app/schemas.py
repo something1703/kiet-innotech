@@ -398,6 +398,26 @@ class StudentTeamRef(BaseModel):
 
 class AdminStudentOut(ProfileOut):
     team: StudentTeamRef | None
+    banned_at: datetime | None = None
+    banned_reason: str | None = None
+    banned_by: str | None = None
+
+
+class AdminStudentInput(ProfileInput):
+    """An organiser registers a student (help desk): the same profile rules, plus the student's Google email."""
+
+    email: str = Field(max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value: str) -> str:
+        return _email(value)
+
+
+class TeamBanInput(Input):
+    reason: str = Field(min_length=5, max_length=500)
+    # Also ban every member from the portal.
+    ban_members: bool = False
 
 
 class TeamPage(BaseModel):
