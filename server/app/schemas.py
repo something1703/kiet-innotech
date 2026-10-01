@@ -122,6 +122,7 @@ class ScheduleDatesOut(BaseModel):
     registration_opens: datetime
     registration_closes: datetime
     nominations_deadline: datetime | None
+    results_publish_from: datetime | None = None
 
 
 class ScheduleOut(BaseModel):
@@ -131,6 +132,10 @@ class ScheduleOut(BaseModel):
     nominations_deadline: datetime | None
     # False once the deadline has passed: department admins can no longer change nominations, super admins still can.
     nominations_open: bool
+    # Results cannot be published before this; None = no restriction.
+    results_publish_from: datetime | None = None
+    # True once that moment has passed (or there is none).
+    results_due: bool = True
     # True once an organiser saved a change; False while the planned dates from the settings apply.
     customised: bool
     updated_by: str | None
@@ -143,6 +148,8 @@ class ScheduleInput(Input):
     registration_opens: AwareDatetime
     registration_closes: AwareDatetime
     nominations_deadline: AwareDatetime | None = None
+    # Leave it out to keep the current results date; null removes the restriction.
+    results_publish_from: AwareDatetime | None = None
 
 
 class OpenNowInput(Input):
@@ -280,10 +287,13 @@ class ReasonInput(Input):
     reason: str = Field(min_length=5, max_length=500)
 
 
+AdminRole = Literal["super_admin", "admin", "outside_admin"]
+
+
 class AdminInput(Input):
     email: EmailStr
     name: str = Field(min_length=2, max_length=120)
-    role: Literal["super_admin", "admin"]
+    role: AdminRole
     department: str | None = None
 
     @field_validator("email")
@@ -295,9 +305,35 @@ class AdminInput(Input):
     def check_department(self) -> "AdminInput":
         if self.role == "admin" and self.department not in rules.DEPARTMENTS:
             raise ValueError("Choose the department this admin manages.")
-        if self.role == "super_admin":
+        if self.role != "admin":
             self.department = None
         return self
+
+
+def _email(value: str) -> str:
+    try:
+        return str(TypeAdapter(EmailStr).validate_python(value.strip())).lower()
+    except ValidationError:
+        raise ValueError(f"{value} is not a valid email address.") from None
+
+
+class AdminTeamInput(TeamInput):
+    """An organiser creates a team for registered students (see services/admin.create_team)."""
+
+    leader_email: str = Field(max_length=320)
+    member_emails: list[str] = Field(default_factory=list, max_length=rules.TEAM_MAX_SIZE - 1)
+    # Submit (lock) it straight away; it needs 2 to 5 members.
+    submit: bool = False
+
+    @field_validator("leader_email")
+    @classmethod
+    def check_leader(cls, value: str) -> str:
+        return _email(value)
+
+    @field_validator("member_emails")
+    @classmethod
+    def check_members(cls, value: list[str]) -> list[str]:
+        return [_email(email) for email in value if email.strip()]
 
 
 class NominationInput(Input):
@@ -312,10 +348,13 @@ class NominationsInput(Input):
 class AdminOut(BaseModel):
     email: str
     name: str
+    # super_admin | admin | outside_admin, or "judge" for a juror who is not an organiser.
     role: str
     department: str | None
     added_at: datetime | None = None
     added_by: str | None = None
+    # True when this account is also an appointed juror (it then has a "My judging" page).
+    judge: bool = False
 
 
 class AdminMemberOut(MemberOut):
@@ -343,6 +382,9 @@ class TeamSummaryOut(BaseModel):
     member_count: int
     project_title: str
     submitted_at: datetime | None
+    leader_year: int | None = None
+    # Year (or class) of every member, the leader's first.
+    member_years: list[int] = []
 
 
 class StudentTeamRef(BaseModel):
@@ -409,6 +451,9 @@ class YearStats(BaseModel):
     participant_type: str
     year: int
     students: int
+    # Active teams led by a student of this year, and active teams with at least one member of this year.
+    teams_led: int = 0
+    teams_with: int = 0
 
 
 class SizeStats(BaseModel):
@@ -487,6 +532,9 @@ class FinalistSummaryOut(BaseModel):
     nominations_deadline: datetime | None = None
     # Why results cannot be published right now (None = they can). The server decides, the panel only shows it.
     publish_blocked: str | None = None
+    results_publish_from: datetime | None = None
+    # Once published: why the results can no longer be withdrawn (None = a super admin can still withdraw them).
+    unpublish_blocked: str | None = None
     matrix: list[MatrixRow]
     direct_teams: list[TeamSummaryOut]
 
@@ -496,10 +544,22 @@ class PublishInput(Input):
     confirm: str = Field(max_length=20)
 
 
+class UnpublishInput(Input):
+    confirm: str = Field(max_length=20)
+    reason: str = Field(min_length=5, max_length=500)
+
+
 class PublishOut(BaseModel):
     published_at: datetime
     finalists: int
     not_selected: int
+
+
+class AuditPage(BaseModel):
+    items: list["AuditOut"]
+    total: int
+    page: int
+    page_size: int
 
 
 class AuditOut(BaseModel):
@@ -511,3 +571,282 @@ class AuditOut(BaseModel):
     team_code: str | None
     department: str | None
     detail: str
+
+
+# ---------- Judging ----------
+
+
+class JurorInput(Input):
+    email: str = Field(max_length=320)
+    name: str = Field(min_length=2, max_length=120)
+    # KIET faculty (from a department) or an external judge (industry, another institution).
+    kind: Literal["faculty", "external"]
+    department: str | None = None
+    organisation: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=20)
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value: str) -> str:
+        return _email(value)
+
+    @field_validator("phone")
+    @classmethod
+    def check_phone(cls, value: str) -> str:
+        if not value:
+            return ""
+        if not rules.is_valid_phone(value):
+            raise ValueError("Enter a 10-digit Indian mobile number, or leave the phone empty.")
+        return rules.normalise_phone(value)
+
+    @model_validator(mode="after")
+    def check_kind(self) -> "JurorInput":
+        if self.kind == "faculty":
+            if self.department not in rules.DEPARTMENTS:
+                raise ValueError("Choose the KIET department this faculty member belongs to.")
+            self.organisation = self.organisation or rules.KIET_INSTITUTION
+        else:
+            self.department = None
+            if len(self.organisation) < 2:
+                raise ValueError("Enter the organisation an external judge comes from.")
+        return self
+
+
+class JurorPanelRef(BaseModel):
+    id: uuid.UUID
+    round: str
+    name: str
+    chair: bool
+
+
+class JurorOut(BaseModel):
+    email: str
+    name: str
+    kind: str
+    department: str | None
+    organisation: str
+    phone: str
+    panels: list[JurorPanelRef]
+    scores: int
+    added_at: datetime | None
+    added_by: str | None
+
+
+class PanelInput(Input):
+    round: rules.JudgingRound
+    name: str = Field(min_length=2, max_length=60)
+    location: str = Field(default="", max_length=120)
+    # Department round: whose teams are judged in this room.
+    department: str | None = None
+
+    @model_validator(mode="after")
+    def check_department(self) -> "PanelInput":
+        self.name = " ".join(self.name.split())
+        if self.round == "department":
+            if self.department not in rules.DEPARTMENTS:
+                raise ValueError("Choose the department whose teams are judged in this room.")
+        else:
+            self.department = None
+        return self
+
+
+class PanelUpdateInput(Input):
+    name: str = Field(min_length=2, max_length=60)
+    location: str = Field(default="", max_length=120)
+
+
+class PanelTeamsInput(Input):
+    team_ids: list[uuid.UUID] = Field(max_length=300)
+
+
+class PanelJurorInput(Input):
+    email: str = Field(max_length=320)
+    chair: bool = False
+
+    @field_validator("email")
+    @classmethod
+    def lower(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class PanelJurorsInput(Input):
+    jurors: list[PanelJurorInput] = Field(max_length=10)
+
+
+class PanelJurorOut(BaseModel):
+    email: str
+    name: str
+    kind: str
+    department: str | None
+    organisation: str
+    chair: bool
+
+
+class PanelTeamOut(TeamSummaryOut):
+    tent: str | None = None
+    # Scores recorded by this panel's judges, and their average total (out of 50).
+    scores: int = 0
+    average: float | None = None
+
+
+class PanelOut(BaseModel):
+    id: uuid.UUID
+    round: str
+    name: str
+    location: str
+    department: str | None
+    jurors: list[PanelJurorOut]
+    teams: list[PanelTeamOut]
+
+
+class RoundOut(BaseModel):
+    round: str
+    open: bool
+    changed_at: datetime | None
+    changed_by: str | None
+    # Why the round cannot be opened now (None = it can, or it is already open).
+    open_blocked: str | None
+
+
+class TentRowOut(BaseModel):
+    team: TeamSummaryOut
+    tent: str | None
+
+
+class JudgingOut(BaseModel):
+    round: RoundOut
+    # True for super admins, who manage panels, judges and tents; everyone else sees this read-only.
+    can_manage: bool
+    panels: list[PanelOut]
+    # Eligible teams of this round (in the caller's scope) not yet allotted to a panel.
+    unallotted: list[TeamSummaryOut]
+    # Final round: every team going to the Grand Finale and its tent.
+    tents: list[TentRowOut] | None
+
+
+class TentAssignment(Input):
+    team_id: uuid.UUID
+    # e.g. "T-12"; null or empty clears the tent.
+    tent: str | None = Field(default=None, max_length=12)
+
+
+class TentsInput(Input):
+    tents: list[TentAssignment] = Field(max_length=500)
+
+
+class AttendanceMember(BaseModel):
+    full_name: str
+    role: str
+    year: int
+    course: str
+    department: str | None
+    institution: str
+    roll_number: str
+    phone: str
+
+
+class AttendanceTeam(BaseModel):
+    code: str
+    name: str
+    category: int
+    project_title: str
+    status: str
+    tent: str | None
+    institution: str
+    department: str | None
+    members: list[AttendanceMember]
+
+
+class AttendanceSheet(BaseModel):
+    round: str
+    title: str
+    location: str
+    jurors: list[str]
+    teams: list[AttendanceTeam]
+
+
+class RankedTeam(BaseModel):
+    position: int | None
+    team: TeamSummaryOut
+    panel: str | None
+    scores: int
+    judges: int
+    average: float | None
+    innovation: float | None
+    query: float | None
+    # Level with the team ranked just above on total, innovation and query addressing: the panel chair decides.
+    tied: bool
+
+
+class RankingGroup(BaseModel):
+    key: str
+    label: str
+    department: str | None
+    category: int | None
+    teams: list[RankedTeam]
+
+
+class RankingsOut(BaseModel):
+    round: str
+    groups: list[RankingGroup]
+
+
+class ScoreInput(Input):
+    marks: list[int] = Field(min_length=len(rules.RUBRIC_PARTS), max_length=len(rules.RUBRIC_PARTS))
+    remarks: str = Field(default="", max_length=1000)
+
+    @field_validator("marks")
+    @classmethod
+    def check_marks(cls, value: list[int]) -> list[int]:
+        if error := rules.marks_error(value):
+            raise ValueError(error)
+        return value
+
+
+class ScoreOut(BaseModel):
+    marks: list[int]
+    total: int
+    remarks: str
+    updated_at: datetime
+
+
+class JudgeMemberOut(BaseModel):
+    full_name: str
+    role: str
+    year: int
+    course: str
+
+
+class JudgeTeamOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+    category: int
+    domain: str
+    project_title: str
+    abstract: str
+    participant_type: str
+    institution: str
+    department: str | None
+    status: str
+    tent: str | None
+    members: list[JudgeMemberOut]
+    my_score: ScoreOut | None
+
+
+class JudgePanelOut(BaseModel):
+    id: uuid.UUID
+    round: str
+    name: str
+    location: str
+    department: str | None
+    chair: bool
+    # Scores can be saved only while the organisers keep this round open.
+    open: bool
+    teams: list[JudgeTeamOut]
+
+
+class JudgeOut(BaseModel):
+    email: str
+    name: str
+    panels: list[JudgePanelOut]

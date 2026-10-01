@@ -1,6 +1,7 @@
 """
 Admin panel logic. Scoping is applied inside every query: a department admin only ever reads or changes
-KIET teams and students of their own department; a super admin sees everything.
+KIET teams and students of their own department; an outside admin only teams and students from other colleges
+and schools; a super admin sees everything.
 """
 
 import uuid
@@ -17,13 +18,29 @@ from sqlalchemy.orm import Session, aliased
 
 from .. import rules
 from ..config import Settings
+from ..db import violated_constraint
 from ..errors import ApiError
-from ..models import Admin, AppState, AuditEntry, FinalistNomination, Invitation, Profile, Team, TeamMember, User, utcnow
+from ..models import (
+    Admin,
+    AppState,
+    AuditEntry,
+    FinalistNomination,
+    FinalTent,
+    Invitation,
+    PanelTeam,
+    Profile,
+    Score,
+    Team,
+    TeamMember,
+    User,
+    utcnow,
+)
 from ..schemas import (
     AdminInput,
     AdminMemberOut,
     AdminOut,
     AdminStudentOut,
+    AdminTeamInput,
     AdminTeamOut,
     AuditOut,
     CategoryStats,
@@ -45,6 +62,7 @@ from ..schemas import (
     TeamSummaryOut,
     TimelinePoint,
     TypeStats,
+    UnpublishInput,
     YearStats,
 )
 from . import audit, schedule
@@ -58,6 +76,17 @@ def _is_super(admin: Admin) -> bool:
     return admin.role == "super_admin"
 
 
+def _is_outside(admin: Admin) -> bool:
+    return admin.role == "outside_admin"
+
+
+OUTSIDE = ("college", "school")
+
+
+def scope_label(admin: Admin) -> str:
+    return "other colleges and schools" if _is_outside(admin) else str(admin.department)
+
+
 def _escape_like(text: str) -> str:
     return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
@@ -68,7 +97,7 @@ def check_department(admin: Admin, department: str | None) -> None:
     if department not in rules.DEPARTMENTS:
         raise ApiError(f'Unknown department "{department}".', 422)
     if not _is_super(admin) and department != admin.department:
-        raise ApiError(f"You can only view {admin.department} data.", 403)
+        raise ApiError(f"You can only view {scope_label(admin)} data.", 403)
 
 
 # ---------- Scope ----------
@@ -77,13 +106,33 @@ def check_department(admin: Admin, department: str | None) -> None:
 def team_scope(admin: Admin) -> ColumnElement[bool]:
     if _is_super(admin):
         return Team.id.is_not(None)
+    if _is_outside(admin):
+        return Team.participant_type.in_(OUTSIDE)
     return and_(Team.participant_type == "kiet", Team.department == admin.department)
 
 
 def student_scope(admin: Admin) -> ColumnElement[bool]:
     if _is_super(admin):
         return Profile.user_id.is_not(None)
+    if _is_outside(admin):
+        return Profile.participant_type.in_(OUTSIDE)
     return and_(Profile.participant_type == "kiet", Profile.department == admin.department)
+
+
+def can_see_team(admin: Admin, team: Team) -> bool:
+    if _is_super(admin):
+        return True
+    if _is_outside(admin):
+        return team.participant_type in OUTSIDE
+    return team.participant_type == "kiet" and team.department == admin.department
+
+
+def can_see_profile(admin: Admin, profile: Profile) -> bool:
+    if _is_super(admin):
+        return True
+    if _is_outside(admin):
+        return profile.participant_type in OUTSIDE
+    return profile.participant_type == "kiet" and profile.department == admin.department
 
 
 def _visible_team(db: Session, admin: Admin, team_id: uuid.UUID, lock: bool = False) -> Team:
@@ -93,8 +142,11 @@ def _visible_team(db: Session, admin: Admin, team_id: uuid.UUID, lock: bool = Fa
     team = db.scalar(statement)
     if team is None:
         raise ApiError("Team not found.", 404)
-    if not _is_super(admin) and not (team.participant_type == "kiet" and team.department == admin.department):
-        raise ApiError(f"This team is not in {admin.department}.", 403)
+    if not can_see_team(admin, team):
+        raise ApiError(
+            "This team is from KIET, not another college or school." if _is_outside(admin) else f"This team is not in {admin.department}.",
+            403,
+        )
     return team
 
 
@@ -115,9 +167,26 @@ def _member_counts(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, in
     return dict(rows.tuples().all())
 
 
+def _member_years(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[tuple[str, int]]]:
+    """Each team's members as (role, year), leader first."""
+    years: dict[uuid.UUID, list[tuple[str, int]]] = defaultdict(list)
+    if not team_ids:
+        return years
+    rows = db.execute(
+        select(TeamMember.team_id, TeamMember.role, Profile.year)
+        .join(Profile, Profile.user_id == TeamMember.user_id)
+        .where(TeamMember.team_id.in_(team_ids))
+        .order_by(TeamMember.team_id, TeamMember.role != "leader", Profile.year)
+    )
+    for team_id, role, year in rows:
+        years[team_id].append((role, year))
+    return years
+
+
 def summaries(db: Session, teams: list[Team]) -> list[TeamSummaryOut]:
     leaders = _leader_names(db, teams)
     counts = _member_counts(db, [t.id for t in teams])
+    years = _member_years(db, [t.id for t in teams])
     return [
         TeamSummaryOut(
             id=t.id,
@@ -134,6 +203,8 @@ def summaries(db: Session, teams: list[Team]) -> list[TeamSummaryOut]:
             member_count=counts.get(t.id, 0),
             project_title=t.project_title,
             submitted_at=t.submitted_at,
+            leader_year=next((year for role, year in years[t.id] if role == "leader"), None),
+            member_years=[year for _, year in years[t.id]],
         )
         for t in teams
     ]
@@ -215,8 +286,12 @@ class TeamFilters(Paging):
     status: Literal["draft", "submitted", "withdrawn", "disqualified"] | None = None
     type: rules.ParticipantType | None = None
     route: Literal["department", "finale"] | None = None
+    # Teams with at least one member in this year (college) or class (school).
+    year: int | None = Field(default=None, ge=1, le=12)
+    # Teams whose leader is in this year or class.
+    leader_year: int | None = Field(default=None, ge=1, le=12)
     q: str | None = Field(default=None, max_length=100)
-    sort: Literal["code", "name", "category", "department", "status", "members", "submitted_at"] = "code"
+    sort: Literal["code", "name", "category", "department", "status", "members", "submitted_at", "leader_year"] = "code"
     order: Literal["asc", "desc"] = "asc"
 
 
@@ -233,6 +308,18 @@ def _team_query(admin: Admin, f: TeamFilters):
         conditions.append(Team.participant_type == f.type)
     if f.route:
         conditions.append(Team.route == f.route)
+    if f.year:
+        member, member_profile = aliased(TeamMember), aliased(Profile)
+        conditions.append(
+            exists(
+                select(member.user_id)
+                .join(member_profile, member_profile.user_id == member.user_id)
+                .where(member.team_id == Team.id, member_profile.year == f.year)
+            )
+        )
+    leader_year = select(Profile.year).where(Profile.user_id == Team.leader_id).correlate(Team).scalar_subquery()
+    if f.leader_year:
+        conditions.append(leader_year == f.leader_year)
     if f.q and f.q.strip():
         pattern = _escape_like(f.q.strip())
         digits = cast(Team.number, String)
@@ -265,6 +352,7 @@ def _team_query(admin: Admin, f: TeamFilters):
         "status": Team.status,
         "members": member_count,
         "submitted_at": Team.submitted_at,
+        "leader_year": leader_year,
     }[f.sort]
     ordered = sort_column.desc().nulls_last() if f.order == "desc" else sort_column.asc().nulls_last()
     tie = Team.number.desc() if f.order == "desc" else Team.number.asc()
@@ -337,6 +425,103 @@ def change_status(
             db.execute(delete(FinalistNomination).where(FinalistNomination.team_id == team.id))
         audit.record(db, admin.email, f"team.{team.status}", team, reason)
     db.commit()
+    return admin_teams(db, [team])[0]
+
+
+# ---------- Creating a team for students ----------
+
+
+def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Settings) -> AdminTeamOut:
+    """
+    An organiser builds a team from registered students, whether or not registration is open (e.g. for help-desk
+    cases). The team rules still apply: same college or school, category eligibility, team size, unique name.
+    """
+    from .students import ALREADY_IN_TEAM, CODE_TAKEN, NAME_TAKEN, _commit, _decline_pending_invitations
+
+    emails = [data.leader_email, *data.member_emails]
+    if len(set(emails)) != len(emails):
+        raise ApiError("A student is listed more than once.", 422)
+    if len(emails) > rules.TEAM_MAX_SIZE:
+        raise ApiError(f"A team can have at most {rules.TEAM_MAX_SIZE} members.", 422)
+    if data.submit and len(emails) < rules.TEAM_MIN_SIZE:
+        raise ApiError(f"A team needs {rules.TEAM_MIN_SIZE} to {rules.TEAM_MAX_SIZE} members to be submitted.", 422)
+
+    # Lock the students' profiles (in a fixed order) so none of them joins another team meanwhile.
+    rows = db.execute(
+        select(User, Profile)
+        .join(Profile, Profile.user_id == User.id)
+        .where(User.email.in_(emails))
+        .order_by(User.id)
+        .with_for_update(of=Profile)
+        .execution_options(populate_existing=True)
+    ).all()
+    found = {user.email: (user, profile) for user, profile in rows}
+    for email in emails:
+        if email not in found:
+            raise ApiError(f"No registered student uses {email}. They must sign in and complete their profile first.", 422)
+    leader_user, leader = found[data.leader_email]
+    if not can_see_profile(admin, leader):
+        raise ApiError(
+            "You can only create teams led by students from other colleges and schools."
+            if _is_outside(admin)
+            else f"You can only create teams led by {admin.department} students.",
+            403,
+        )
+    for email in data.member_emails:
+        _, profile = found[email]
+        same = profile.participant_type == leader.participant_type and (
+            leader.participant_type == "kiet" or profile.institution_key == leader.institution_key
+        )
+        if not same:
+            raise ApiError(f"{email} is not from the same college or school as the leader.", 422)
+    taken = db.execute(
+        select(User.email, Team.number)
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .join(Team, Team.id == TeamMember.team_id)
+        .where(User.email.in_(emails))
+    ).first()
+    if taken:
+        raise ApiError(f"{taken[0]} is already in team IT26-{taken[1]:04d}.", 409)
+    if error := rules.category_error(data.category, leader.participant_type, [found[e][1].year for e in emails]):
+        raise ApiError(error, 422)
+    route = "department" if leader.participant_type == "kiet" else "finale"
+    if data.submit and route == "department" and _results_published(db):
+        raise ApiError("Results have been published, so new KIET teams can be created as drafts only.", 409)
+
+    now = utcnow()
+    team = Team(
+        name=data.name,
+        name_key=rules.normalise_team_name(data.name),
+        category=data.category,
+        domain=data.domain,
+        project_title=data.project_title,
+        abstract=data.abstract,
+        participant_type=leader.participant_type,
+        institution=leader.institution,
+        institution_key=leader.institution_key,
+        department=leader.department,
+        route=route,
+        leader_id=leader_user.id,
+        status="submitted" if data.submit else "draft",
+        submitted_at=now if data.submit else None,
+    )
+    db.add(team)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if NAME_TAKEN[0] in violated_constraint(exc):
+            raise ApiError(*NAME_TAKEN[1]) from exc
+        raise
+    for email in emails:
+        user, _ = found[email]
+        db.add(TeamMember(team_id=team.id, user_id=user.id, role="leader" if email == data.leader_email else "member", joined_at=now))
+        # One team per student: their invitations to other teams can no longer be accepted.
+        _decline_pending_invitations(db, email)
+    audit.record(db, admin.email, "team.created", team, f"Created by an organiser with {len(emails)} members: {', '.join(emails)}")
+    if data.submit:
+        audit.record(db, admin.email, "team.submitted", team, "Submitted by an organiser")
+    _commit(db, dict([ALREADY_IN_TEAM, NAME_TAKEN, CODE_TAKEN]))
     return admin_teams(db, [team])[0]
 
 
@@ -506,10 +691,16 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
     recent = list(db.scalars(select(Team).where(team_scope(admin), Team.status == "submitted").order_by(Team.submitted_at.desc()).limit(8)))
     published = _results_published(db)
     is_super = _is_super(admin)
+    sees_outside = is_super or _is_outside(admin)
     active = [t for t in teams if t.status in ACTIVE]
+    # Years in active teams: who leads them, and which years they include.
+    team_years = _member_years(db, [t.id for t in active])
+    led_by = Counter((t.participant_type, year) for t in active for role, year in team_years[t.id] if role == "leader")
+    including = Counter((t.participant_type, year) for t in active for year in {y for _, y in team_years[t.id]})
+    student_years = Counter((s.participant_type, s.year) for s in students)
 
     return StatsOut(
-        department=None if is_super else admin.department,
+        department=admin.department if admin.role == "admin" else None,
         students=len(students),
         students_in_teams=sum(1 for s in students if s.in_team),
         pending_invitations=pending or 0,
@@ -521,9 +712,9 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
                 teams=sum(1 for t in teams if t.participant_type == kind),
                 submitted=sum(1 for t in teams if t.participant_type == kind and t.status == "submitted"),
             )
-            for kind in ("kiet", "college", "school")
+            for kind in (("kiet", "college", "school") if is_super else OUTSIDE)
         ]
-        if is_super
+        if sees_outside
         else None,
         by_category=[
             CategoryStats(category=number, **_counts([t.status for t in teams if t.category == number])) for number in rules.CATEGORIES
@@ -545,8 +736,14 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
         ),
         schedule=schedule.to_out(window, settings),
         by_year=[
-            YearStats(participant_type=kind, year=year, students=count)
-            for (kind, year), count in sorted(Counter((s.participant_type, s.year) for s in students).items())
+            YearStats(
+                participant_type=kind,
+                year=year,
+                students=student_years[(kind, year)],
+                teams_led=led_by[(kind, year)],
+                teams_with=including[(kind, year)],
+            )
+            for kind, year in sorted(set(student_years) | set(led_by) | set(including))
         ],
         team_sizes=[
             SizeStats(size=size, teams=sum(1 for t in active if sizes.get(t.id, 0) == size)) for size in range(1, rules.TEAM_MAX_SIZE + 1)
@@ -555,7 +752,7 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
             DomainStats(domain=domain, teams=count)
             for domain, count in sorted(Counter(t.domain for t in active).items(), key=lambda item: (-item[1], item[0]))
         ],
-        top_institutions=_top_institutions(students, teams) if is_super else None,
+        top_institutions=_top_institutions(students, teams) if sees_outside else None,
     )
 
 
@@ -696,6 +893,8 @@ def finalist_summary(db: Session, admin: Admin, settings: Settings) -> FinalistS
         published_by=published.value if published else None,
         nominations_deadline=schedule.load(db, settings).nominations_deadline,
         publish_blocked=None if published else publish_blocker(db, settings),
+        results_publish_from=schedule.load(db, settings).results_from,
+        unpublish_blocked=unpublish_blocker(db) if published else None,
         matrix=[
             MatrixRow(
                 department=department,
@@ -721,6 +920,12 @@ PUBLISH_PHRASE = "PUBLISH"
 def publish_blocker(db: Session, settings: Settings) -> str | None:
     """Why results cannot be published right now, or None. Publishing is one-way and locks every department's nominations."""
     window = schedule.load(db, settings)
+    if not window.results_due():
+        due = window.results_from.astimezone(rules.IST)  # type: ignore[union-attr]
+        return (
+            f"Results can be published from {due:%d %B %Y, %I:%M %p} IST (the finalists declaration date). "
+            "Change the results date on the Schedule page only if the event plan has changed."
+        )
     if window.nominations_deadline is not None and not window.nominations_closed():
         due = window.nominations_deadline.astimezone(rules.IST)
         return (
@@ -758,6 +963,43 @@ def publish_results(db: Session, admin: Admin, settings: Settings, data: Publish
     audit.record(db, admin.email, "results.published", detail=f"{finalists} finalists, {not_selected} not selected")
     db.commit()
     return PublishOut(published_at=now, finalists=finalists, not_selected=not_selected)
+
+
+UNPUBLISH_PHRASE = "UNPUBLISH"
+
+
+def unpublish_blocker(db: Session) -> str | None:
+    """Why published results can no longer be withdrawn, or None. Once the finale is being prepared, they stay."""
+    from . import judging  # judging builds on this module
+
+    if judging.round_open(db, "final"):
+        return "Final-round judging is open, so the published results can no longer be withdrawn."
+    if db.scalar(select(func.count()).select_from(Score).where(Score.round == "final")):
+        return "Final-round scores have been recorded, so the published results can no longer be withdrawn."
+    finalist_ids = select(Team.id).where(Team.route == "department", Team.result == "finalist")
+    if db.scalar(select(func.count()).select_from(FinalTent).where(FinalTent.team_id.in_(finalist_ids))):
+        return "Tents have been allotted to department finalists. Clear those tents on the Judging page first."
+    if db.scalar(select(func.count()).select_from(PanelTeam).where(PanelTeam.round == "final", PanelTeam.team_id.in_(finalist_ids))):
+        return "Department finalists have been allotted to finale panels. Remove them from the panels on the Judging page first."
+    return None
+
+
+def unpublish_results(db: Session, admin: Admin, data: UnpublishInput) -> None:
+    """Withdraws published results, e.g. published by mistake: every department team's result goes back to pending
+    and nominations can be changed again. Not possible once the finale is being prepared (see unpublish_blocker)."""
+    _require_super(admin, "withdraw published results")
+    if data.confirm.strip() != UNPUBLISH_PHRASE:
+        raise ApiError(f"Type {UNPUBLISH_PHRASE} to confirm.", 422)
+    _lock_state(db, f"{RESULTS_KEY}_lock")
+    published = _results_published(db)
+    if published is None:
+        raise ApiError("Results are not published.", 409)
+    if blocked := unpublish_blocker(db):
+        raise ApiError(blocked, 409)
+    reverted = db.execute(update(Team).where(Team.route == "department", Team.result != "pending").values(result="pending")).rowcount
+    db.delete(published)
+    audit.record(db, admin.email, "results.unpublished", detail=f"{reverted} team results back to pending. Reason: {data.reason}")
+    db.commit()
 
 
 # ---------- Admins ----------
@@ -832,24 +1074,64 @@ def remove_admin(db: Session, admin: Admin, email: str, settings: Settings) -> N
 # ---------- Audit ----------
 
 
+def _audit_scope(admin: Admin) -> ColumnElement[bool]:
+    if _is_super(admin):
+        return AuditEntry.id.is_not(None)
+    if _is_outside(admin):
+        return AuditEntry.participant_type.in_(OUTSIDE)
+    return AuditEntry.department == admin.department
+
+
+def _audit_out(entry: AuditEntry) -> AuditOut:
+    return AuditOut(
+        id=str(entry.id),
+        at=entry.at,
+        actor_email=entry.actor_email,
+        action=entry.action,
+        team_id=entry.team_id,
+        team_code=entry.team_code,
+        department=entry.department,
+        detail=entry.detail,
+    )
+
+
 def audit_log(db: Session, admin: Admin, team_id: uuid.UUID | None, limit: int) -> list[AuditOut]:
-    statement = select(AuditEntry).order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit)
+    statement = select(AuditEntry).where(_audit_scope(admin)).order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit)
     if team_id:
         if db.get(Team, team_id) is not None:
             _visible_team(db, admin, team_id)
         statement = statement.where(AuditEntry.team_id == team_id)
-    if not _is_super(admin):
-        statement = statement.where(AuditEntry.department == admin.department)
-    return [
-        AuditOut(
-            id=str(entry.id),
-            at=entry.at,
-            actor_email=entry.actor_email,
-            action=entry.action,
-            team_id=entry.team_id,
-            team_code=entry.team_code,
-            department=entry.department,
-            detail=entry.detail,
+    return [_audit_out(entry) for entry in db.scalars(statement)]
+
+
+ActivityKind = Literal["team", "member", "invitation", "finalists", "results", "admin", "schedule", "judging"]
+
+
+class ActivityFilters(Paging):
+    kind: ActivityKind | None = None
+    department: str | None = None
+    q: str | None = Field(default=None, max_length=100)
+
+
+def activity(db: Session, admin: Admin, f: ActivityFilters) -> tuple[list[AuditOut], int]:
+    """The full audit log, newest first, a page at a time."""
+    check_department(admin, f.department)
+    conditions = [_audit_scope(admin)]
+    if f.kind:
+        conditions.append(AuditEntry.action.startswith(f"{f.kind}.", autoescape=True))
+    if f.department:
+        conditions.append(AuditEntry.department == f.department)
+    if f.q and f.q.strip():
+        pattern = _escape_like(f.q.strip())
+        conditions.append(
+            or_(*(column.ilike(pattern, escape="\\") for column in (AuditEntry.actor_email, AuditEntry.team_code, AuditEntry.detail)))
         )
-        for entry in db.scalars(statement)
-    ]
+    total = db.scalar(select(func.count()).select_from(AuditEntry).where(*conditions)) or 0
+    statement = (
+        select(AuditEntry)
+        .where(*conditions)
+        .order_by(AuditEntry.at.desc(), AuditEntry.id.desc())
+        .offset((f.page - 1) * f.page_size)
+        .limit(f.page_size)
+    )
+    return [_audit_out(entry) for entry in db.scalars(statement)], total

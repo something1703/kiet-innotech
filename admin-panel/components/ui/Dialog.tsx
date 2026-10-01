@@ -6,6 +6,8 @@ import { Button } from "./Button";
 import { Field, Input, Textarea } from "./Field";
 import { errorMessage } from "@/lib/api";
 
+const widths = { md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" } as const;
+
 /**
  * Modal built on the native <dialog> element, which traps focus and handles Escape.
  * Render it only while it should be open; unmounting closes it and resets its state.
@@ -17,6 +19,7 @@ export function Dialog({
   busy = false,
   children,
   footer,
+  size = "md",
 }: {
   title: string;
   description?: ReactNode;
@@ -25,6 +28,8 @@ export function Dialog({
   busy?: boolean;
   children?: ReactNode;
   footer: ReactNode;
+  /** md for confirmations, lg for forms, xl for wide pickers. */
+  size?: "md" | "lg" | "xl";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -45,9 +50,9 @@ export function Dialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl bg-white p-0 text-ink shadow-2xl ring-1 ring-line backdrop:bg-navy-950/60"
+      className={`m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${widths[size]} flex-col overflow-hidden rounded-2xl bg-white p-0 text-ink shadow-2xl ring-1 ring-line backdrop:bg-navy-950/60 open:flex`}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-4">
         <div className="min-w-0">
           <h2 id={titleId} className="font-display text-lg font-bold text-navy-900">
             {title}
@@ -68,8 +73,9 @@ export function Dialog({
           <X aria-hidden="true" className="size-4" />
         </button>
       </div>
-      {children && <div className="px-5 py-4">{children}</div>}
-      <div className="flex flex-wrap justify-end gap-2 border-t border-line bg-surface/60 px-5 py-3">{footer}</div>
+      {/* Long content scrolls inside the dialog; the title and buttons stay in view. */}
+      {children && <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>}
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-line bg-surface/60 px-5 py-3">{footer}</div>
     </dialog>
   );
 }

@@ -6,31 +6,49 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
-from ..auth import CurrentAdmin, SuperAdmin
+from ..auth import CurrentAdmin, Identity, SuperAdmin, find_admin, get_admin_identity
 from ..config import Settings, get_settings
 from ..db import get_db
+from ..errors import ApiError
+from ..models import Juror
+from ..rules import JudgingRound
 from ..schemas import (
     AdminInput,
     AdminOut,
     AdminStudentOut,
+    AdminTeamInput,
     AdminTeamOut,
+    AttendanceSheet,
     AuditOut,
+    AuditPage,
     FinalistBoardOut,
     FinalistSummaryOut,
+    JudgingOut,
+    JurorInput,
+    JurorOut,
     NominationsInput,
     OpenNowInput,
+    PanelInput,
+    PanelJurorsInput,
+    PanelOut,
+    PanelTeamsInput,
+    PanelUpdateInput,
     PublishInput,
     PublishOut,
+    RankingsOut,
     ReasonInput,
+    RoundOut,
     ScheduleInput,
     ScheduleOut,
     StatsOut,
     StudentPage,
     TeamPage,
+    TentsInput,
+    UnpublishInput,
 )
 from ..services import admin as service
-from ..services import schedule
-from ..services.admin import StudentFilters, TeamFilters
+from ..services import judging, schedule
+from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -39,8 +57,15 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get("/me")
-def me(admin: CurrentAdmin) -> AdminOut:
-    return service.admin_out(admin)
+def me(identity: Annotated[Identity, Depends(get_admin_identity)], db: Db, settings: AppSettings) -> AdminOut:
+    """The signed-in organiser, or a judge (role "judge") who is not an organiser."""
+    juror = db.get(Juror, identity.email)
+    admin = find_admin(db, identity.email, settings)
+    if admin is not None:
+        return service.admin_out(admin).model_copy(update={"judge": juror is not None})
+    if juror is not None:
+        return AdminOut(email=juror.email, name=juror.name, role="judge", department=juror.department, judge=True)
+    raise ApiError("This account is not an InnoTech26 organiser or judge.", 403)
 
 
 @router.get("/stats")
@@ -57,6 +82,12 @@ def list_teams(admin: CurrentAdmin, db: Db, filters: Annotated[TeamFilters, Quer
 @router.get("/teams/export")
 def export_teams(admin: CurrentAdmin, db: Db, filters: Annotated[TeamFilters, Query()]) -> list[AdminTeamOut]:
     return service.export_teams(db, admin, filters)
+
+
+@router.post("/teams", status_code=status.HTTP_201_CREATED)
+def create_team(data: AdminTeamInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminTeamOut:
+    """Creates a team for registered students, whether or not registration is open."""
+    return service.create_team(db, admin, data, settings)
 
 
 @router.get("/teams/{team_id}")
@@ -115,6 +146,12 @@ def publish_results(data: PublishInput, admin: CurrentAdmin, db: Db, settings: A
     return service.publish_results(db, admin, settings, data)
 
 
+@router.post("/results/unpublish", status_code=status.HTTP_204_NO_CONTENT)
+def unpublish_results(data: UnpublishInput, admin: CurrentAdmin, db: Db) -> Response:
+    service.unpublish_results(db, admin, data)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/schedule")
 def get_schedule(admin: CurrentAdmin, db: Db, settings: AppSettings) -> ScheduleOut:
     """Every admin can see the schedule; only a super admin can change it."""
@@ -130,6 +167,7 @@ def set_schedule(data: ScheduleInput, admin: SuperAdmin, db: Db, settings: AppSe
         opens=data.registration_opens,
         closes=data.registration_closes,
         deadline=data.nominations_deadline,
+        results_from=data.results_publish_from if "results_publish_from" in data.model_fields_set else schedule.KEEP,
     )
     return schedule.to_out(window, settings)
 
@@ -169,3 +207,86 @@ def audit_log(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[AuditOut]:
     return service.audit_log(db, admin, team_id, limit)
+
+
+@router.get("/activity")
+def activity(admin: CurrentAdmin, db: Db, filters: Annotated[ActivityFilters, Query()]) -> AuditPage:
+    items, total = service.activity(db, admin, filters)
+    return AuditPage(items=items, total=total, page=filters.page, page_size=filters.page_size)
+
+
+# ---------- Judging ----------
+
+
+@router.get("/judging/{round_}")
+def judging_overview(round_: JudgingRound, admin: CurrentAdmin, db: Db, settings: AppSettings) -> JudgingOut:
+    return judging.overview(db, admin, settings, round_)
+
+
+@router.post("/judging/{round_}/open")
+def open_judging(round_: JudgingRound, admin: CurrentAdmin, db: Db, settings: AppSettings) -> RoundOut:
+    return judging.open_round(db, admin, settings, round_)
+
+
+@router.post("/judging/{round_}/lock")
+def lock_judging(round_: JudgingRound, admin: CurrentAdmin, db: Db, settings: AppSettings) -> RoundOut:
+    return judging.lock_round(db, admin, settings, round_)
+
+
+@router.get("/judging/{round_}/rankings")
+def judging_rankings(
+    round_: JudgingRound, admin: CurrentAdmin, db: Db, department: Annotated[str | None, Query(max_length=20)] = None
+) -> RankingsOut:
+    return judging.rankings(db, admin, round_, department)
+
+
+@router.get("/judging/{round_}/attendance")
+def attendance_sheet(round_: JudgingRound, admin: CurrentAdmin, db: Db, panel_id: uuid.UUID | None = None) -> AttendanceSheet:
+    return judging.attendance(db, admin, round_, panel_id)
+
+
+@router.put("/judging/final/tents")
+def set_tents(data: TentsInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> JudgingOut:
+    return judging.set_tents(db, admin, settings, data)
+
+
+@router.post("/panels", status_code=status.HTTP_201_CREATED)
+def create_panel(data: PanelInput, admin: CurrentAdmin, db: Db) -> PanelOut:
+    return judging.create_panel(db, admin, data)
+
+
+@router.patch("/panels/{panel_id}")
+def update_panel(panel_id: uuid.UUID, data: PanelUpdateInput, admin: CurrentAdmin, db: Db) -> PanelOut:
+    return judging.update_panel(db, admin, panel_id, data)
+
+
+@router.delete("/panels/{panel_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_panel(panel_id: uuid.UUID, admin: CurrentAdmin, db: Db) -> Response:
+    judging.delete_panel(db, admin, panel_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/panels/{panel_id}/teams")
+def set_panel_teams(panel_id: uuid.UUID, data: PanelTeamsInput, admin: CurrentAdmin, db: Db) -> PanelOut:
+    return judging.set_panel_teams(db, admin, panel_id, data)
+
+
+@router.put("/panels/{panel_id}/jurors")
+def set_panel_jurors(panel_id: uuid.UUID, data: PanelJurorsInput, admin: CurrentAdmin, db: Db) -> PanelOut:
+    return judging.set_panel_jurors(db, admin, panel_id, data)
+
+
+@router.get("/jurors")
+def list_jurors(admin: CurrentAdmin, db: Db) -> list[JurorOut]:
+    return judging.list_jurors(db, admin)
+
+
+@router.post("/jurors", status_code=status.HTTP_201_CREATED)
+def add_juror(data: JurorInput, admin: CurrentAdmin, db: Db) -> JurorOut:
+    return judging.add_juror(db, admin, data)
+
+
+@router.delete("/jurors/{email}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_juror(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> Response:
+    judging.remove_juror(db, admin, email)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

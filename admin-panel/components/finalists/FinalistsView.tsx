@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send, Undo2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { FinalistSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departments } from "@/lib/content";
-import { formatDateTime, typeShortLabels } from "@/lib/format";
+import { formatDateTime, formatIst, typeShortLabels } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
@@ -130,6 +130,7 @@ function SuperAdminFinalists() {
   const [department, setDepartment] = useState(departments[0]);
   const [boardNonce, setBoardNonce] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [published, setPublished] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -175,9 +176,36 @@ function SuperAdminFinalists() {
         <section aria-labelledby="publish-title" className="space-y-3">
           <SectionTitle id="publish-title" title="Department round results" />
           {data.publishedAt ? (
-            <Notice tone="success" title="Results published">
-              Published {formatDateTime(data.publishedAt)} by {data.publishedBy}. Nominated teams are marked finalist and the other submitted department-round teams are marked not selected. Nominations are locked.
-            </Notice>
+            <>
+              <Notice
+                tone="success"
+                title="Results published"
+                action={
+                  data.unpublishBlocked === null && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setPublishError(null);
+                        setPublished(null);
+                        setWithdrawing(true);
+                      }}
+                    >
+                      <Undo2 aria-hidden="true" className="size-3.5" />
+                      Withdraw results
+                    </Button>
+                  )
+                }
+              >
+                Published {formatDateTime(data.publishedAt)} by {data.publishedBy}. Nominated teams are marked finalist and the other submitted department-round teams are marked not selected. Nominations are locked.
+                {data.resultsPublishFrom && new Date(data.publishedAt) < new Date(data.resultsPublishFrom) && (
+                  <strong className="mt-1 block text-red-700">
+                    This was before the planned results date ({formatIst(data.resultsPublishFrom)}). If it was a mistake, withdraw the results.
+                  </strong>
+                )}
+              </Notice>
+              {data.unpublishBlocked && <p className="text-xs text-muted">{data.unpublishBlocked}</p>}
+            </>
           ) : (
             <div className="flex flex-col gap-3 border-y border-line py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted">
@@ -266,10 +294,35 @@ function SuperAdminFinalists() {
         </section>
       )}
 
+      {withdrawing && data && (
+        <ConfirmDialog
+          title="Withdraw the published results?"
+          description="Use this only to correct a mistake, such as results published early."
+          confirmLabel="Withdraw results"
+          tone="danger"
+          typeToConfirm="UNPUBLISH"
+          reasonLabel="Why are the results being withdrawn?"
+          onClose={() => setWithdrawing(false)}
+          onConfirm={async (reason) => {
+            await api.unpublishResults(reason);
+            setWithdrawing(false);
+            setPublished("Results withdrawn. Every department-round team is back to “result pending” and nominations can change again.");
+            summary.reload();
+            setBoardNonce((n) => n + 1);
+          }}
+        >
+          <ul className="list-disc space-y-1 pl-5 text-sm text-navy-800">
+            <li>Finalist and not-selected results go back to pending, so students stop seeing them.</li>
+            <li>Nominations are kept and unlock again (department admins only until their deadline).</li>
+            <li>It is saved in the activity log with your reason.</li>
+          </ul>
+        </ConfirmDialog>
+      )}
+
       {publishing && data && !summary.loading && (
         <ConfirmDialog
           title="Publish department round results?"
-          description="This cannot be undone from the panel."
+          description="Students see their result straight away. A super admin can withdraw the results only until the finale is being prepared (tents, finale panels or finale scoring)."
           confirmLabel="Publish results"
           typeToConfirm="PUBLISH"
           onClose={() => setPublishing(false)}
@@ -305,7 +358,13 @@ export function FinalistsView() {
             : "After the department round (22 to 24 October), choose the finalist teams for each category. One team per category, or two in Categories 1 to 4 for CSE, CS, CSE(AI) and CSE(AIML)."
         }
       />
-      {isSuper ? <SuperAdminFinalists /> : admin.department && <Board department={admin.department} />}
+      {isSuper ? (
+        <SuperAdminFinalists />
+      ) : admin.role === "admin" && admin.department ? (
+        <Board department={admin.department} />
+      ) : (
+        <Notice tone="info">Teams from other colleges and schools go straight to the Grand Finale; there are no nominations for them. Their tents are on the Judging page.</Notice>
+      )}
     </div>
   );
 }

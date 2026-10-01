@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { AuditEntry } from "@/lib/admin-types";
-import { auditLabels, formatDateTime } from "@/lib/format";
+import { auditLabels, formatDateTime, formatTime } from "@/lib/format";
 import { teamHref } from "@/lib/routes";
 import { Pill, type PillTone } from "@/components/ui/Pill";
 
@@ -16,16 +16,32 @@ const tones: Partial<Record<string, PillTone>> = {
   "results.published": "orange",
   "admin.added": "navy",
   "admin.removed": "navy",
+  "results.unpublished": "red",
+  "judging.opened": "green",
+  "judging.locked": "orange",
+  "judging.scored": "cyan",
 };
 
 /** A ruled, newest-first list of audit log entries. */
-export function AuditList({ entries, showTeam = true }: { entries: AuditEntry[]; showTeam?: boolean }) {
+export function AuditList({
+  entries,
+  showTeam = true,
+  timeOnly = false,
+  boxed = false,
+}: {
+  entries: AuditEntry[];
+  showTeam?: boolean;
+  /** Under a day heading: show just the time. */
+  timeOnly?: boolean;
+  /** A white card instead of ruled lines. */
+  boxed?: boolean;
+}) {
   return (
-    <ol className="divide-y divide-line border-y border-line">
+    <ol className={boxed ? "divide-y divide-line overflow-hidden rounded-2xl bg-white px-4 ring-1 ring-line" : "divide-y divide-line border-y border-line"}>
       {entries.map((entry) => (
-        <li key={entry.id} className="grid gap-1 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4">
+        <li key={entry.id} className={`grid gap-1 py-3 sm:gap-4 ${timeOnly ? "sm:grid-cols-[4.5rem_minmax(0,1fr)]" : "sm:grid-cols-[8.5rem_minmax(0,1fr)]"}`}>
           <time dateTime={entry.at} className="text-xs tabular-nums text-muted sm:pt-0.5">
-            {formatDateTime(entry.at)}
+            {timeOnly ? formatTime(entry.at) : formatDateTime(entry.at)}
           </time>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

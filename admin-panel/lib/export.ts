@@ -59,6 +59,14 @@ export function downloadStudents(students: AdminStudent[]) {
 
 const leaderOf = (team: AdminTeam) => team.members.find((m) => m.role === "leader");
 
+/** e.g. "3rd year (leader), 2nd year, 1st year". */
+function yearsOf(team: AdminTeam) {
+  return [...team.members]
+    .sort((a, b) => Number(b.role === "leader") - Number(a.role === "leader") || a.year - b.year)
+    .map((m) => `${yearLabel(m.year, team.participantType)}${m.role === "leader" ? " (leader)" : ""}`)
+    .join(", ");
+}
+
 /** Two sheets: one row per team (with the leader's contact details), and one row per member. */
 export async function downloadTeamsExcel(teams: AdminTeam[]) {
   const teamSheet = sheet<AdminTeam>(
@@ -81,6 +89,8 @@ export async function downloadTeamsExcel(teams: AdminTeam[]) {
       { header: "Leader", width: 22, value: (t) => leaderOf(t)?.fullName ?? "" },
       { header: "Leader email", width: 30, value: (t) => leaderOf(t)?.email ?? "" },
       { header: "Leader phone", width: 13, value: (t) => leaderOf(t)?.phone ?? "", text: true },
+      { header: "Leader's year", width: 12, value: (t) => (leaderOf(t) ? yearLabel(leaderOf(t)!.year, t.participantType) : "") },
+      { header: "Members' years", width: 30, value: (t) => yearsOf(t) },
       { header: "Members (names)", width: 50, value: (t) => t.members.map((m) => m.fullName).join(", ") },
       { header: "Created (IST)", width: 20, value: (t) => formatCsvDateTime(t.createdAt) },
       { header: "Submitted (IST)", width: 20, value: (t) => formatCsvDateTime(t.submittedAt) },
@@ -193,6 +203,8 @@ export async function downloadOverviewExcel(stats: Stats) {
       { header: "Participant type", width: 16, value: (r: Stats["byYear"][number]) => typeShortLabels[r.participantType] },
       { header: "Year / class", width: 12, value: (r: Stats["byYear"][number]) => yearLabel(r.year, r.participantType) },
       { header: "Students", width: 10, value: (r: Stats["byYear"][number]) => r.students },
+      { header: "Active teams led", width: 12, value: (r: Stats["byYear"][number]) => r.teamsLed },
+      { header: "Active teams with a member", width: 14, value: (r: Stats["byYear"][number]) => r.teamsWith },
     ], stats.byYear),
     sheet("Team sizes", [
       { header: "Members", width: 9, value: (r: Stats["teamSizes"][number]) => r.size },

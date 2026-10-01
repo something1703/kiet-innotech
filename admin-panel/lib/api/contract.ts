@@ -1,5 +1,18 @@
 import type {
+  ActivityQuery,
   AdminInput,
+  AdminTeamInput,
+  AttendanceSheet,
+  JudgeView,
+  Judging,
+  JudgingRound,
+  Juror,
+  JurorInput,
+  Panel,
+  PanelInput,
+  Rankings,
+  RoundState,
+  Score,
   AdminStudent,
   AdminTeam,
   AdminUser,
@@ -28,6 +41,8 @@ export interface AdminApi {
   /** Every team matching the filters (no paging), for CSV export. */
   exportTeams(query: TeamQuery): Promise<AdminTeam[]>;
   getTeam(id: string): Promise<AdminTeam>;
+  /** Creates a team for registered students, whether or not registration is open. */
+  createTeam(input: AdminTeamInput): Promise<AdminTeam>;
   withdrawTeam(id: string, reason: string): Promise<AdminTeam>;
   disqualifyTeam(id: string, reason: string): Promise<AdminTeam>;
   restoreTeam(id: string, reason: string): Promise<AdminTeam>;
@@ -46,12 +61,35 @@ export interface AdminApi {
   saveFinalists(department: string, nominations: NominationInput): Promise<FinalistBoard>;
   finalistSummary(): Promise<FinalistSummary>;
   publishResults(): Promise<PublishResult>;
+  /** Withdraws published results (e.g. published by mistake): every department team's result goes back to pending. */
+  unpublishResults(reason: string): Promise<void>;
 
   listAdmins(): Promise<AdminUser[]>;
   addAdmin(input: AdminInput): Promise<AdminUser>;
   removeAdmin(email: string): Promise<void>;
 
   audit(query?: { teamId?: string; limit?: number }): Promise<AuditEntry[]>;
+  /** The whole audit log, newest first, a page at a time. */
+  activity(query: ActivityQuery): Promise<Page<AuditEntry>>;
+
+  judging(round: JudgingRound): Promise<Judging>;
+  openJudging(round: JudgingRound): Promise<RoundState>;
+  lockJudging(round: JudgingRound): Promise<RoundState>;
+  rankings(round: JudgingRound, department?: string): Promise<Rankings>;
+  attendance(round: JudgingRound, panelId?: string): Promise<AttendanceSheet>;
+  setTents(tents: { teamId: string; tent: string | null }[]): Promise<Judging>;
+  createPanel(input: PanelInput): Promise<Panel>;
+  updatePanel(id: string, input: { name: string; location: string }): Promise<Panel>;
+  deletePanel(id: string): Promise<void>;
+  setPanelTeams(id: string, teamIds: string[]): Promise<Panel>;
+  setPanelJurors(id: string, jurors: { email: string; chair: boolean }[]): Promise<Panel>;
+  listJurors(): Promise<Juror[]>;
+  addJuror(input: JurorInput): Promise<Juror>;
+  removeJuror(email: string): Promise<void>;
+
+  /** A judge's own panels and scores. */
+  judgeView(): Promise<JudgeView>;
+  saveScore(panelId: string, teamId: string, marks: number[], remarks: string): Promise<Score>;
 }
 
 export class ApiError extends Error {

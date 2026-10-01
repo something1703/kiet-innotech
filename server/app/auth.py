@@ -28,7 +28,7 @@ from . import rules
 from .config import Settings, get_settings
 from .db import get_db
 from .errors import ApiError
-from .models import Admin, User, utcnow
+from .models import Admin, Juror, User, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +125,9 @@ def find_admin(db: Session, email: str, settings: Settings) -> Admin | None:
 def sign_in(db: Session, identity: Identity, app: App, settings: Settings, google_sub: str | None = None) -> dict[str, str]:
     """Checks the account may use `app`, records the sign-in and issues a session."""
     if app == "admin":
-        if find_admin(db, identity.email, settings) is None:
-            raise ApiError("This account is not an InnoTech26 organiser.", 403)
+        # Organisers and appointed judges use the admin panel; judges see only their own judging page.
+        if find_admin(db, identity.email, settings) is None and db.get(Juror, identity.email) is None:
+            raise ApiError("This account is not an InnoTech26 organiser or judge.", 403)
     else:
         user = _get_or_create_user(db, identity)
         if google_sub and user.google_sub != google_sub:
@@ -237,3 +238,16 @@ def require_super_admin(admin: CurrentAdmin) -> Admin:
 
 
 SuperAdmin = Annotated[Admin, Depends(require_super_admin)]
+
+
+def get_current_juror(
+    identity: Annotated[Identity, Depends(get_admin_identity)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Juror:
+    juror = db.get(Juror, identity.email)
+    if juror is None:
+        raise ApiError("This account is not an appointed InnoTech26 judge.", 403)
+    return juror
+
+
+CurrentJuror = Annotated[Juror, Depends(get_current_juror)]

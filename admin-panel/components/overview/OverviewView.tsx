@@ -11,12 +11,9 @@ import { downloadOverviewExcel } from "@/lib/export";
 import { categoryTitle, formatDate, formatDateTime, formatIst, formatNumber, typeShortLabels } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
-import { teamHref } from "@/lib/routes";
-import { AuditList } from "@/components/audit/AuditList";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading, Notice } from "@/components/ui/Notice";
-import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
-import { Pill, StatusPill } from "@/components/ui/Pill";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Pill } from "@/components/ui/Pill";
 import { ChartCard, DataTable, Segmented } from "@/components/charts/ChartCard";
 import { Columns } from "@/components/charts/Columns";
 import { Donut } from "@/components/charts/Donut";
@@ -100,8 +97,8 @@ function WindowStrip({ stats }: { stats: Stats }) {
 export function OverviewView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
+  const outside = admin.role === "outside_admin";
   const stats = useQuery("stats", () => api.stats());
-  const activity = useQuery("audit-recent", () => api.audit({ limit: 8 }));
   const data = stats.data;
   const [reporting, setReporting] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -122,12 +119,14 @@ export function OverviewView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All departments, colleges and schools" : `${admin.department} department`}
+        eyebrow={isSuper ? "All departments, colleges and schools" : outside ? "Other colleges and schools" : `${admin.department} department`}
         title="Overview"
         description={
           isSuper
             ? "Registrations across InnoTech26. Department admins see the same page for their own department."
-            : `Registrations of ${admin.department} students and teams led by ${admin.department} students.`
+            : outside
+              ? "Registrations from other colleges and schools, who go straight to the Grand Finale."
+              : `Registrations of ${admin.department} students and teams led by ${admin.department} students.`
         }
         actions={
           <Button variant="secondary" onClick={downloadReport} pending={reporting} disabled={!data}>
@@ -149,45 +148,19 @@ export function OverviewView() {
           </section>
           <Charts stats={data} />
 
-          <div className="grid gap-8 pt-2 xl:grid-cols-2">
-            <section aria-labelledby="recent-submissions" className="min-w-0">
-              <SectionTitle id="recent-submissions" title="Recent submissions" meta={<Link href="/teams?status=submitted&sort=submitted_at&order=desc" className="font-semibold text-brand-700 hover:underline">All submitted teams</Link>} />
-              {data.recentSubmissions.length === 0 ? (
-                <EmptyState title="No submitted teams yet" />
-              ) : (
-                <ol className="divide-y divide-line border-y border-line">
-                  {data.recentSubmissions.map((team) => (
-                    <li key={team.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
-                      <div className="min-w-0">
-                        <Link href={teamHref(team.id)} className="font-semibold text-navy-900 hover:text-brand-700 hover:underline">
-                          {team.name}
-                        </Link>
-                        <p className="text-xs text-muted">
-                          {team.code} · Category {team.category} · {team.department ?? team.institution} · {team.memberCount} members
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted">
-                        <StatusPill status={team.status} />
-                        <time dateTime={team.submittedAt ?? undefined}>{formatDateTime(team.submittedAt)}</time>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            <section aria-labelledby="recent-activity" className="min-w-0">
-              <SectionTitle id="recent-activity" title="Recent activity" meta="Audit log, newest first" />
-              {activity.error && <Notice tone="error">{activity.error}</Notice>}
-              {!activity.data && !activity.error && <Loading label="Loading activity" />}
-              {activity.data && (activity.data.length ? <AuditList entries={activity.data} /> : <EmptyState title="No activity yet" />)}
-            </section>
-          </div>
         </>
       )}
     </div>
   );
 }
+
+type YearMode = "students" | "led" | "with";
+const yearNotes: Record<YearMode, string> = { students: "students", led: "active teams led", with: "active teams with a member" };
+const yearDescriptions: Record<YearMode, string> = {
+  students: "Registered students by year (college) or class (school)",
+  led: "Active teams by the leader's year",
+  with: "Active teams with at least one member of each year",
+};
 
 const trendSeries: Series<"students" | "teams" | "submitted">[] = [
   { key: "students", label: "Students registered", color: categorical[0] },
@@ -205,6 +178,7 @@ const statusTable = (rows: (StatusCounts & { label: string })[]) => (
 /** The dashboard: every chart has a table view, and bars, slices and rows link to the matching filtered list. */
 function Charts({ stats }: { stats: Stats }) {
   const [trendMode, setTrendMode] = useState<"cumulative" | "daily">("cumulative");
+  const [yearMode, setYearMode] = useState<YearMode>("students");
   const running = { students: 0, teams: 0, submitted: 0 };
   const trend: TrendPoint<"students" | "teams" | "submitted">[] = stats.timeline.map((day) => {
     if (trendMode === "daily") return { date: day.date, values: { students: day.students, teams: day.teams, submitted: day.submitted } };
@@ -215,10 +189,12 @@ function Charts({ stats }: { stats: Stats }) {
   });
 
   const statusSlices = statusSeries.map((s) => ({ key: s.key, label: s.label, color: s.color, value: stats.teams[s.key], href: `/teams?status=${s.key}` }));
+  const yearValue = (r: Stats["byYear"][number]) => (yearMode === "students" ? r.students : yearMode === "led" ? r.teamsLed : r.teamsWith);
   const collegeYears = [1, 2, 3, 4].map((year) => ({
     key: String(year),
     label: yearLabel(year),
-    value: stats.byYear.filter((r) => r.participantType !== "school" && r.year === year).reduce((sum, r) => sum + r.students, 0),
+    note: `${yearLabel(year)} · ${yearNotes[yearMode]}`,
+    value: stats.byYear.filter((r) => r.participantType !== "school" && r.year === year).reduce((sum, r) => sum + yearValue(r), 0),
   }));
   const schoolYears = stats.byYear.filter((r) => r.participantType === "school");
   const domainRows = stats.byDomain.map((d) => ({ key: d.domain, label: d.domain, values: { value: d.teams } }));
@@ -320,15 +296,44 @@ function Charts({ stats }: { stats: Stats }) {
         )}
         <ChartCard
           title="Year of study"
-          description="KIET and college students"
-          table={<DataTable head={["Year / class", "Students"]} rows={[...collegeYears.map((c) => [c.label, c.value]), ...schoolYears.map((r) => [yearLabel(r.year, "school"), r.students])]} />}
+          description={yearDescriptions[yearMode]}
+          controls={
+            <Segmented
+              label="Students or teams by year"
+              value={yearMode}
+              onChange={setYearMode}
+              options={[
+                { value: "students", label: "Students" },
+                { value: "led", label: "Teams led" },
+                { value: "with", label: "Teams with" },
+              ]}
+            />
+          }
+          table={
+            <DataTable
+              head={["Year / class", "Type", "Students", "Active teams led", "Active teams with a member"]}
+              rows={stats.byYear.map((r) => [yearLabel(r.year, r.participantType), typeShortLabels[r.participantType], r.students, r.teamsLed, r.teamsWith])}
+            />
+          }
         >
-          <Columns columns={collegeYears} unit="students" />
+          <Columns columns={collegeYears} unit={yearNotes[yearMode]} />
           {schoolYears.length > 0 && (
             <p className="mt-3 text-xs text-muted">
-              School students: {schoolYears.map((r) => `${yearLabel(r.year, "school")}: ${formatNumber(r.students)}`).join(" · ")}
+              School: {schoolYears.map((r) => `${yearLabel(r.year, "school")}: ${formatNumber(yearValue(r))}`).join(" · ")}
             </p>
           )}
+          <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="text-muted">Open teams {yearMode === "led" ? "led by" : "with"}:</span>
+            {[1, 2, 3, 4].map((year) => (
+              <Link
+                key={year}
+                href={`/teams?${yearMode === "led" ? "leader_year" : "year"}=${year}`}
+                className="font-semibold text-brand-700 hover:underline"
+              >
+                {yearLabel(year)}
+              </Link>
+            ))}
+          </p>
         </ChartCard>
         <ChartCard
           title="Team sizes"

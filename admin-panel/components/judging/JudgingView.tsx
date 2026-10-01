@@ -1,0 +1,200 @@
+"use client";
+
+import { useState } from "react";
+import { Lock, LockOpen, ScrollText } from "lucide-react";
+import { api } from "@/lib/api";
+import type { Judging, JudgingRound } from "@/lib/admin-types";
+import { useAdmin } from "@/lib/auth/AuthProvider";
+import { formatDateTime, roundLabels } from "@/lib/format";
+import { useQuery } from "@/lib/use-query";
+import { pickParam, useUrlParams } from "@/lib/use-url-params";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { Field, Select } from "@/components/ui/Field";
+import { Loading, Notice } from "@/components/ui/Notice";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Pill } from "@/components/ui/Pill";
+import { JurorsTab } from "./JurorsTab";
+import { PanelsTab } from "./PanelsTab";
+import { RankingsTab } from "./RankingsTab";
+import { TentsTab } from "./TentsTab";
+
+type Tab = "rooms" | "judges" | "tents" | "rankings";
+
+/** The event document's rules for each round, shown on the page so nobody has to look them up. */
+const roundRules: Record<JudgingRound, string[]> = {
+  department: [
+    "22 to 24 October. KIET teams are judged in rooms; each room takes one department's teams and has its own panel of judges.",
+    "Judges are faculty of another department (the panel refuses faculty of the room's own department). One judge chairs the panel.",
+    "Every category is marked out of 50 on its common rubric: five criteria of 10, the first four in two parts of 5.",
+    "Ties: higher Innovation / Originality score, then Query Addressing, then the panel chair decides. No shared positions.",
+    "Each department nominates one finalist per category (two in Categories 1 to 4 for CSE, CS, CSE(AI) and CSE(AIML)) by 24 October, 6:00 PM.",
+  ],
+  final: [
+    "30 October, institute level. Department finalists and teams from other colleges and schools exhibit in numbered tents.",
+    "The plan is 8 panels of 2 external judges (16 judges), covering Categories 1 to 8 and the school entries.",
+    "Same rubrics and tie-breakers as the department round. Schools also compete for the Best School Project award.",
+    "Prizes: ₹8,000 / ₹5,000 for project categories, ₹4,000 / ₹3,000 for posters, ₹5,000 / ₹3,000 for the best school project.",
+  ],
+};
+
+export function JudgingView() {
+  const admin = useAdmin();
+  const isSuper = admin.role === "super_admin";
+  const rounds: JudgingRound[] = admin.role === "admin" ? ["department"] : admin.role === "outside_admin" ? ["final"] : ["department", "final"];
+  const { params, update } = useUrlParams();
+  const round = pickParam(params, "round", rounds) ?? rounds[0];
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "rooms", label: round === "department" ? "Rooms" : "Panels" },
+    ...(isSuper ? [{ key: "judges" as Tab, label: "Judges" }] : []),
+    ...(round === "final" ? [{ key: "tents" as Tab, label: "Tents" }] : []),
+    ...(admin.role !== "outside_admin" ? [{ key: "rankings" as Tab, label: "Rankings" }] : []),
+  ];
+  const tab = pickParam(params, "tab", tabs.map((t) => t.key)) ?? "rooms";
+  const judging = useQuery(`judging-${round}`, () => api.judging(round));
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={isSuper ? "Super admin" : admin.role === "outside_admin" ? "Other colleges and schools · read only" : `${admin.department} department · read only`}
+        title="Judging"
+        description={
+          isSuper
+            ? "Appoint judges, set up rooms and finale panels, allot teams and tents, and open scoring when the round starts."
+            : "Your rooms, their judges and teams, and attendance sheets. Organisers manage the allotments."
+        }
+        actions={
+          <Field label="Round" htmlFor="judging-round" className="w-48">
+            <Select id="judging-round" value={round} onChange={(e) => update({ round: e.target.value, tab: null })} disabled={rounds.length === 1}>
+              {rounds.map((r) => (
+                <option key={r} value={r}>{roundLabels[r]}</option>
+              ))}
+            </Select>
+          </Field>
+        }
+      />
+
+      {judging.error && <Notice tone="error">{judging.error}</Notice>}
+      {!judging.data && !judging.error && <Loading label="Loading judging" />}
+
+      {judging.data && (
+        <>
+          <RoundBar judging={judging.data} canManage={isSuper} onChange={judging.reload} />
+          <details className="group rounded-2xl bg-white ring-1 ring-line">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-navy-900">
+              <ScrollText aria-hidden="true" className="size-4 text-brand-600" />
+              Rules for the {roundLabels[round].toLowerCase()} round (from the event document)
+              <span className="ml-auto text-xs font-normal text-muted group-open:hidden">Show</span>
+              <span className="ml-auto hidden text-xs font-normal text-muted group-open:inline">Hide</span>
+            </summary>
+            <ul className="list-disc space-y-1.5 border-t border-line px-4 py-3 pl-8 text-sm text-navy-800">
+              {roundRules[round].map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </details>
+
+          <div role="tablist" aria-label="Judging sections" className="flex gap-1 overflow-x-auto border-b border-line">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                role="tab"
+                type="button"
+                aria-selected={tab === t.key}
+                onClick={() => update({ tab: t.key === "rooms" ? null : t.key })}
+                className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                  tab === t.key ? "border-accent-500 text-navy-900" : "border-transparent text-muted hover:text-navy-900"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div role="tabpanel">
+            {tab === "rooms" && <PanelsTab judging={judging.data} reload={judging.reload} />}
+            {tab === "judges" && isSuper && <JurorsTab onChange={judging.reload} />}
+            {tab === "tents" && round === "final" && <TentsTab judging={judging.data} onSaved={judging.setData} />}
+            {tab === "rankings" && <RankingsTab round={round} />}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RoundBar({ judging, canManage, onChange }: { judging: Judging; canManage: boolean; onChange: () => void }) {
+  const { round } = judging;
+  const [confirming, setConfirming] = useState<"open" | "lock" | null>(null);
+  const panels = judging.panels.length;
+  const teams = judging.panels.reduce((sum, p) => sum + p.teams.length, 0);
+  const judges = new Set(judging.panels.flatMap((p) => p.jurors.map((j) => j.email))).size;
+  const scored = judging.panels.reduce((sum, p) => sum + p.teams.reduce((s, t) => s + t.scores, 0), 0);
+  const expected = judging.panels.reduce((sum, p) => sum + p.teams.length * p.jurors.length, 0);
+
+  return (
+    <section aria-label="Scoring status" className={`rounded-2xl px-4 py-4 ring-1 sm:px-5 ${round.open ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-line"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-2">
+            {round.open ? <LockOpen aria-hidden="true" className="size-5 text-emerald-700" /> : <Lock aria-hidden="true" className="size-5 text-navy-800" />}
+            <span className="font-display text-lg font-bold text-navy-900">Scoring is {round.open ? "open" : "locked"}</span>
+            <Pill tone={round.open ? "green" : "slate"}>{roundLabels[round.round]}</Pill>
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {round.open
+              ? "Judges can save and change their marks for the teams in their own rooms."
+              : "Judges can already sign in and see their room and teams, but cannot save marks until scoring is opened."}
+            {round.changedAt && ` Last ${round.open ? "opened" : "changed"} ${formatDateTime(round.changedAt)} by ${round.changedBy}.`}
+          </p>
+          {!round.open && round.openBlocked && canManage && <p className="mt-2 text-sm font-medium text-accent-600">{round.openBlocked}</p>}
+        </div>
+        {canManage &&
+          (round.open ? (
+            <Button variant="secondary" onClick={() => setConfirming("lock")}>
+              <Lock aria-hidden="true" className="size-4" />
+              Lock scoring
+            </Button>
+          ) : (
+            <Button onClick={() => setConfirming("open")} disabled={round.openBlocked !== null}>
+              <LockOpen aria-hidden="true" className="size-4" />
+              Open scoring
+            </Button>
+          ))}
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        {[
+          [judging.round.round === "department" ? "Rooms" : "Panels", panels],
+          ["Teams allotted", teams],
+          ["Judges", judges],
+          ["Scores in", expected ? `${scored} / ${expected}` : "—"],
+        ].map(([label, value]) => (
+          <div key={label as string}>
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</dt>
+            <dd className="font-display text-xl font-bold tabular-nums text-navy-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === "open" ? `Open scoring for the ${roundLabels[round.round].toLowerCase()} round?` : "Lock scoring?"}
+          description={
+            confirming === "open"
+              ? "Every judge on a panel of this round can save marks for their own teams until you lock it again."
+              : "Judges keep seeing their teams and marks but can no longer save or change them. You can open it again later."
+          }
+          confirmLabel={confirming === "open" ? "Open scoring" : "Lock scoring"}
+          tone={confirming === "open" ? "primary" : "danger"}
+          onClose={() => setConfirming(null)}
+          onConfirm={async () => {
+            if (confirming === "open") await api.openJudging(round.round);
+            else await api.lockJudging(round.round);
+            setConfirming(null);
+            onChange();
+          }}
+        />
+      )}
+    </section>
+  );
+}

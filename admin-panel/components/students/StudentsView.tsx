@@ -35,6 +35,8 @@ const studentKey = (student: AdminStudent) => student.userId;
 export function StudentsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
+  const outside = admin.role === "outside_admin";
+  const typeChoices = isSuper ? types : outside ? types.filter((t) => t !== "kiet") : [];
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
@@ -44,7 +46,7 @@ export function StudentsView() {
 
   const inTeam = params.get("team");
   const query: StudentQuery = {
-    type: isSuper ? pickParam(params, "type", types) : undefined,
+    type: typeChoices.length ? pickParam(params, "type", typeChoices) : undefined,
     department: isSuper ? pickParam(params, "department", departments) : undefined,
     year: intParam(params, "year", 1, 12),
     inTeam: inTeam === "yes" || inTeam === "no" ? inTeam : undefined,
@@ -90,17 +92,19 @@ export function StudentsView() {
   }
 
   const sortProps = { sort: query.sort ?? "name", order: query.order ?? "asc", onSort } as const;
-  const showClasses = isSuper && query.type !== "kiet" && query.type !== "college";
+  const showClasses = typeChoices.includes("school") && query.type !== "kiet" && query.type !== "college";
   const showYears = query.type !== "school";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All participants" : `${admin.department} department`}
+        eyebrow={isSuper ? "All participants" : outside ? "Other colleges and schools" : `${admin.department} department`}
         title="Students"
         description={
           isSuper
             ? "Everyone who has registered, whether or not they have joined a team."
+            : outside
+              ? "Students from other colleges and schools, whether or not they have joined a team."
             : `KIET students registered in ${admin.department}, including those in teams led by other departments.`
         }
         actions={
@@ -121,11 +125,11 @@ export function StudentsView() {
           onSearch={(q) => update({ q })}
         />
         <div className={`grid grid-cols-2 gap-3 ${isSuper ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
-          {isSuper && (
+          {typeChoices.length > 0 && (
             <Field label="Participant type" htmlFor="filter-type">
               <Select id="filter-type" value={query.type ?? ""} onChange={(e) => update({ type: e.target.value, year: null })}>
                 <option value="">All types</option>
-                {types.map((t) => (
+                {typeChoices.map((t) => (
                   <option key={t} value={t}>{typeShortLabels[t]}</option>
                 ))}
               </Select>
@@ -232,7 +236,7 @@ export function StudentsView() {
                   <SortableTh label="Name" sortKey="name" {...sortProps} />
                   <SortableTh label="Email" sortKey="email" {...sortProps} />
                   <Th>Phone</Th>
-                  <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
+                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : "Department"} sortKey="department" {...sortProps} />
                   <SortableTh label="Year" sortKey="year" {...sortProps} />
                   <Th>Roll no.</Th>
                   <Th>Team</Th>
@@ -241,7 +245,7 @@ export function StudentsView() {
               </thead>
               <tbody>
                 {data.items.map((s) => {
-                  const teamVisible = s.team && (isSuper || s.team.department === admin.department);
+                  const teamVisible = s.team && (isSuper || outside || s.team.department === admin.department);
                   return (
                     <tr key={s.userId} className={selection.has(s) ? "bg-brand-50/70" : "hover:bg-surface/70"}>
                       <td className={tdClass}>
@@ -252,7 +256,7 @@ export function StudentsView() {
                       <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
                       <td className={tdClass}>
                         {s.department ?? <span className="block max-w-56">{s.institution}</span>}
-                        {isSuper && (
+                        {typeChoices.length > 0 && (
                           <span className="mt-0.5 block">
                             <Pill tone={s.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[s.participantType]}</Pill>
                           </span>

@@ -10,7 +10,9 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -166,12 +168,15 @@ class Invitation(Base):
 
 
 class Admin(Base):
-    """Organisers. Super admins see everything; admins are scoped to one KIET department."""
+    """
+    Organisers. Super admins see everything; admins are scoped to one KIET department; outside admins see only
+    teams and students from other colleges and schools.
+    """
 
     __tablename__ = "admins"
     __table_args__ = (
-        CheckConstraint("role IN ('super_admin', 'admin')", name="role"),
-        CheckConstraint("role = 'super_admin' OR department IS NOT NULL", name="department"),
+        CheckConstraint("role IN ('super_admin', 'admin', 'outside_admin')", name="role"),
+        CheckConstraint("role <> 'admin' OR department IS NOT NULL", name="department"),
     )
 
     email: Mapped[str] = mapped_column(String(320), primary_key=True)
@@ -216,6 +221,8 @@ class AuditEntry(Base):
     team_code: Mapped[str | None] = mapped_column(String(12))
     # KIET department the entry belongs to, so department admins see only their own history. Null = institute-wide.
     department: Mapped[str | None] = mapped_column(String(20), index=True)
+    # Participant type of the team, so outside admins see the history of other colleges' and schools' teams.
+    participant_type: Mapped[str | None] = mapped_column(String(10))
     detail: Mapped[str] = mapped_column(Text, default="")
 
 
@@ -227,3 +234,102 @@ class RateLimit(Base):
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
     window_start: Mapped[datetime] = mapped_column(Timestamp)
     count: Mapped[int] = mapped_column(Integer)
+
+
+# ---------- Judging ----------
+
+
+class Juror(Base):
+    """A judge appointed by the organisers. They sign in to the admin panel and see only their own panels' teams."""
+
+    __tablename__ = "jurors"
+    __table_args__ = (
+        CheckConstraint("kind IN ('faculty', 'external')", name="kind"),
+        # KIET faculty belong to a department, which may not judge its own teams.
+        CheckConstraint("kind = 'external' OR department IS NOT NULL", name="department"),
+    )
+
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(10))
+    department: Mapped[str | None] = mapped_column(String(20))
+    organisation: Mapped[str] = mapped_column(String(200), default="")
+    phone: Mapped[str] = mapped_column(String(10), default="")
+    created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(320))
+
+
+class Panel(Base):
+    """A judging room (department round, one department's teams) or a finale panel."""
+
+    __tablename__ = "panels"
+    __table_args__ = (
+        CheckConstraint("round IN ('department', 'final')", name="round"),
+        CheckConstraint("round = 'final' OR department IS NOT NULL", name="department"),
+        Index("uq_panels_round_name_key", "round", "name_key", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    round: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(60))
+    name_key: Mapped[str] = mapped_column(String(60))
+    location: Mapped[str] = mapped_column(String(120), default="")
+    # Department round: the department whose teams are judged here.
+    department: Mapped[str | None] = mapped_column(String(20), index=True)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(320))
+
+
+class PanelJuror(Base):
+    __tablename__ = "panel_jurors"
+    __table_args__ = (
+        # One chair per panel; the chair settles ties (event document: tie-breaker rules).
+        Index("uq_panel_jurors_chair", "panel_id", unique=True, postgresql_where=text("chair"), sqlite_where=text("chair")),
+    )
+
+    panel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("panels.id", ondelete="CASCADE"), primary_key=True)
+    juror_email: Mapped[str] = mapped_column(ForeignKey("jurors.email", ondelete="RESTRICT"), primary_key=True, index=True)
+    chair: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PanelTeam(Base):
+    __tablename__ = "panel_teams"
+    __table_args__ = (
+        # A team is judged by one panel in each round.
+        Index("uq_panel_teams_round_team", "round", "team_id", unique=True),
+    )
+
+    panel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("panels.id", ondelete="CASCADE"), primary_key=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
+    round: Mapped[str] = mapped_column(String(10))
+
+
+class FinalTent(Base):
+    """Where a team exhibits at the Grand Finale."""
+
+    __tablename__ = "final_tents"
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
+    tent: Mapped[str] = mapped_column(String(12), unique=True)
+    assigned_by: Mapped[str] = mapped_column(String(320))
+    assigned_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+
+
+class Score(Base):
+    """One juror's marks for one team in one round (nine marks, see rules.RUBRIC_PARTS)."""
+
+    __tablename__ = "scores"
+    __table_args__ = (
+        CheckConstraint("round IN ('department', 'final')", name="round"),
+        Index("uq_scores_round_team_juror", "round", "team_id", "juror_email", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    round: Mapped[str] = mapped_column(String(10))
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    juror_email: Mapped[str] = mapped_column(ForeignKey("jurors.email", ondelete="RESTRICT"), index=True)
+    marks: Mapped[list[int]] = mapped_column(JSON)
+    total: Mapped[int] = mapped_column(Integer)
+    remarks: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow, onupdate=utcnow)

@@ -81,6 +81,7 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
         <Field label="Role" htmlFor="role-input">
           <Select id="role-input" value={role} onChange={(e) => setRole(e.target.value as AdminRole)}>
             <option value="admin">{roleLabels.admin}</option>
+            <option value="outside_admin">{roleLabels.outside_admin} (other colleges and schools)</option>
             <option value="super_admin">{roleLabels.super_admin}</option>
           </Select>
         </Field>
@@ -88,18 +89,18 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
           label="Department"
           htmlFor="department-input"
           error={errors.department}
-          hint={role === "super_admin" ? "Super admins see every department." : "Required for department admins."}
+          hint={role === "super_admin" ? "Super admins see every department." : role === "outside_admin" ? "Sees only teams and students from other colleges and schools." : "Required for department admins."}
         >
           <Select
             id="department-input"
-            value={role === "super_admin" ? "" : department}
+            value={role === "admin" ? department : ""}
             onChange={(e) => setDepartment(e.target.value)}
-            disabled={role === "super_admin"}
+            disabled={role !== "admin"}
             required={role === "admin"}
             aria-invalid={errors.department ? true : undefined}
             aria-describedby={describe("department", true)}
           >
-            <option value="">{role === "super_admin" ? "All departments" : "Choose a department"}</option>
+            <option value="">{role === "super_admin" ? "All departments" : role === "outside_admin" ? "No department" : "Choose a department"}</option>
             {departments.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
@@ -134,7 +135,7 @@ export function AdminsView() {
             <span id="admins-denied" className="font-display text-lg font-bold">Not authorised</span>
           </p>
           <p className="mt-1 text-sm text-muted">
-            Only the super admin can view and manage admins. You are a department admin for {me.department}.
+            Only the super admin can view and manage admins.
           </p>
           <ButtonLink href="/" size="sm" className="mt-4">
             Back to overview
@@ -154,7 +155,7 @@ export function AdminsView() {
       <PageHeader
         eyebrow="Super admin"
         title="Admins"
-        description="Department admins see only their department's teams and students and nominate its finalists. Super admins see everything and publish results."
+        description="Department admins see only their department's teams and students and nominate its finalists. Outside teams admins look after teams from other colleges and schools. Super admins see everything and publish results. Judges are appointed on the Judging page."
       />
 
       {message && <Notice tone="success">{message}</Notice>}
@@ -188,9 +189,9 @@ export function AdminsView() {
                     </td>
                     <td className={`${tdClass} break-all`}>{admin.email}</td>
                     <td className={tdClass}>
-                      <Pill tone={admin.role === "super_admin" ? "navy" : "cyan"}>{roleLabels[admin.role]}</Pill>
+                      <Pill tone={admin.role === "super_admin" ? "navy" : admin.role === "outside_admin" ? "orange" : "cyan"}>{roleLabels[admin.role]}</Pill>
                     </td>
-                    <td className={tdClass}>{admin.department ?? <span className="text-muted">All</span>}</td>
+                    <td className={tdClass}>{admin.department ?? <span className="text-muted">{admin.role === "outside_admin" ? "Other colleges & schools" : "All"}</span>}</td>
                     <td className={`${tdClass} whitespace-nowrap text-muted`}>{configured ? "Server configuration" : formatDate(admin.addedAt)}</td>
                     <td className={`${tdClass} text-right`}>
                       {self ? (
@@ -215,7 +216,11 @@ export function AdminsView() {
         <SectionTitle id="add-admin" title="Add an admin" meta="They sign in with Google using this email" />
         <AddAdminForm
           onAdded={(admin) => {
-            setMessage(`${admin.name} (${admin.email}) can now sign in as ${admin.role === "super_admin" ? "a super admin" : `the ${admin.department} admin`}.`);
+            setMessage(
+              `${admin.name} (${admin.email}) can now sign in as ${
+                admin.role === "super_admin" ? "a super admin" : admin.role === "outside_admin" ? "the admin for other colleges and schools" : `the ${admin.department} admin`
+              }.`,
+            );
             admins.reload();
           }}
         />

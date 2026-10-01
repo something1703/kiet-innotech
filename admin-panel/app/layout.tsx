@@ -28,7 +28,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${headingFont.variable} antialiased`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${bodyFont.variable} ${headingFont.variable} antialiased`}>
       <body className="min-h-screen font-sans">
         <AuthProvider>{children}</AuthProvider>
       </body>

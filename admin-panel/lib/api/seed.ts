@@ -35,13 +35,22 @@ export type MockDb = {
   publishedAt: string | null;
   publishedBy: string | null;
   /** The schedule organisers can change (registration window, nominations deadline). */
-  schedule: { opens: string; closes: string; deadline: string | null; customised: boolean; updatedBy: string | null; updatedAt: string | null };
+  schedule: {
+    opens: string;
+    closes: string;
+    deadline: string | null;
+    /** Results cannot be published before this. Missing in older saved data: the planned date applies. */
+    resultsFrom?: string | null;
+    customised: boolean;
+    updatedBy: string | null;
+    updatedAt: string | null;
+  };
   /** Latest timestamp handed out, so new actions always sort after the seeded October data. */
   clock: number;
   seq: number;
 };
 
-export const MOCK_DB_VERSION = 2;
+export const MOCK_DB_VERSION = 3;
 
 // ---------- Seeded PRNG (mulberry32) ----------
 

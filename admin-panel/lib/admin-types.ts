@@ -5,14 +5,18 @@
  */
 import type { ParticipantType, Profile, Team, TeamMember, TeamResult, TeamRoute, TeamStatus } from "./types";
 
-export type AdminRole = "super_admin" | "admin";
+/** Organiser roles. A department admin sees one KIET department; an outside admin other colleges and schools. */
+export type AdminRole = "super_admin" | "admin" | "outside_admin";
 
 export type AdminUser = {
   email: string;
   name: string;
-  role: AdminRole;
-  /** The KIET department an admin is scoped to. Always null for a super admin. */
+  /** "judge": an appointed judge who is not an organiser; they see only their own judging page. */
+  role: AdminRole | "judge";
+  /** The KIET department a department admin is scoped to (or a faculty judge belongs to). Null otherwise. */
   department: string | null;
+  /** True when this account is also an appointed judge. */
+  judge?: boolean;
   /** Null for super admins set in the server configuration. */
   addedAt?: string | null;
   /** An admin's email, or CONFIGURED_BY_SERVER. */
@@ -22,7 +26,7 @@ export type AdminUser = {
 /** `addedBy` of super admins listed in the backend's configuration. They cannot be removed from the panel. */
 export const CONFIGURED_BY_SERVER = "server configuration";
 
-export type AdminInput = Pick<AdminUser, "email" | "name" | "role" | "department">;
+export type AdminInput = { email: string; name: string; role: AdminRole; department: string | null };
 
 export type AuditAction =
   | "team.created"
@@ -46,7 +50,28 @@ export type AuditAction =
   | "schedule.updated"
   | "schedule.opened"
   | "schedule.closed"
-  | "results.unpublished";
+  | "results.unpublished"
+  | "judging.opened"
+  | "judging.locked"
+  | "judging.judge_added"
+  | "judging.judge_removed"
+  | "judging.panel_created"
+  | "judging.panel_updated"
+  | "judging.panel_deleted"
+  | "judging.teams_allotted"
+  | "judging.judges_assigned"
+  | "judging.tents_allotted"
+  | "judging.scored";
+
+export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging";
+
+export type ActivityQuery = {
+  kind?: ActivityKind;
+  department?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+};
 
 export type AuditEntry = {
   id: string;
@@ -93,7 +118,7 @@ export type Page<T> = {
 
 export type SortOrder = "asc" | "desc";
 
-export type TeamSort = "code" | "name" | "category" | "department" | "status" | "members" | "submitted_at";
+export type TeamSort = "code" | "name" | "category" | "department" | "status" | "members" | "submitted_at" | "leader_year";
 
 export type TeamQuery = {
   department?: string;
@@ -101,6 +126,10 @@ export type TeamQuery = {
   status?: TeamStatus;
   type?: ParticipantType;
   route?: TeamRoute;
+  /** Teams with at least one member in this year (college) or class (school). */
+  year?: number;
+  /** Teams whose leader is in this year or class. */
+  leaderYear?: number;
   q?: string;
   sort?: TeamSort;
   order?: SortOrder;
@@ -147,7 +176,8 @@ export type Stats = {
   resultsPublishedAt: string | null;
   /** One entry per day (IST), oldest first, from registration opening to today. */
   timeline: TimelinePoint[];
-  byYear: { participantType: ParticipantType; year: number; students: number }[];
+  /** Students per year, plus active teams led by that year and active teams with at least one member of it. */
+  byYear: { participantType: ParticipantType; year: number; students: number; teamsLed: number; teamsWith: number }[];
   /** Active teams (draft or submitted) by number of members, sizes 1 to 5. */
   teamSizes: { size: number; teams: number }[];
   /** Active teams by project domain, most popular first. */
@@ -173,19 +203,24 @@ export type Schedule = {
   nominationsDeadline: string | null;
   /** False once the deadline has passed (department admins are then locked out of nominations). */
   nominationsOpen: boolean;
+  /** Results cannot be published before this (finalists are declared on 26 October). Null = no restriction. */
+  resultsPublishFrom: string | null;
+  resultsDue: boolean;
   /** True once an organiser saved a change; false while the planned dates apply. */
   customised: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
   /** The server's clock, so the page never depends on the browser's. */
   serverTime: string;
-  planned: { registrationOpens: string; registrationCloses: string; nominationsDeadline: string | null };
+  planned: { registrationOpens: string; registrationCloses: string; nominationsDeadline: string | null; resultsPublishFrom: string | null };
 };
 
 export type ScheduleInput = {
   registrationOpens: string;
   registrationCloses: string;
   nominationsDeadline: string | null;
+  /** Left out: unchanged. */
+  resultsPublishFrom?: string | null;
 };
 
 export type TimelinePoint = {
@@ -215,6 +250,9 @@ export type TeamSummary = {
   memberCount: number;
   projectTitle: string;
   submittedAt: string | null;
+  leaderYear: number | null;
+  /** Every member's year (or class), the leader's first. */
+  memberYears: number[];
 };
 
 export type FinalistCategory = {
@@ -247,6 +285,9 @@ export type FinalistSummary = {
   nominationsDeadline: string | null;
   /** Why results cannot be published right now (null = they can). Decided by the server. */
   publishBlocked: string | null;
+  resultsPublishFrom: string | null;
+  /** Once published: why the results can no longer be withdrawn (null = a super admin can still withdraw them). */
+  unpublishBlocked: string | null;
   matrix: {
     department: string;
     categories: { category: number; quota: number; nominated: number; eligible: number }[];
@@ -260,3 +301,154 @@ export type PublishResult = {
   finalists: number;
   notSelected: number;
 };
+
+/** An organiser creates a team for registered students, whether or not registration is open. */
+export type AdminTeamInput = {
+  name: string;
+  category: number;
+  domain: string;
+  projectTitle: string;
+  abstract: string;
+  leaderEmail: string;
+  memberEmails: string[];
+  submit: boolean;
+};
+
+// ---------- Judging ----------
+
+export type JudgingRound = "department" | "final";
+
+export type Juror = {
+  email: string;
+  name: string;
+  kind: "faculty" | "external";
+  department: string | null;
+  organisation: string;
+  phone: string;
+  panels: { id: string; round: JudgingRound; name: string; chair: boolean }[];
+  scores: number;
+  addedAt: string | null;
+  addedBy: string | null;
+};
+
+export type JurorInput = Pick<Juror, "email" | "name" | "kind" | "department" | "organisation" | "phone">;
+
+export type PanelJuror = Pick<Juror, "email" | "name" | "kind" | "department" | "organisation"> & { chair: boolean };
+
+export type PanelTeam = TeamSummary & {
+  tent: string | null;
+  /** Scores recorded by this panel's judges, and their average total out of 50. */
+  scores: number;
+  average: number | null;
+};
+
+/** A judging room (department round, one department's teams) or a Grand Finale panel. */
+export type Panel = {
+  id: string;
+  round: JudgingRound;
+  name: string;
+  location: string;
+  department: string | null;
+  jurors: PanelJuror[];
+  teams: PanelTeam[];
+};
+
+export type RoundState = {
+  round: JudgingRound;
+  open: boolean;
+  changedAt: string | null;
+  changedBy: string | null;
+  /** Why the round cannot be opened now (null = it can, or it is open). */
+  openBlocked: string | null;
+};
+
+export type Judging = {
+  round: RoundState;
+  /** Super admins manage; everyone else sees it read-only. */
+  canManage: boolean;
+  panels: Panel[];
+  unallotted: TeamSummary[];
+  /** Final round only: every Grand Finale team and its tent. */
+  tents: { team: TeamSummary; tent: string | null }[] | null;
+};
+
+export type PanelInput = { round: JudgingRound; name: string; location: string; department: string | null };
+
+export type AttendanceSheet = {
+  round: JudgingRound;
+  title: string;
+  location: string;
+  jurors: string[];
+  teams: {
+    code: string;
+    name: string;
+    category: number;
+    projectTitle: string;
+    status: TeamStatus;
+    tent: string | null;
+    institution: string;
+    department: string | null;
+    members: {
+      fullName: string;
+      role: "leader" | "member";
+      year: number;
+      course: string;
+      department: string | null;
+      institution: string;
+      rollNumber: string;
+      phone: string;
+    }[];
+  }[];
+};
+
+export type RankedTeam = {
+  /** Null until the team has a score. */
+  position: number | null;
+  team: TeamSummary;
+  panel: string | null;
+  scores: number;
+  judges: number;
+  average: number | null;
+  innovation: number | null;
+  query: number | null;
+  /** Level with the team above on total, innovation and query addressing: the panel chair decides. */
+  tied: boolean;
+};
+
+export type Rankings = {
+  round: JudgingRound;
+  groups: { key: string; label: string; department: string | null; category: number | null; teams: RankedTeam[] }[];
+};
+
+export type Score = { marks: number[]; total: number; remarks: string; updatedAt: string };
+
+export type JudgeTeam = {
+  id: string;
+  code: string;
+  name: string;
+  category: number;
+  domain: string;
+  projectTitle: string;
+  abstract: string;
+  participantType: ParticipantType;
+  institution: string;
+  department: string | null;
+  status: TeamStatus;
+  tent: string | null;
+  members: { fullName: string; role: "leader" | "member"; year: number; course: string }[];
+  myScore: Score | null;
+};
+
+export type JudgePanel = {
+  id: string;
+  round: JudgingRound;
+  name: string;
+  location: string;
+  department: string | null;
+  chair: boolean;
+  /** Scores can be saved only while organisers keep the round open. */
+  open: boolean;
+  teams: JudgeTeam[];
+};
+
+export type JudgeView = { email: string; name: string; panels: JudgePanel[] };

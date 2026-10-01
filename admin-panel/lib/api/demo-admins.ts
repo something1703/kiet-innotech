@@ -8,4 +8,5 @@ export const demoAdmins: AdminUser[] = [
   { email: "superadmin@kiet.edu", name: "Neha Verma", role: "super_admin", department: null },
   { email: "cse.coordinator@kiet.edu", name: "Amit Kumar", role: "admin", department: "CSE" },
   { email: "it.coordinator@kiet.edu", name: "Sonal Gupta", role: "admin", department: "IT" },
+  { email: "outside.desk@kiet.edu", name: "Ravi Shah", role: "outside_admin", department: null },
 ];

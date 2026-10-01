@@ -6,6 +6,7 @@
 import {
   CONFIGURED_BY_SERVER,
   type AdminInput,
+  type AdminTeamInput,
   type AdminStudent,
   type AdminTeam,
   type AdminUser,
@@ -118,26 +119,32 @@ function requireSuper(admin: AdminUser, what: string) {
   if (admin.role !== "super_admin") throw new ApiError(403, `Only the super admin can ${what}.`);
 }
 
-function canSeeTeam(admin: AdminUser, team: AdminTeam) {
-  return admin.role === "super_admin" || (team.participantType === "kiet" && team.department === admin.department);
+/** Same scoping as the backend: department admins see one KIET department, outside admins other colleges and schools. */
+function inScope(admin: AdminUser, record: { participantType: ParticipantType; department: string | null }) {
+  if (admin.role === "super_admin") return true;
+  if (admin.role === "outside_admin") return record.participantType !== "kiet";
+  return record.participantType === "kiet" && record.department === admin.department;
 }
 
-function canSeeStudent(admin: AdminUser, student: StudentRecord) {
-  return admin.role === "super_admin" || (student.participantType === "kiet" && student.department === admin.department);
-}
+const canSeeTeam = (admin: AdminUser, team: AdminTeam) => inScope(admin, team);
+const canSeeStudent = (admin: AdminUser, student: StudentRecord) => inScope(admin, student);
 
 function checkDepartmentFilter(admin: AdminUser, department: string | undefined) {
-  if (admin.role === "admin" && department && department !== admin.department) {
-    throw new ApiError(403, `You can only view ${admin.department} data.`);
+  if (admin.role !== "super_admin" && department && department !== admin.department) {
+    throw new ApiError(403, admin.role === "outside_admin" ? "You can only view other colleges and schools." : `You can only view ${admin.department} data.`);
   }
 }
 
 function findTeam(db: MockDb, admin: AdminUser, id: string) {
   const team = db.teams.find((t) => t.id === id);
   if (!team) throw new ApiError(404, "No team with this ID exists.");
-  if (!canSeeTeam(admin, team)) throw new ApiError(403, `This team belongs to another department. You can only view ${admin.department} teams.`);
+  if (!canSeeTeam(admin, team)) {
+    throw new ApiError(403, admin.role === "outside_admin" ? "This is a KIET team." : `This team belongs to another department. You can only view ${admin.department} teams.`);
+  }
   return team;
 }
+
+const leaderYear = (team: AdminTeam) => team.members.find((m) => m.role === "leader")?.year ?? null;
 
 function requireReason(reason: string) {
   const trimmed = reason.trim();
@@ -170,6 +177,8 @@ function filterTeams(db: MockDb, admin: AdminUser, query: TeamQuery) {
     if (query.status && team.status !== query.status) return false;
     if (query.type && team.participantType !== query.type) return false;
     if (query.route && team.route !== query.route) return false;
+    if (query.year && !team.members.some((m) => m.year === query.year)) return false;
+    if (query.leaderYear && leaderYear(team) !== query.leaderYear) return false;
     if (q) {
       const haystack = [team.name, team.code, team.institution, ...team.members.flatMap((m) => [m.fullName, m.email])];
       if (!haystack.some((value) => value.toLowerCase().includes(q))) return false;
@@ -185,6 +194,7 @@ function filterTeams(db: MockDb, admin: AdminUser, query: TeamQuery) {
       case "status": return team.status;
       case "members": return team.members.length;
       case "submitted_at": return team.submittedAt;
+      case "leader_year": return leaderYear(team);
       default: return team.code;
     }
   };
@@ -214,6 +224,8 @@ function summary(team: AdminTeam): TeamSummary {
     memberCount: team.members.length,
     projectTitle: team.projectTitle,
     submittedAt: team.submittedAt,
+    leaderYear: leaderYear(team),
+    memberYears: [...team.members].sort((a, b) => Number(b.role === "leader") - Number(a.role === "leader") || a.year - b.year).map((m) => m.year),
   };
 }
 
@@ -338,8 +350,16 @@ function checkBoardAccess(admin: AdminUser, department: string) {
   }
 }
 
+/** The planned results date (event document: finalists declared 26 October). */
+const RESULTS_PUBLISH_FROM = "2026-10-26T00:00:00+05:30";
+const resultsFrom = (db: MockDb) => (db.schedule.resultsFrom === undefined ? RESULTS_PUBLISH_FROM : db.schedule.resultsFrom);
+const resultsDue = (db: MockDb) => resultsFrom(db) === null || Date.now() >= new Date(resultsFrom(db)!).getTime();
+
 /** Mirrors server/app/services/admin.py publish_blocker. */
 function publishBlocker(db: MockDb): string | null {
+  if (!resultsDue(db)) {
+    return `Results can be published from ${formatIst(resultsFrom(db))} (the finalists declaration date). Change the results date on the Schedule page only if the event plan has changed.`;
+  }
   if (db.schedule.deadline !== null && !deadlinePassed(db)) {
     return `Department admins can nominate finalists until ${formatIst(db.schedule.deadline)}, so results cannot be published yet. Move or clear the nominations deadline on the Schedule page if you really need to publish earlier.`;
   }
@@ -353,6 +373,9 @@ function finalistSummaryOf(db: MockDb): FinalistSummary {
     publishedBy: db.publishedBy,
     nominationsDeadline: db.schedule.deadline,
     publishBlocked: db.publishedAt ? null : publishBlocker(db),
+    resultsPublishFrom: resultsFrom(db),
+    // The demo has no judging, so nothing is prepared for the finale yet.
+    unpublishBlocked: null,
     matrix: departments.map((department) => ({
       department,
       categories: categories.map((c) => ({
@@ -437,11 +460,18 @@ function scheduleOf(db: MockDb): Schedule {
     registration: { state: windowState(opens, closes), opens, closes },
     nominationsDeadline: deadline,
     nominationsOpen: !deadlinePassed(db),
+    resultsPublishFrom: resultsFrom(db),
+    resultsDue: resultsDue(db),
     customised,
     updatedBy,
     updatedAt,
     serverTime: new Date().toISOString(),
-    planned: { registrationOpens: REGISTRATION_OPENS, registrationCloses: REGISTRATION_CLOSES, nominationsDeadline: NOMINATIONS_DEADLINE },
+    planned: {
+      registrationOpens: REGISTRATION_OPENS,
+      registrationCloses: REGISTRATION_CLOSES,
+      nominationsDeadline: NOMINATIONS_DEADLINE,
+      resultsPublishFrom: RESULTS_PUBLISH_FROM,
+    },
   };
 }
 
@@ -458,9 +488,25 @@ function checkWindow(opens: string, closes: string, deadline: string | null) {
   if (span > 366 * DAY_MS) throw new ApiError(422, "Registration can stay open for at most a year.");
 }
 
-function writeSchedule(db: MockDb, admin: AdminUser, opens: string, closes: string, deadline: string | null) {
+function writeSchedule(db: MockDb, admin: AdminUser, opens: string, closes: string, deadline: string | null, results?: string | null) {
   checkWindow(opens, closes, deadline);
-  db.schedule = { opens, closes, deadline, customised: true, updatedBy: admin.email, updatedAt: new Date().toISOString() };
+  if (results) {
+    if (deadline && results < deadline) throw new ApiError(422, "Results can only be published after the nominations deadline.");
+    if (new Date(results).getTime() < new Date(closes).getTime()) throw new ApiError(422, "Results can only be published after registration closes.");
+  }
+  const resultsFromValue = results === undefined ? resultsFrom(db) : results;
+  db.schedule = { opens, closes, deadline, resultsFrom: resultsFromValue, customised: true, updatedBy: admin.email, updatedAt: new Date().toISOString() };
+}
+
+const NOT_IN_DEMO = "Judging works with the real backend only; the demo data has no judges, rooms or scores.";
+
+function auditVisible(db: MockDb, admin: AdminUser, entry: AuditEntry) {
+  if (admin.role === "super_admin") return true;
+  if (admin.role === "outside_admin") {
+    const team = entry.teamId ? db.teams.find((t) => t.id === entry.teamId) : undefined;
+    return !!team && team.participantType !== "kiet";
+  }
+  return entry.department === admin.department;
 }
 
 export const mockApi: AdminApi = {
@@ -478,15 +524,20 @@ export const mockApi: AdminApi = {
     const teams = db.teams.filter((t) => canSeeTeam(admin, t));
     const students = db.students.filter((s) => canSeeStudent(admin, s));
     const isSuper = admin.role === "super_admin";
-    const types: ParticipantType[] = ["kiet", "college", "school"];
+    const seesOutside = isSuper || admin.role === "outside_admin";
+    const types: ParticipantType[] = isSuper ? ["kiet", "college", "school"] : ["college", "school"];
     const active = teams.filter((t) => t.status === "draft" || t.status === "submitted");
+    const yearKeys = new Set([
+      ...students.map((s) => `${s.participantType}|${s.year}`),
+      ...active.flatMap((t) => t.members.map((m) => `${t.participantType}|${m.year}`)),
+    ]);
     const stats: Stats = {
-      department: isSuper ? null : admin.department,
+      department: admin.role === "admin" ? admin.department : null,
       students: students.length,
       studentsInTeams: students.filter((s) => s.teamId).length,
       pendingInvitations: teams.reduce((sum, t) => sum + t.invitations.length, 0),
       teams: counts(teams),
-      byType: isSuper
+      byType: seesOutside
         ? types.map((type) => ({
             type,
             students: students.filter((s) => s.participantType === type).length,
@@ -509,17 +560,25 @@ export const mockApi: AdminApi = {
         .map(summary),
       resultsPublishedAt: db.publishedAt,
       timeline: timelineOf(students, teams),
-      byYear: [...tally(students, (s) => `${s.participantType}|${s.year}`)]
-        .map(([key, count]) => {
-          const [participantType, year] = key.split("|");
-          return { participantType: participantType as ParticipantType, year: Number(year), students: count };
+      byYear: [...yearKeys]
+        .map((key) => {
+          const [participantType, yearText] = key.split("|");
+          const year = Number(yearText);
+          const ofType = active.filter((t) => t.participantType === participantType);
+          return {
+            participantType: participantType as ParticipantType,
+            year,
+            students: students.filter((s) => s.participantType === participantType && s.year === year).length,
+            teamsLed: ofType.filter((t) => leaderYear(t) === year).length,
+            teamsWith: ofType.filter((t) => t.members.some((m) => m.year === year)).length,
+          };
         })
         .sort((a, b) => a.participantType.localeCompare(b.participantType) || a.year - b.year),
       teamSizes: [1, 2, 3, 4, 5].map((size) => ({ size, teams: active.filter((t) => t.members.length === size).length })),
       byDomain: [...tally(active, (t) => t.domain)]
         .map(([domain, count]) => ({ domain, teams: count }))
         .sort((a, b) => b.teams - a.teams || a.domain.localeCompare(b.domain)),
-      topInstitutions: isSuper ? topInstitutionsOf(students, active) : null,
+      topInstitutions: seesOutside ? topInstitutionsOf(students, active) : null,
       schedule: scheduleOf(db),
     };
     return stats;
@@ -611,7 +670,7 @@ export const mockApi: AdminApi = {
     const db = load();
     const admin = actor(db);
     requireSuper(admin, "change the schedule");
-    writeSchedule(db, admin, input.registrationOpens, input.registrationCloses, input.nominationsDeadline);
+    writeSchedule(db, admin, input.registrationOpens, input.registrationCloses, input.nominationsDeadline, input.resultsPublishFrom);
     log(db, { actorEmail: admin.email, action: "schedule.updated", department: null, detail: `Registration ${input.registrationOpens} to ${input.registrationCloses}` });
     save(db);
     return clone(scheduleOf(db));
@@ -753,7 +812,7 @@ export const mockApi: AdminApi = {
     const name = input.name.trim();
     if (!EMAIL_PATTERN.test(email)) throw new ApiError(422, "Enter a valid email address.");
     if (name.length < 2) throw new ApiError(422, "Enter the admin's name.");
-    if (input.role !== "admin" && input.role !== "super_admin") throw new ApiError(422, "Choose a role.");
+    if (!["admin", "super_admin", "outside_admin"].includes(input.role)) throw new ApiError(422, "Choose a role.");
     if (input.role === "admin" && (!input.department || !departments.includes(input.department))) {
       throw new ApiError(422, "Choose the department this admin manages.");
     }
@@ -773,7 +832,7 @@ export const mockApi: AdminApi = {
       actorEmail: admin.email,
       action: "admin.added",
       department: created.department,
-      detail: `Added ${name} (${email}) as ${created.role === "super_admin" ? "super admin" : `admin for ${created.department}`}.`,
+      detail: `Added ${name} (${email}) as ${created.role === "super_admin" ? "super admin" : created.role === "outside_admin" ? "admin for other colleges and schools" : `admin for ${created.department}`}.`,
     });
     save(db);
     return clone(created);
@@ -806,10 +865,129 @@ export const mockApi: AdminApi = {
     const rows = db.audit
       .filter((entry) => {
         if (query.teamId && entry.teamId !== query.teamId) return false;
-        return admin.role === "super_admin" || entry.department === admin.department;
+        return auditVisible(db, admin, entry);
       })
       .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id))
       .slice(0, Math.min(query.limit ?? 50, 200));
     return clone(rows);
   },
+
+  async activity(query) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    checkDepartmentFilter(admin, query.department);
+    const q = query.q?.trim().toLowerCase();
+    const rows = db.audit
+      .filter((entry) => {
+        if (!auditVisible(db, admin, entry)) return false;
+        if (query.kind && !entry.action.startsWith(`${query.kind}.`)) return false;
+        if (query.department && entry.department !== query.department) return false;
+        if (q && ![entry.actorEmail, entry.teamCode ?? "", entry.detail].some((v) => v.toLowerCase().includes(q))) return false;
+        return true;
+      })
+      .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+    return clone(paginate(rows, query.page, query.pageSize));
+  },
+
+  async createTeam(input: AdminTeamInput) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    const emails = [input.leaderEmail, ...input.memberEmails].map((e) => e.trim().toLowerCase()).filter(Boolean);
+    if (new Set(emails).size !== emails.length) throw new ApiError(422, "A student is listed more than once.");
+    if (emails.length > 5) throw new ApiError(422, "A team can have at most 5 members.");
+    if (input.submit && emails.length < TEAM_MIN_SIZE) throw new ApiError(422, "A team needs 2 to 5 members to be submitted.");
+    const people = emails.map((email) => {
+      const found = db.students.find((s) => s.email.toLowerCase() === email);
+      if (!found) throw new ApiError(422, `No registered student uses ${email}. They must sign in and complete their profile first.`);
+      if (found.teamId) throw new ApiError(409, `${email} is already in a team.`);
+      return found;
+    });
+    const [leader] = people;
+    if (!canSeeStudent(admin, leader)) throw new ApiError(403, "You can only create teams led by students in your scope.");
+    for (const p of people.slice(1)) {
+      const same = p.participantType === leader.participantType && (leader.participantType === "kiet" || normaliseInstitution(p.institution) === normaliseInstitution(leader.institution));
+      if (!same) throw new ApiError(422, `${p.email} is not from the same college or school as the leader.`);
+    }
+    if (db.teams.some((t) => t.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new ApiError(409, "Another team already uses this name.");
+    const at = now(db);
+    const number = db.teams.length + 1;
+    const id = `team-${String(number).padStart(3, "0")}-${db.seq + 1}`;
+    const team: AdminTeam = {
+      id,
+      code: `IT26-${String(number).padStart(4, "0")}`,
+      joinCode: "DEMO-CODE",
+      name: input.name.trim(),
+      category: input.category,
+      domain: input.domain,
+      projectTitle: input.projectTitle,
+      abstract: input.abstract,
+      participantType: leader.participantType,
+      institution: leader.institution,
+      department: leader.department,
+      route: leader.participantType === "kiet" ? "department" : "finale",
+      leaderId: leader.userId,
+      members: people.map((p, index) => ({
+        userId: p.userId,
+        fullName: p.fullName,
+        email: p.email,
+        department: p.department,
+        course: p.course,
+        year: p.year,
+        role: index === 0 ? "leader" : "member",
+        joinedAt: at,
+        phone: p.phone,
+        rollNumber: p.rollNumber,
+        institution: p.institution,
+      })),
+      invitations: [],
+      status: input.submit ? "submitted" : "draft",
+      result: "pending",
+      createdAt: at,
+      submittedAt: input.submit ? at : null,
+    };
+    db.teams.push(team);
+    for (const p of people) p.teamId = id;
+    log(db, { actorEmail: admin.email, action: "team.created", teamId: id, teamCode: team.code, department: team.department, detail: `Created by an organiser with ${emails.length} members: ${emails.join(", ")}` });
+    save(db);
+    return clone(team);
+  },
+
+  async unpublishResults(reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "withdraw published results");
+    const text = requireReason(reason);
+    if (!db.publishedAt) throw new ApiError(409, "Results are not published.");
+    let reverted = 0;
+    for (const team of db.teams) {
+      if (team.route === "department" && team.result !== "pending") {
+        team.result = "pending";
+        reverted += 1;
+      }
+    }
+    db.publishedAt = null;
+    db.publishedBy = null;
+    log(db, { actorEmail: admin.email, action: "results.unpublished", department: null, detail: `${reverted} team results back to pending. Reason: ${text}` });
+    save(db);
+  },
+
+  judging: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  openJudging: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  lockJudging: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  rankings: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  attendance: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  setTents: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  createPanel: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  updatePanel: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  deletePanel: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  setPanelTeams: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  setPanelJurors: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  listJurors: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  addJuror: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  removeJuror: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  judgeView: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  saveScore: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
 };

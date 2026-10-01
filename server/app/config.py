@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     # Department admins' finalist nominations are due by then (the event document says 24 October, 6:00 PM). After it,
     # only a super admin can still change them. Organisers can change or clear it in the admin panel.
     nominations_deadline: datetime | None = datetime.fromisoformat("2026-10-24T18:00:00+05:30")
+    # Results (finalists) cannot be published before this: the event document declares finalists on 26 October.
+    results_publish_from: datetime | None = datetime.fromisoformat("2026-10-26T00:00:00+05:30")
     # Testing only: treat registration as open regardless of the dates above.
     force_registration_open: bool = False
 
@@ -87,9 +89,13 @@ class Settings(BaseSettings):
         if not self.session_secret and self.environment != "production":
             # Development and tests only: a fixed secret so tokens survive restarts.
             self.session_secret = "development-only-session-secret-not-for-production"
-        dates = [self.registration_opens, self.registration_closes, *([self.nominations_deadline] if self.nominations_deadline else [])]
+        dates = [
+            self.registration_opens,
+            self.registration_closes,
+            *(d for d in (self.nominations_deadline, self.results_publish_from) if d),
+        ]
         if any(moment.tzinfo is None for moment in dates):
-            raise ValueError("Registration and nomination dates must include a timezone offset, e.g. +05:30.")
+            raise ValueError("Registration, nomination and results dates must include a timezone offset, e.g. +05:30.")
         return self
 
 

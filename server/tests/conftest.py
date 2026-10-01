@@ -18,6 +18,8 @@ os.environ.update(
     FORCE_REGISTRATION_OPEN="true",
     # Far away, so tests do not start failing when the real deadline passes.
     NOMINATIONS_DEADLINE="2099-01-01T00:00:00+00:00",
+    # Long past, so publishing is not blocked by the results date unless a test sets one.
+    RESULTS_PUBLISH_FROM="2020-01-01T00:00:00+00:00",
     EMAIL_BACKEND="log",
     CORS_ORIGINS="http://localhost:3000",
 )
@@ -80,7 +82,8 @@ class Api:
         self.admin = {"Authorization": f"Bearer {token(email, app='admin')}"}
 
     def headers(self, path: str) -> dict[str, str]:
-        return self.admin if path.startswith("/admin") else self.portal
+        # The judge page lives in the admin panel too.
+        return self.admin if path.startswith(("/admin", "/judge")) else self.portal
 
     def get(self, path: str, **kwargs):
         return self.client.get(path, headers=self.headers(path), **kwargs)

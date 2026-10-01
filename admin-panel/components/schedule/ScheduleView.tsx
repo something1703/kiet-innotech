@@ -51,13 +51,13 @@ export function ScheduleView() {
       <PageHeader
         eyebrow={isSuper ? "Super admin" : "Read only"}
         title="Schedule"
-        description="When students can register and when department admins must finish their finalist nominations. Changes apply to students on their very next action, with no redeploy."
+        description="When students can register, when department admins must finish their finalist nominations, and the earliest moment results can be published. Changes apply on the very next request, with no redeploy."
       />
       {query.error && <Notice tone="error">{query.error}</Notice>}
       {!data && !query.error && <Loading label="Loading the schedule" />}
       {data && (
         <ScheduleBody
-          key={`${data.updatedAt}|${data.registration.opens}|${data.registration.closes}|${data.nominationsDeadline}`}
+          key={`${data.updatedAt}|${data.registration.opens}|${data.registration.closes}|${data.nominationsDeadline}|${data.resultsPublishFrom}`}
           schedule={data}
           isSuper={isSuper}
           saved={saved}
@@ -255,12 +255,14 @@ function OpenDialog({
 }
 
 function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedule; isSuper: boolean; loadedAt: number; onSaved: (next: Schedule) => void }) {
-  const ids = { opens: useId(), closes: useId(), deadline: useId(), none: useId() };
+  const ids = { opens: useId(), closes: useId(), deadline: useId(), none: useId(), results: useId(), anyTime: useId() };
   const initial = {
     opens: toIstInput(schedule.registration.opens),
     closes: toIstInput(schedule.registration.closes),
     deadline: toIstInput(schedule.nominationsDeadline),
     noDeadline: schedule.nominationsDeadline === null,
+    results: toIstInput(schedule.resultsPublishFrom),
+    anyTime: schedule.resultsPublishFrom === null,
   };
   const [form, setForm] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -269,7 +271,8 @@ function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedul
   const opens = fromIstInput(form.opens);
   const closes = fromIstInput(form.closes);
   const deadline = form.noDeadline ? null : fromIstInput(form.deadline);
-  const problems: { opens?: string; closes?: string; deadline?: string } = {};
+  const results = form.anyTime ? null : fromIstInput(form.results);
+  const problems: { opens?: string; closes?: string; deadline?: string; results?: string } = {};
   if (!opens) problems.opens = "Enter the opening date and time.";
   if (!closes) problems.closes = "Enter the closing date and time.";
   if (opens && closes) {
@@ -278,6 +281,9 @@ function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedul
     else if (span > 366 * DAY) problems.closes = "Registration can stay open for at most a year.";
   }
   if (!form.noDeadline && !deadline) problems.deadline = "Enter the deadline, or choose “No deadline”.";
+  if (!form.anyTime && !results) problems.results = "Enter the date, or choose “Any time”.";
+  else if (results && deadline && new Date(results) < new Date(deadline)) problems.results = "Results can only be published after the nominations deadline.";
+  else if (results && closes && new Date(results) < new Date(closes)) problems.results = "Results can only be published after registration closes.";
   const valid = Object.keys(problems).length === 0;
   const changed = JSON.stringify(form) !== JSON.stringify(initial);
 
@@ -286,6 +292,8 @@ function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedul
     closes: toIstInput(schedule.planned.registrationCloses),
     deadline: toIstInput(schedule.planned.nominationsDeadline),
     noDeadline: schedule.planned.nominationsDeadline === null,
+    results: toIstInput(schedule.planned.resultsPublishFrom),
+    anyTime: schedule.planned.resultsPublishFrom === null,
   };
   const isPlanned = JSON.stringify(form) === JSON.stringify(planned);
 
@@ -308,7 +316,7 @@ function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedul
     setPending(true);
     setError(null);
     try {
-      onSaved(await api.saveSchedule({ registrationOpens: opens, registrationCloses: closes, nominationsDeadline: deadline }));
+      onSaved(await api.saveSchedule({ registrationOpens: opens, registrationCloses: closes, nominationsDeadline: deadline, resultsPublishFrom: results }));
     } catch (err) {
       setError(errorMessage(err));
       setPending(false);
@@ -351,6 +359,34 @@ function DatesForm({ schedule, isSuper, loadedAt, onSaved }: { schedule: Schedul
               className="size-4 accent-brand-600"
             />
             No deadline
+          </label>
+        </div>
+        <Field
+          label="Results can be published from"
+          htmlFor={ids.results}
+          error={problems.results}
+          hint="The event plan declares finalists on 26 October. Publishing is refused before this, even with the typed confirmation."
+        >
+          <Input
+            id={ids.results}
+            type="datetime-local"
+            value={form.anyTime ? "" : form.results}
+            disabled={!isSuper || form.anyTime}
+            onChange={(e) => setForm({ ...form, results: e.target.value })}
+            aria-invalid={problems.results ? true : undefined}
+          />
+        </Field>
+        <div className="flex items-end pb-1">
+          <label htmlFor={ids.anyTime} className="flex items-center gap-2 text-sm text-navy-800">
+            <input
+              id={ids.anyTime}
+              type="checkbox"
+              checked={form.anyTime}
+              disabled={!isSuper}
+              onChange={(e) => setForm({ ...form, anyTime: e.target.checked, results: form.results || planned.results })}
+              className="size-4 accent-brand-600"
+            />
+            Any time (after the nominations deadline)
           </label>
         </div>
       </div>

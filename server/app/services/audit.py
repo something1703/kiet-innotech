@@ -12,6 +12,7 @@ def record(db: Session, actor_email: str, action: str, team: Team | None = None,
             team_id=team.id if team else None,
             team_code=team.code if team else None,
             department=team.department if team and team.participant_type == "kiet" else department,
+            participant_type=team.participant_type if team else None,
             detail=detail[:2000],
         )
     )

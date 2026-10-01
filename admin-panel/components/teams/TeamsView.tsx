@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Download, Plus, X } from "lucide-react";
 import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminTeam, TeamQuery, TeamSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -24,18 +25,28 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { lastPage, PageSizeSelect, Pagination } from "@/components/ui/Pagination";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
+import { yearLabel } from "@/lib/rules";
+import { CreateTeamDialog } from "./CreateTeamDialog";
+import { YearChips } from "./YearChips";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { numClass, SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
 
 const statuses: TeamStatus[] = ["draft", "submitted", "withdrawn", "disqualified"];
 const types: ParticipantType[] = ["kiet", "college", "school"];
 const routes: TeamRoute[] = ["department", "finale"];
-const sorts: TeamSort[] = ["code", "name", "category", "department", "status", "members", "submitted_at"];
+const sorts: TeamSort[] = ["code", "name", "category", "department", "status", "members", "submitted_at", "leader_year"];
+const memberYears = (team: AdminTeam) =>
+  [...team.members].sort((a, b) => Number(b.role === "leader") - Number(a.role === "leader") || a.year - b.year).map((m) => m.year);
 const teamKey = (team: AdminTeam) => team.id;
 
 export function TeamsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
+  const outside = admin.role === "outside_admin";
+  // Super admins filter by every type; outside admins between colleges and schools.
+  const typeChoices = isSuper ? types : outside ? types.filter((t) => t !== "kiet") : [];
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
@@ -47,8 +58,10 @@ export function TeamsView() {
     department: isSuper ? pickParam(params, "department", departments) : undefined,
     category: intParam(params, "category", 1, categories.length),
     status: pickParam(params, "status", statuses),
-    type: isSuper ? pickParam(params, "type", types) : undefined,
+    type: typeChoices.length ? pickParam(params, "type", typeChoices) : undefined,
     route: isSuper ? pickParam(params, "route", routes) : undefined,
+    year: intParam(params, "year", 1, 12),
+    leaderYear: intParam(params, "leader_year", 1, 12),
     q: params.get("q")?.trim().slice(0, MAX_SEARCH_LENGTH) || undefined,
     sort: pickParam(params, "sort", sorts) ?? "code",
     order: params.get("order") === "desc" ? "desc" : "asc",
@@ -57,7 +70,11 @@ export function TeamsView() {
   };
   const key = JSON.stringify(query);
   const { data, error, loading } = useQuery(key, () => api.listTeams(query));
-  const filtered = Boolean(query.department || query.category || query.status || query.type || query.route || query.q);
+  const filtered = Boolean(query.department || query.category || query.status || query.type || query.route || query.year || query.leaderYear || query.q);
+  const yearChoices = [
+    ...(query.type === "school" ? [] : [1, 2, 3, 4].map((y) => ({ value: y, label: yearLabel(y) }))),
+    ...(typeChoices.includes("school") && query.type !== "college" ? [6, 7, 8, 9, 10, 11, 12].map((y) => ({ value: y, label: yearLabel(y, "school") })) : []),
+  ];
 
   function onSort(sort: TeamSort) {
     update({ sort, order: query.sort === sort && query.order === "asc" ? "desc" : "asc" });
@@ -96,18 +113,26 @@ export function TeamsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All participants" : `${admin.department} department`}
+        eyebrow={isSuper ? "All participants" : outside ? "Other colleges and schools" : `${admin.department} department`}
         title="Teams"
         description={
           isSuper
             ? "Every team from KIET departments, other colleges and schools."
-            : `Teams whose leader is a ${admin.department} student. Members may come from other branches.`
+            : outside
+              ? "Teams from other colleges and schools. They go straight to the Grand Finale."
+              : `Teams whose leader is a ${admin.department} student. Members may come from other branches.`
         }
         actions={
-          <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
-            <Download aria-hidden="true" className="size-4" />
-            Export
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setExportOpen(true)} disabled={!data || data.total === 0}>
+              <Download aria-hidden="true" className="size-4" />
+              Export
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus aria-hidden="true" className="size-4" />
+              Create team
+            </Button>
+          </>
         }
       />
 
@@ -120,7 +145,7 @@ export function TeamsView() {
           value={query.q ?? ""}
           onSearch={(q) => update({ q })}
         />
-        <div className={`grid grid-cols-2 gap-3 ${isSuper ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-3"}`}>
+        <div className={`grid grid-cols-2 gap-3 ${isSuper ? "md:grid-cols-4 xl:grid-cols-7" : outside ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4"}`}>
           {isSuper && (
             <Field label="Department" htmlFor="filter-department">
               <Select id="filter-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
@@ -147,11 +172,27 @@ export function TeamsView() {
               ))}
             </Select>
           </Field>
-          {isSuper && (
+          <Field label="Has a member in" htmlFor="filter-year">
+            <Select id="filter-year" value={query.year ?? ""} onChange={(e) => update({ year: e.target.value })}>
+              <option value="">Any year</option>
+              {yearChoices.map((y) => (
+                <option key={y.value} value={y.value}>{y.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Leader's year" htmlFor="filter-leader-year">
+            <Select id="filter-leader-year" value={query.leaderYear ?? ""} onChange={(e) => update({ leader_year: e.target.value })}>
+              <option value="">Any year</option>
+              {yearChoices.map((y) => (
+                <option key={y.value} value={y.value}>{y.label}</option>
+              ))}
+            </Select>
+          </Field>
+          {typeChoices.length > 0 && (
             <Field label="Participant type" htmlFor="filter-type">
               <Select id="filter-type" value={query.type ?? ""} onChange={(e) => update({ type: e.target.value })}>
                 <option value="">All types</option>
-                {types.map((t) => (
+                {typeChoices.map((t) => (
                   <option key={t} value={t}>{typeShortLabels[t]}</option>
                 ))}
               </Select>
@@ -230,7 +271,7 @@ export function TeamsView() {
               The list is shorter than this page number, possibly because teams were removed since the link was made.
             </EmptyState>
           ) : (
-            <TableFrame label="Teams" minWidth="min-w-[920px]">
+            <TableFrame label="Teams" minWidth="min-w-[1040px]">
               <thead>
                 <tr>
                   <Th className="w-10">
@@ -244,8 +285,9 @@ export function TeamsView() {
                   <SortableTh label="Code" sortKey="code" {...sortProps} />
                   <SortableTh label="Team" sortKey="name" {...sortProps} />
                   <SortableTh label="Cat." sortKey="category" {...sortProps} />
-                  <SortableTh label={isSuper ? "Department / institution" : "Department"} sortKey="department" {...sortProps} />
+                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : "Department"} sortKey="department" {...sortProps} />
                   <SortableTh label="Members" sortKey="members" {...sortProps} className={numClass} />
+                  <SortableTh label="Years" sortKey="leader_year" {...sortProps} />
                   <SortableTh label="Status" sortKey="status" {...sortProps} />
                   <SortableTh label="Submitted" sortKey="submitted_at" {...sortProps} />
                   <Th>Result</Th>
@@ -284,7 +326,7 @@ export function TeamsView() {
                         ) : (
                           <span className="block max-w-56 text-sm">{team.institution}</span>
                         )}
-                        {isSuper && (
+                        {typeChoices.length > 0 && (
                           <span className="mt-0.5 flex gap-1">
                             <Pill tone={team.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[team.participantType]}</Pill>
                             {team.route === "finale" && <Pill tone="orange">Direct to finale</Pill>}
@@ -294,6 +336,9 @@ export function TeamsView() {
                       <td className={`${tdClass} ${numClass}`}>
                         {team.members.length}
                         {team.invitations.length > 0 && <span className="block text-xs text-muted">+{team.invitations.length} invited</span>}
+                      </td>
+                      <td className={tdClass}>
+                        <YearChips years={memberYears(team)} type={team.participantType} />
                       </td>
                       <td className={tdClass}>
                         <StatusPill status={team.status} />
@@ -308,6 +353,16 @@ export function TeamsView() {
           )}
           <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} disabled={loading} />
         </div>
+      )}
+
+      {creating && (
+        <CreateTeamDialog
+          onClose={() => setCreating(false)}
+          onCreated={(team) => {
+            setCreating(false);
+            router.push(teamHref(team.id));
+          }}
+        />
       )}
 
       {exportOpen && data && (

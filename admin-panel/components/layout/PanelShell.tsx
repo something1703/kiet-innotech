@@ -3,7 +3,22 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarClock, GraduationCap, LayoutDashboard, LogOut, Menu, ShieldCheck, Trophy, Users, X } from "lucide-react";
+import {
+  Activity,
+  CalendarClock,
+  ClipboardCheck,
+  GraduationCap,
+  Inbox,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Scale,
+  ShieldCheck,
+  Trophy,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { API_MODE } from "@/lib/auth/session";
@@ -12,14 +27,46 @@ import { Loading, Notice } from "@/components/ui/Notice";
 import { Brand, KietLogo } from "./Brand";
 import { NotAuthorised } from "./NotAuthorised";
 
-const nav = [
-  { href: "/", label: "Overview", Icon: LayoutDashboard, superOnly: false },
-  { href: "/teams", label: "Teams", Icon: Users, superOnly: false },
-  { href: "/students", label: "Students", Icon: GraduationCap, superOnly: false },
-  { href: "/finalists", label: "Finalists", Icon: Trophy, superOnly: false },
-  { href: "/schedule", label: "Schedule", Icon: CalendarClock, superOnly: true },
-  { href: "/admins", label: "Admins", Icon: ShieldCheck, superOnly: true },
+type Role = AdminUser["role"];
+type NavItem = { href: string; label: string; Icon: LucideIcon; roles: Role[] };
+
+const ORGANISERS: Role[] = ["super_admin", "admin", "outside_admin"];
+
+/** Sections of the sidebar. Items show only for the listed roles; "My judging" also for organisers who judge. */
+const nav: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Dashboard",
+    items: [
+      { href: "/", label: "Overview", Icon: LayoutDashboard, roles: ORGANISERS },
+      { href: "/submissions", label: "Submissions", Icon: Inbox, roles: ORGANISERS },
+      { href: "/activity", label: "Activity", Icon: Activity, roles: ORGANISERS },
+    ],
+  },
+  {
+    title: "Participants",
+    items: [
+      { href: "/teams", label: "Teams", Icon: Users, roles: ORGANISERS },
+      { href: "/students", label: "Students", Icon: GraduationCap, roles: ORGANISERS },
+    ],
+  },
+  {
+    title: "Event",
+    items: [
+      { href: "/finalists", label: "Finalists", Icon: Trophy, roles: ["super_admin", "admin"] },
+      { href: "/judging", label: "Judging", Icon: Scale, roles: ORGANISERS },
+      { href: "/judge", label: "My judging", Icon: ClipboardCheck, roles: ["judge"] },
+      { href: "/schedule", label: "Schedule", Icon: CalendarClock, roles: ["super_admin"] },
+    ],
+  },
+  {
+    title: "Access",
+    items: [{ href: "/admins", label: "Admins", Icon: ShieldCheck, roles: ["super_admin"] }],
+  },
 ];
+
+function visible(item: NavItem, admin: AdminUser) {
+  return item.roles.includes(admin.role) || (item.href === "/judge" && admin.judge === true);
+}
 
 function isActive(pathname: string, href: string) {
   // The static export uses trailing slashes ("/teams/"), so compare without them.
@@ -28,34 +75,52 @@ function isActive(pathname: string, href: string) {
 }
 
 function scopeLabel(admin: AdminUser) {
-  return admin.role === "super_admin" ? "Super admin · all participants" : `Admin · ${admin.department}`;
+  switch (admin.role) {
+    case "super_admin":
+      return "Super admin · all participants";
+    case "outside_admin":
+      return "Admin · other colleges & schools";
+    case "judge":
+      return "Judge";
+    default:
+      return `Admin · ${admin.department}`;
+  }
 }
 
 function NavLinks({ admin, onNavigate }: { admin: AdminUser; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
-    <ul className="grid gap-1">
-      {nav
-        .filter((item) => !item.superOnly || admin.role === "super_admin")
-        .map(({ href, label, Icon }) => {
-          const active = isActive(pathname, href);
-          return (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                  active ? "bg-white text-navy-900" : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <Icon aria-hidden="true" className={`size-4 ${active ? "text-accent-500" : ""}`} />
-                {label}
-              </Link>
-            </li>
-          );
-        })}
-    </ul>
+    <div className="grid gap-5">
+      {nav.map((section) => {
+        const items = section.items.filter((item) => visible(item, admin));
+        if (items.length === 0) return null;
+        return (
+          <div key={section.title}>
+            <p className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">{section.title}</p>
+            <ul className="grid gap-0.5">
+              {items.map(({ href, label, Icon }) => {
+                const active = isActive(pathname, href);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center gap-3 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        active ? "bg-white text-navy-900" : "text-white/70 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <Icon aria-hidden="true" className={`size-4 ${active ? "text-accent-500" : ""}`} />
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -90,18 +155,22 @@ function Frame({ admin, onSignOut, children }: { admin: AdminUser; onSignOut: ()
         Skip to content
       </a>
 
-      {/* Sidebar, large screens */}
-      <aside className="bg-grid fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-navy-950 px-4 py-5 lg:flex">
-        <div className="rounded-2xl bg-white px-3 py-2.5">
-          <KietLogo className="h-8 w-auto" />
+      {/* Sidebar, large screens. It never moves with the page; only its link list scrolls, on short screens. */}
+      <aside className="bg-grid fixed inset-y-0 left-0 z-30 hidden h-dvh w-64 flex-col bg-navy-950 py-5 lg:flex">
+        <div className="shrink-0 px-4">
+          <div className="rounded-2xl bg-white px-3 py-2.5">
+            <KietLogo className="h-8 w-auto" />
+          </div>
+          <div className="mt-5 px-2">
+            <Brand />
+          </div>
         </div>
-        <div className="mt-5 px-2">
-          <Brand />
-        </div>
-        <nav aria-label="Admin" className="mt-7 flex-1">
+        <nav aria-label="Admin" className="sidebar-scroll mt-6 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           <NavLinks admin={admin} />
         </nav>
-        <Account admin={admin} onSignOut={onSignOut} />
+        <div className="shrink-0 px-4">
+          <Account admin={admin} onSignOut={onSignOut} />
+        </div>
       </aside>
 
       {/* Top bar and slide-down menu, below lg */}
@@ -146,6 +215,12 @@ function Frame({ admin, onSignOut, children }: { admin: AdminUser; onSignOut: ()
 export function PanelShell({ children }: { children: ReactNode }) {
   const { state, signOut, refresh } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  // Judges who are not organisers have one page.
+  const judgeElsewhere = state.status === "signed_in" && state.admin.role === "judge" && !isActive(pathname, "/judge");
+  useEffect(() => {
+    if (judgeElsewhere) router.replace("/judge");
+  }, [judgeElsewhere, router]);
 
   const signedOutReason = state.status === "signed_out" ? (state.reason ?? null) : undefined;
   useEffect(() => {
@@ -155,7 +230,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
     router.replace(next === "/" || signedOutReason === "signed_out" ? "/login" : `/login?next=${encodeURIComponent(next)}`);
   }, [signedOutReason, router]);
 
-  if (state.status === "signed_in") {
+  if (state.status === "signed_in" && !judgeElsewhere) {
     return (
       <Frame admin={state.admin} onSignOut={signOut}>
         {children}

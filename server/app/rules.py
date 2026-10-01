@@ -189,3 +189,43 @@ def normalise_join_code(code: str) -> str | None:
     if len(chars) != 8 or any(c not in JOIN_CODE_ALPHABET for c in chars):
         return None
     return f"{chars[:4]}-{chars[4:]}"
+
+
+# ---------- Judging ----------
+
+JudgingRound = Literal["department", "final"]
+JUDGING_ROUNDS: tuple[JudgingRound, ...] = ("department", "final")
+
+# Each category is judged with one of six common rubrics (event document: Evaluation Rubrics).
+RUBRIC_GROUPS = {1: "software", 2: "software", 3: "hardware", 4: "hardware", 5: "startup", 6: "genz", 7: "poster", 8: "cybershield"}
+
+# Every rubric has five criteria of 10 marks (out of 50). Criteria 1 to 4 have two sub-parts of 5 marks each;
+# criterion 5, Query Addressing, is a single mark out of 10. A score is the nine marks in that order.
+RUBRIC_PARTS = (5, 5, 5, 5, 5, 5, 5, 5, 10)
+RUBRIC_TOTAL = sum(RUBRIC_PARTS)
+
+# The criterion that measures innovation or originality in each rubric (0-based), the first tie-breaker.
+INNOVATION_CRITERION = {"software": 1, "hardware": 1, "startup": 0, "genz": 0, "poster": 0, "cybershield": 1}
+QUERY_CRITERION = 4
+
+
+def criterion_marks(marks: list[int]) -> list[int]:
+    """The five criterion scores (out of 10 each) from the nine sub-part marks."""
+    return [marks[0] + marks[1], marks[2] + marks[3], marks[4] + marks[5], marks[6] + marks[7], marks[8]]
+
+
+def marks_error(marks: list[int]) -> str | None:
+    if len(marks) != len(RUBRIC_PARTS):
+        return f"A score needs {len(RUBRIC_PARTS)} marks: two for each of the first four criteria and one for Query Addressing."
+    for mark, top in zip(marks, RUBRIC_PARTS, strict=True):
+        if not 0 <= mark <= top:
+            return f"Each mark must be between 0 and {top}."
+    return None
+
+
+def innovation_marks(category: int, marks: list[int]) -> int:
+    return criterion_marks(marks)[INNOVATION_CRITERION[RUBRIC_GROUPS[category]]]
+
+
+def query_marks(marks: list[int]) -> int:
+    return criterion_marks(marks)[QUERY_CRITERION]

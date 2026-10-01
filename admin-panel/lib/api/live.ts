@@ -124,6 +124,31 @@
  *          → AdminUser
  *   DELETE /admin/admins/{email}            (super_admin only) → 204. 409 when removing yourself.
  *
+ *   POST   /admin/teams     body { name, category, domain, project_title, abstract, leader_email, member_emails[], submit }
+ *          Creates a team for registered students whatever the registration window says. Same team rules as students
+ *          (same institution, category eligibility, 1-5 members or 2-5 to submit, unique name); the leader must be in the
+ *          caller's scope. → AdminTeam (201)
+ *
+ *   POST   /admin/results/unpublish   (super_admin) body { confirm: "UNPUBLISH", reason } → 204
+ *          409 when not published, or once the finale is being prepared (tents or finale panels for finalists, final
+ *          judging open or scored).
+ *
+ *   GET    /admin/activity?kind=&department=&q=&page=&page_size=  → Page<AuditEntry>, newest first, scoped like teams.
+ *
+ *   Judging (writes: super_admin only; department admins read their department's rooms, outside admins the finale)
+ *   GET    /admin/judging/{round}                 → Judging        round: department | final
+ *   POST   /admin/judging/{round}/open | /lock    → RoundState     409 with the reason when it cannot open
+ *   GET    /admin/judging/{round}/rankings?department=   → Rankings
+ *   GET    /admin/judging/{round}/attendance?panel_id=   → AttendanceSheet (final round: panel optional)
+ *   PUT    /admin/judging/final/tents   body { tents: [{ team_id, tent | null }] } → Judging
+ *   POST   /admin/panels   body { round, name, location, department } → Panel
+ *   PATCH  /admin/panels/{id}   body { name, location } → Panel;  DELETE /admin/panels/{id} → 204
+ *   PUT    /admin/panels/{id}/teams    body { team_ids }  → Panel
+ *   PUT    /admin/panels/{id}/jurors   body { jurors: [{ email, chair }] } → Panel
+ *   GET    /admin/jurors → Juror[];  POST /admin/jurors body JurorInput → Juror;  DELETE /admin/jurors/{email} → 204
+ *   GET    /judge  → JudgeView (the signed-in judge's panels);  PUT /judge/panels/{panel}/teams/{team}/score
+ *          body { marks: number[9], remarks } → Score. 423 while the round is locked.
+ *
  *   GET    /admin/audit?team_id=&limit=
  *          → AuditEntry[] newest first (limit default 50, max 200). Scoped like teams; team_id of a
  *          team outside the caller's scope → 403.
@@ -136,6 +161,14 @@
  */
 import type {
   AdminInput,
+  AttendanceSheet,
+  JudgeView,
+  Judging,
+  Juror,
+  Panel,
+  Rankings,
+  RoundState,
+  Score,
   AdminStudent,
   AdminTeam,
   AdminUser,
@@ -270,6 +303,7 @@ export const liveApi: AdminApi = {
   listTeams: (query: TeamQuery) => request<Page<AdminTeam>>("GET", `/admin/teams${queryString(query)}`),
   exportTeams: (query: TeamQuery) => request<AdminTeam[]>("GET", `/admin/teams/export${queryString(withoutPaging(query))}`),
   getTeam: (teamId) => request<AdminTeam>("GET", `/admin/teams/${id(teamId)}`),
+  createTeam: (input) => request<AdminTeam>("POST", "/admin/teams", input),
   withdrawTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/withdraw`, { reason }),
   disqualifyTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/disqualify`, { reason }),
   restoreTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/restore`, { reason }),
@@ -290,10 +324,31 @@ export const liveApi: AdminApi = {
   finalistSummary: () => request<FinalistSummary>("GET", "/admin/finalists/summary"),
   // The server insists on the typed phrase too, so a stray request cannot publish.
   publishResults: () => request<PublishResult>("POST", "/admin/results/publish", { confirm: "PUBLISH" }),
+  unpublishResults: (reason) => request<void>("POST", "/admin/results/unpublish", { confirm: "UNPUBLISH", reason }),
 
   listAdmins: () => request<AdminUser[]>("GET", "/admin/admins"),
   addAdmin: (input: AdminInput) => request<AdminUser>("POST", "/admin/admins", input),
   removeAdmin: (email) => request<void>("DELETE", `/admin/admins/${id(email)}`),
 
   audit: (query = {}) => request<AuditEntry[]>("GET", `/admin/audit${queryString(query)}`),
+  activity: (query) => request<Page<AuditEntry>>("GET", `/admin/activity${queryString(query)}`),
+
+  judging: (round) => request<Judging>("GET", `/admin/judging/${round}`),
+  openJudging: (round) => request<RoundState>("POST", `/admin/judging/${round}/open`),
+  lockJudging: (round) => request<RoundState>("POST", `/admin/judging/${round}/lock`),
+  rankings: (round, department) => request<Rankings>("GET", `/admin/judging/${round}/rankings${queryString({ department })}`),
+  attendance: (round, panelId) => request<AttendanceSheet>("GET", `/admin/judging/${round}/attendance${queryString({ panelId })}`),
+  setTents: (tents) => request<Judging>("PUT", "/admin/judging/final/tents", { tents }),
+  createPanel: (input) => request<Panel>("POST", "/admin/panels", input),
+  updatePanel: (panelId, input) => request<Panel>("PATCH", `/admin/panels/${id(panelId)}`, input),
+  deletePanel: (panelId) => request<void>("DELETE", `/admin/panels/${id(panelId)}`),
+  setPanelTeams: (panelId, teamIds) => request<Panel>("PUT", `/admin/panels/${id(panelId)}/teams`, { teamIds }),
+  setPanelJurors: (panelId, jurors) => request<Panel>("PUT", `/admin/panels/${id(panelId)}/jurors`, { jurors }),
+  listJurors: () => request<Juror[]>("GET", "/admin/jurors"),
+  addJuror: (input) => request<Juror>("POST", "/admin/jurors", input),
+  removeJuror: (email) => request<void>("DELETE", `/admin/jurors/${id(email)}`),
+
+  judgeView: () => request<JudgeView>("GET", "/judge"),
+  saveScore: (panelId, teamId, marks, remarks) =>
+    request<Score>("PUT", `/judge/panels/${id(panelId)}/teams/${id(teamId)}/score`, { marks, remarks }),
 };

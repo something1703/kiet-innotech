@@ -68,9 +68,11 @@ export const routeLabels: Record<TeamRoute, string> = {
   finale: "Direct to finale",
 };
 
-export const roleLabels: Record<AdminRole, string> = {
+export const roleLabels: Record<AdminRole | "judge", string> = {
   super_admin: "Super admin",
   admin: "Department admin",
+  outside_admin: "Outside teams admin",
+  judge: "Judge",
 };
 
 export const typeShortLabels: Record<ParticipantType, string> = {
@@ -101,8 +103,21 @@ export const auditLabels: Record<AuditAction, string> = {
   "schedule.updated": "Schedule changed",
   "schedule.opened": "Registration opened",
   "schedule.closed": "Registration closed",
-  "results.unpublished": "Results un-published (corrected)",
+  "results.unpublished": "Results withdrawn",
+  "judging.opened": "Judging opened",
+  "judging.locked": "Judging locked",
+  "judging.judge_added": "Judge appointed",
+  "judging.judge_removed": "Judge removed",
+  "judging.panel_created": "Room / panel created",
+  "judging.panel_updated": "Room / panel renamed",
+  "judging.panel_deleted": "Room / panel deleted",
+  "judging.teams_allotted": "Teams allotted",
+  "judging.judges_assigned": "Judges assigned",
+  "judging.tents_allotted": "Tents allotted",
+  "judging.scored": "Team scored",
 };
+
+export const roundLabels = { department: "Departmental", final: "Grand Finale" } as const;
 
 export { participantTypeLabels };
 
@@ -161,4 +176,24 @@ export function formatIst(iso: string | null | undefined) {
     minute: "2-digit",
     hour12: true,
   })} IST`;
+}
+
+/** "IST day" of an ISO time, e.g. "2026-10-05", for grouping lists by day. */
+export function istDayKey(iso: string) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: TIME_ZONE });
+}
+
+/** "Today", "Yesterday" or e.g. "Sat, 3 Oct", for day headings in feeds. */
+export function dayHeading(iso: string, now = new Date()) {
+  const day = istDayKey(iso);
+  const today = istDayKey(now.toISOString());
+  const yesterday = istDayKey(new Date(now.getTime() - 86_400_000).toISOString());
+  if (day === today) return "Today";
+  if (day === yesterday) return "Yesterday";
+  return new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: TIME_ZONE }).format(new Date(iso));
+}
+
+/** e.g. "2:05 pm" in IST. */
+export function formatTime(iso: string) {
+  return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: TIME_ZONE }).format(new Date(iso));
 }
