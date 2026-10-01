@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { CalendarDays, MapPin, Ticket } from "lucide-react";
 import { event } from "@/lib/content";
 import { Countdown } from "./Countdown";
+import { HeroVideo } from "./HeroVideo";
 import { RegisterCta, RegistrationRange } from "./RegisterCta";
 
 const facts = [
@@ -14,16 +15,10 @@ const facts = [
 export function Hero() {
   return (
     <section className="relative isolate overflow-hidden bg-navy-950">
-      {/* Background photo with a slow zoom-out */}
-      <Image
-        src="/images/kiet/campus-walkway.jpg"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="-z-20 animate-hero-zoom object-cover"
-      />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-navy-950 via-navy-950/90 to-navy-900/60" />
+      {/* Background film of InnoTech'25. The text side stays dark; the film shows through on the right. */}
+      <HeroVideo />
+      <div className="absolute inset-0 -z-10 bg-navy-950/80 lg:bg-transparent lg:bg-gradient-to-r lg:from-navy-950 lg:via-navy-950/85 lg:to-navy-950/35" />
+      <div className="absolute inset-x-0 bottom-0 -z-10 h-32 bg-gradient-to-t from-navy-950 to-transparent" />
       <div className="bg-grid absolute inset-0 -z-10" />
       <div className="absolute -left-40 top-1/3 -z-10 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl" />
       <div className="absolute -right-20 bottom-0 -z-10 h-80 w-80 rounded-full bg-accent-500/20 blur-3xl" />
