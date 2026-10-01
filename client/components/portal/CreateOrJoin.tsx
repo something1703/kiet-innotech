@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { clearPendingJoinCode, pendingJoinCode } from "@/lib/invite";
 import { useRegistrationState } from "@/lib/registration";
 import { normaliseJoinCode } from "@/lib/rules";
 import { Button, Field, Input, Notice, buttonStyles } from "@/components/ui/form";
@@ -35,7 +36,7 @@ export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: bool
               Start a new team
             </h3>
             <p className="mt-2 text-sm text-muted">
-              You become the leader, choose the category, then add teammates by email or by sharing your team code.
+              You become the leader, choose the category, then share an invite link with your teammates.
             </p>
             <Link href="/team/new" className={`${buttonStyles("primary")} mt-5`}>
               Create a team
@@ -47,7 +48,7 @@ export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: bool
               <KeyRound size={20} className="text-brand-500" aria-hidden="true" />
               Join with a team code
             </h3>
-            <p className="mt-2 text-sm text-muted">Ask your team leader for the 8-character code shown on their Team page.</p>
+            <p className="mt-2 text-sm text-muted">Use the invite link your leader shared, or enter the 8-character code from their Team page.</p>
             <JoinTeamForm />
           </section>
         </div>
@@ -67,12 +68,16 @@ function JoinTeamForm() {
   const router = useRouter();
   const { refresh } = usePortal();
   const { run, pending, error, setError } = useAction();
-  const [code, setCode] = useState("");
+  // An invite link opened earlier in this browser (see app/join) fills in the code. Portal pages render only in
+  // the browser, so reading storage here is safe.
+  const [code, setCode] = useState(() => pendingJoinCode() ?? "");
+  const [fromLink, setFromLink] = useState(() => pendingJoinCode() !== null);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!normaliseJoinCode(code)) return setError("Enter the 8-character team code, e.g. K7PQ-3XM9.");
     if (await run(() => api.joinTeam(code))) {
+      clearPendingJoinCode();
       await refresh();
       router.push("/team?joined=1");
     }
@@ -80,6 +85,11 @@ function JoinTeamForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="mt-5">
+      {fromLink && (
+        <Notice tone="success" className="mb-4">
+          The code from your invite link is filled in. Press <strong>Join team</strong> to join.
+        </Notice>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <Field id="join-code" label="Team code" className="flex-1" error={error}>
           <Input
@@ -88,6 +98,7 @@ function JoinTeamForm() {
             invalid={!!error}
             onChange={(e) => {
               setCode(e.target.value.toUpperCase());
+              setFromLink(false);
               setError(null);
             }}
             placeholder="K7PQ-3XM9"

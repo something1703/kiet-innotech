@@ -4,6 +4,7 @@ import { useState } from "react";
 import { categories, type Category } from "@/lib/content";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
+import { Slider } from "@/components/ui/Slider";
 
 const filters: { label: string; match: (category: Category) => boolean }[] = [
   { label: "All", match: () => true },
@@ -24,15 +25,14 @@ export function Categories() {
         description="Each team registers for exactly one category. Sub-topics are guidelines, and new ideas are always welcome."
       />
 
-      <div role="tablist" aria-label="Filter categories" className="mb-10 flex flex-wrap justify-center gap-2">
+      <div role="group" aria-label="Filter categories" className="mb-6 flex flex-wrap justify-center gap-2 md:mb-10">
         {filters.map((filter) => {
           const isActive = filter.label === activeFilter;
           return (
             <button
               key={filter.label}
               type="button"
-              role="tab"
-              aria-selected={isActive}
+              aria-pressed={isActive}
               onClick={() => setActiveFilter(filter.label)}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
                 isActive
@@ -46,28 +46,28 @@ export function Categories() {
         })}
       </div>
 
-      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {categories.map((category, index) => {
-          const isMatch = match(category);
-          return (
-            <Reveal
-              as="li"
-              key={category.number}
-              delay={(index % 4) * 80}
-              className={isMatch ? "" : "hidden"}
-            >
+      {/* Keyed by the filter, so a new filter starts the phone slider at its first card. */}
+      <Slider
+        key={activeFilter}
+        label="Categories"
+        gridClassName="md:grid-cols-2 md:gap-5 lg:grid-cols-4"
+        slides={categories.filter(match).map((category, index) => ({
+          key: String(category.number),
+          className: "flex",
+          content: (
+            <Reveal delay={(index % 4) * 80} className="flex w-full">
               <CategoryCard category={category} />
             </Reveal>
-          );
-        })}
-      </ul>
+          ),
+        }))}
+      />
     </Section>
   );
 }
 
 function CategoryCard({ category }: { category: Category }) {
   return (
-    <article className="group relative flex h-full flex-col overflow-hidden rounded-3xl border border-line bg-white p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-24px_rgb(11_22_51/0.35)]">
+    <article className="group relative flex h-full w-full flex-col overflow-hidden rounded-3xl border border-line bg-white p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_-24px_rgb(11_22_51/0.35)]">
       {/* Accent bar that grows on hover */}
       <span
         className={`absolute inset-x-0 top-0 h-1 origin-left scale-x-0 transition-transform duration-500 group-hover:scale-x-100 ${

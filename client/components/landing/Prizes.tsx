@@ -3,6 +3,7 @@ import { departmentPrizes, departments, institutePrizes, prizeHeadline, prizePoo
 import { formatINR } from "@/lib/format";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
+import { Slider } from "@/components/ui/Slider";
 
 export function Prizes() {
   return (
@@ -14,10 +15,15 @@ export function Prizes() {
       />
 
       <LevelHeading title="Institute level" pool={prizePools.institute} note="Grand Finale, amounts per category" />
-      <ul className="grid gap-5 md:grid-cols-3">
-        {institutePrizes.map((prize, index) => (
-          <Reveal as="li" key={prize.title} delay={index * 100}>
-            <div className="group relative h-full overflow-hidden rounded-3xl bg-navy-900 p-7 text-white transition duration-300 hover:-translate-y-1">
+      <Slider
+        label="Institute level prizes"
+        gridClassName="md:grid-cols-3 md:gap-5"
+        slides={institutePrizes.map((prize, index) => ({
+          key: prize.title,
+          className: "flex",
+          content: (
+            <Reveal delay={index * 100} className="flex w-full">
+              <div className="group relative h-full w-full overflow-hidden rounded-3xl bg-navy-900 p-7 text-white transition duration-300 hover:-translate-y-1">
               <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand-500/20 blur-2xl transition-transform duration-500 group-hover:scale-150" aria-hidden="true" />
               <Trophy size={32} className="relative text-accent-500" aria-hidden="true" />
               <h4 className="relative mt-4 font-display text-xl font-bold">{prize.title}</h4>
@@ -28,11 +34,12 @@ export function Prizes() {
                 <PrizeAmount place="2nd" amount={prize.second} />
               </dl>
             </div>
-          </Reveal>
-        ))}
-      </ul>
+            </Reveal>
+          ),
+        }))}
+      />
 
-      <Reveal className="mt-12 rounded-3xl border border-line bg-white p-6 sm:p-8">
+      <Reveal className="mt-8 rounded-3xl border border-line bg-white p-6 sm:p-8 md:mt-12">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="flex items-center gap-2 font-display text-lg font-bold text-navy-800">

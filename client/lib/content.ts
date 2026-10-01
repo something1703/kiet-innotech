@@ -482,7 +482,7 @@ export const teamRules = [
 export const registrationSteps = [
   { title: "Create your account", text: "Every student registers individually and completes their profile." },
   { title: "Form a team", text: "The team leader creates a team and picks one category." },
-  { title: "Add members", text: "Teammates join with the team code the leader shares, or accept an email invitation." },
+  { title: "Add members", text: "The leader shares an invite link on WhatsApp or anywhere else; teammates open it and join with the team code." },
   { title: "Submit the team", text: "Once 2 to 5 members have joined, the leader submits and the team is locked." },
 ];
 
@@ -516,7 +516,7 @@ export const faqs = [
   {
     question: "How do I join my friend's team?",
     answer:
-      "Register and complete your profile first. Then either enter the team code your leader shares on your dashboard, or accept the email invitation they send you. You can be part of only one team.",
+      "Open the invite link your leader shares (on WhatsApp or anywhere else), sign in with Google and complete your profile; the team code is filled in for you. You can also type the code on your dashboard. You can be part of only one team.",
   },
   {
     question: "I am a KIET student. Can I sign in with my personal Gmail?",

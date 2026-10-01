@@ -86,6 +86,16 @@ body {
   transform: none;
 }
 
+/* Phones: cards inside a <Slider> are already laid out side by side, so they show at once instead of
+   waiting for a vertical scroll that a sideways swipe never triggers. */
+@media (max-width: 767.98px) {
+  .js .slider-track .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Subtle circuit-style grid used behind dark sections. */
 .bg-grid {
   background-image:

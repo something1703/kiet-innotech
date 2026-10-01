@@ -4,6 +4,7 @@ import { attractions } from "@/lib/content";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
+import { Slider } from "@/components/ui/Slider";
 import { tones } from "./tones";
 
 /*
@@ -102,13 +103,21 @@ export function Attractions() {
           <Reveal className="mx-auto max-w-sm pt-16">
             <CentreCard unit={px} flow />
           </Reveal>
-          <ul className="mt-8 grid gap-4 md:grid-cols-2">
-            {attractions.map((item, index) => (
-              <Reveal as="li" key={item.title} delay={(index % 2) * 80}>
-                <AttractionCard item={item} number={index + 1} unit={px} flow />
-              </Reveal>
-            ))}
-          </ul>
+          <div className="mt-4 md:mt-8">
+            <Slider
+              label="Finale attractions"
+              gridClassName="md:grid-cols-2 md:gap-4"
+              slides={attractions.map((item, index) => ({
+                key: item.title,
+                className: "flex",
+                content: (
+                  <Reveal delay={(index % 2) * 80} className="flex w-full">
+                    <AttractionCard item={item} number={index + 1} unit={px} flow />
+                  </Reveal>
+                ),
+              }))}
+            />
+          </div>
         </div>
       </div>
     </Section>
@@ -151,15 +160,13 @@ type AttractionCardProps = {
 
 function AttractionCard({ item, number, unit, style, flow = false }: AttractionCardProps) {
   const tone = tones[item.tone];
+  if (flow) return <FlowAttractionCard item={item} number={number} unit={unit} />;
   return (
     <div
-      className={`${flow ? "relative h-full" : "absolute"} flex items-center overflow-hidden rounded-[1.75rem] bg-gradient-to-r ${tone.wash} to-white shadow-[0_20px_45px_-28px_rgb(11_22_51/0.35)] ring-1 ring-line/70`}
+      className={`absolute flex items-center overflow-hidden rounded-[1.75rem] bg-gradient-to-r ${tone.wash} to-white shadow-[0_20px_45px_-28px_rgb(11_22_51/0.35)] ring-1 ring-line/70`}
       style={{ ...style, padding: `${unit(24)} ${unit(84)} ${unit(24)} ${unit(24)}`, columnGap: unit(26) }}
     >
-      <span
-        className={`flex shrink-0 items-center justify-center rounded-[22%] ${tone.badge}`}
-        style={{ width: unit(96), height: unit(96) }}
-      >
+      <span className={`flex shrink-0 items-center justify-center rounded-[22%] ${tone.badge}`} style={{ width: unit(96), height: unit(96) }}>
         <Icon name={item.icon} strokeWidth={1.75} style={{ width: unit(44), height: unit(44) }} />
       </span>
       <div className="min-w-0">
@@ -183,6 +190,59 @@ function AttractionCard({ item, number, unit, style, flow = false }: AttractionC
         aria-hidden="true"
       >
         <ArrowRight style={{ width: unit(22), height: unit(22) }} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The card in the page flow. Phones (inside the slider) stack the icon above the text, since a slide is too
+ * narrow for the side-by-side card. From md up it is the diagram card at the scale `unit` gives, passed in as
+ * CSS variables because inline styles cannot change per breakpoint.
+ */
+function FlowAttractionCard({ item, number, unit }: { item: (typeof attractions)[number]; number: number; unit: Unit }) {
+  const tone = tones[item.tone];
+  const sizes = {
+    "--pad": `${unit(24)} ${unit(84)} ${unit(24)} ${unit(24)}`,
+    "--gap": unit(26),
+    "--icon": unit(96),
+    "--glyph": unit(44),
+    "--title": unit(23),
+    "--text": unit(16.5),
+    "--text-gap": unit(8),
+    "--num-top": unit(18),
+    "--num-right": unit(26),
+    "--num": unit(46),
+    "--arrow-bottom": unit(24),
+    "--arrow-right": unit(22),
+    "--arrow": unit(48),
+    "--arrow-glyph": unit(22),
+  } as CSSProperties;
+  return (
+    <div
+      className={`relative flex h-full w-full flex-col items-start gap-4 overflow-hidden rounded-[1.75rem] bg-gradient-to-r p-5 ${tone.wash} to-white shadow-[0_20px_45px_-28px_rgb(11_22_51/0.35)] ring-1 ring-line/70 md:flex-row md:items-center md:gap-0 md:[column-gap:var(--gap)] md:[padding:var(--pad)]`}
+      style={sizes}
+    >
+      <span
+        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[22%] ${tone.badge} md:h-[var(--icon)] md:w-[var(--icon)]`}
+      >
+        <Icon name={item.icon} strokeWidth={1.75} className="h-7 w-7 md:h-[var(--glyph)] md:w-[var(--glyph)]" />
+      </span>
+      <div className="min-w-0">
+        <h3 className="font-display text-xl font-bold leading-tight text-navy-900 md:text-[length:var(--title)]">{item.title}</h3>
+        <p className="mt-2 text-[15px] leading-relaxed text-muted md:mt-[var(--text-gap)] md:text-[length:var(--text)]">{item.text}</p>
+      </div>
+      <span
+        className={`absolute right-5 top-4 font-display text-4xl font-black leading-none opacity-[0.12] ${tone.title} md:right-[var(--num-right)] md:top-[var(--num-top)] md:text-[length:var(--num)]`}
+        aria-hidden="true"
+      >
+        {String(number).padStart(2, "0")}
+      </span>
+      <span
+        className={`absolute hidden items-center justify-center rounded-full ${tone.badge} md:bottom-[var(--arrow-bottom)] md:right-[var(--arrow-right)] md:flex md:h-[var(--arrow)] md:w-[var(--arrow)]`}
+        aria-hidden="true"
+      >
+        <ArrowRight className="md:h-[var(--arrow-glyph)] md:w-[var(--arrow-glyph)]" />
       </span>
     </div>
   );

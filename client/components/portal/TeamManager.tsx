@@ -1,17 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import { Check, Copy, Mail, Pencil, RefreshCw, Send, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Check, Copy, Mail, MessageCircle, Pencil, RefreshCw, Send, Share2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { categories } from "@/lib/content";
 import { draftKeys, hasDraft } from "@/lib/drafts";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { clearPendingJoinCode, inviteMessage, joinLink, pendingJoinCode } from "@/lib/invite";
 import { useRegistrationState } from "@/lib/registration";
 import { TEAM_MAX_SIZE, openSlots, submissionChecks, yearLabel } from "@/lib/rules";
 import type { RegistrationState, Team } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Button, Field, Input, Notice, Pill } from "@/components/ui/form";
+import { Button, Field, Input, Notice, Pill, buttonStyles } from "@/components/ui/form";
 import { Panel } from "./PageHeading";
 import { usePortal } from "./PortalProvider";
 import { TeamForm } from "./TeamForm";
@@ -65,6 +66,8 @@ export function TeamManager({ team }: { team: Team }) {
   const isLeader = team.leaderId === me.profile!.userId;
   const editable = team.status === "draft" && registration === "open";
   const canEdit = isLeader && editable;
+  // Joining needs a draft team with a free place while registration is open.
+  const canAddTeammates = team.status === "draft" && openSlots(team) > 0 && registration !== "closed" && registration !== "upcoming";
   const draftKey = draftKeys.team(me.email, team.id);
   // Reopen the form if unsaved changes were kept, e.g. after signing in again.
   const [editing, setEditing] = useState(() => canEdit && hasDraft(draftKey));
@@ -83,6 +86,8 @@ export function TeamManager({ team }: { team: Team }) {
   };
 
   return (
+    <>
+    <OtherTeamInvite team={team} />
     <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr] lg:items-start">
       <div className="min-w-0 space-y-6">
         <Panel
@@ -91,11 +96,13 @@ export function TeamManager({ team }: { team: Team }) {
         >
           <MembersTable team={team} canEdit={canEdit} leaderId={team.leaderId} />
           {team.invitations.length > 0 && <PendingInvitations team={team} canEdit={canEdit} />}
-          {canEdit && openSlots(team) > 0 && <InviteForm team={team} />}
           {team.status === "draft" && !isLeader && (
-            <p className="mt-6 text-sm text-muted">Only the team leader can invite or remove members.</p>
+            <p className="mt-6 text-sm text-muted">Only the team leader can remove members. Anyone in the team can share the invite.</p>
           )}
         </Panel>
+
+        {/* Right below the members, so on phones it is near the top of the page. */}
+        {canAddTeammates && <AddTeammates team={team} isLeader={isLeader} canEdit={canEdit} />}
 
         <Panel
           title="Project"
@@ -143,7 +150,6 @@ export function TeamManager({ team }: { team: Team }) {
       </div>
 
       <div className="min-w-0 space-y-6 lg:sticky lg:top-40">
-        {team.status === "draft" && openSlots(team) > 0 && <TeamCodePanel team={team} canReset={canEdit} />}
         {team.status === "draft" && <SubmitPanel team={team} isLeader={isLeader} editable={editable} registration={registration} />}
         <TeamFacts team={team} />
         {((team.status === "draft" && editable) || (team.status === "withdrawn" && registration === "open")) && (
@@ -151,6 +157,33 @@ export function TeamManager({ team }: { team: Team }) {
         )}
       </div>
     </div>
+    </>
+  );
+}
+
+/** A student who is already in a team opened an invite link to another team (see app/join). */
+function OtherTeamInvite({ team }: { team: Team }) {
+  const [code, setCode] = useState(() => {
+    const pending = pendingJoinCode();
+    return pending === team.joinCode ? null : pending;
+  });
+  // Their own team's link (e.g. the leader testing it) needs no notice.
+  useEffect(() => {
+    if (pendingJoinCode() === team.joinCode) clearPendingJoinCode();
+  }, [team.joinCode]);
+  if (!code) return null;
+  const dismiss = () => {
+    clearPendingJoinCode();
+    setCode(null);
+  };
+  return (
+    <Notice tone="info" title="You opened an invite to another team" className="mb-6">
+      The invite was for team code <span className="font-mono font-semibold">{code}</span>, but you are already in {team.name}. A student can be in
+      only one team; to switch, leave this team first and then join with that code.{" "}
+      <button type="button" onClick={dismiss} className="font-semibold text-accent-600 hover:underline">
+        Dismiss
+      </button>
+    </Notice>
   );
 }
 
@@ -290,10 +323,11 @@ function InviteForm({ team }: { team: Team }) {
   };
 
   return (
-    <form onSubmit={onSubmit} noValidate className="mt-8 border-t border-line pt-6">
-      <h3 className="font-display text-lg font-bold text-ink">Invite a teammate</h3>
+    <form onSubmit={onSubmit} noValidate className="mt-6 border-t border-line pt-6">
+      <h3 className="font-display text-lg font-bold text-ink">Or invite a registered student</h3>
       <p className="mt-1 text-sm text-muted">
-        They must have signed in and completed their profile. They will see the invitation on their dashboard.
+        For someone who has already signed in and completed their profile. No email is sent: the invitation waits on their dashboard
+        until they accept it.
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
         <Field
@@ -322,32 +356,52 @@ function InviteForm({ team }: { team: Team }) {
         </Field>
         <Button type="submit" variant="dark" pending={pending} className="sm:mt-7">
           <Send size={16} aria-hidden="true" />
-          Send invite
+          Invite
         </Button>
       </div>
       {sent && (
         <Notice tone="success" className="mt-4">
-          Invitation sent to {sent}. They will see it on their dashboard when they sign in.
+          {sent} is invited. They will see it on their dashboard the next time they sign in; tell them to look there.
         </Notice>
       )}
     </form>
   );
 }
 
-/** The private code teammates enter to join without an email invitation. */
-function TeamCodePanel({ team, canReset }: { team: Team; canReset: boolean }) {
+/**
+ * Getting teammates in: share an invite (any app, WhatsApp, the student's own email) with the team code and a join
+ * link, or, for the leader, invite someone who has already registered. The portal itself sends no email.
+ */
+function AddTeammates({ team, isLeader, canEdit }: { team: Team; isLeader: boolean; canEdit: boolean }) {
   const { refresh } = usePortal();
   const { run, pending, error, setError } = useAction();
   const [confirming, setConfirming] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"code" | "message" | null>(null);
+  // Portal pages render only in the browser. The share sheet exists on phones and some desktop browsers; elsewhere
+  // "Share" copies the message. The join link uses the address the portal is open at.
+  const [canShare] = useState(() => typeof navigator.share === "function");
+  const link = joinLink(team.joinCode);
+  const slots = openSlots(team);
+  const fullMessage = inviteMessage(team, link);
 
-  const copy = async () => {
+  const copy = async (what: "code" | "message") => {
     try {
-      await navigator.clipboard.writeText(team.joinCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(what === "code" ? team.joinCode : fullMessage);
+      setError(null);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2500);
     } catch {
       setError("Copying is blocked in this browser. Select the code and copy it instead.");
+    }
+  };
+
+  const share = async () => {
+    if (!canShare) return copy("message");
+    try {
+      await navigator.share({ title: `Join ${team.name} for InnoTech26`, text: inviteMessage(team), url: link });
+    } catch (err) {
+      // Closing the share sheet is not an error; anything else falls back to copying.
+      if (!(err instanceof DOMException && err.name === "AbortError")) await copy("message");
     }
   };
 
@@ -358,25 +412,64 @@ function TeamCodePanel({ team, canReset }: { team: Team; canReset: boolean }) {
     }
   };
 
-  const where = team.participantType === "kiet" ? "KIET, from any department," : team.institution;
+  const where = team.participantType === "kiet" ? "KIET (any department or course)" : team.institution;
+  const subject = encodeURIComponent(`Join my InnoTech26 team ${team.name}`);
   return (
-    <Panel title="Team code" description={`Registered students from ${where} can join with this code until the team is full or submitted.`}>
-      <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
-        <span className="select-all font-mono text-2xl font-bold tracking-[0.2em] text-ink" aria-label={`Team code ${team.joinCode.split("").join(" ")}`}>
-          {team.joinCode}
-        </span>
-        <Button variant="outline" size="sm" onClick={copy}>
-          <Copy size={15} aria-hidden="true" />
-          {copied ? "Copied" : "Copy"}
+    <Panel
+      title="Add teammates"
+      description={`${slots} more ${slots === 1 ? "student" : "students"} from ${where} can join. Send them the invite: they sign in with Google and join with your team code.`}
+    >
+      <Button size="lg" className="w-full" onClick={share}>
+        <Share2 size={18} aria-hidden="true" />
+        {canShare ? "Share invite" : copied === "message" ? "Invite message copied" : "Copy invite message"}
+      </Button>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <a
+          href={`https://wa.me/?text=${encodeURIComponent(fullMessage)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${buttonStyles("outline", "sm")} w-full`}
+        >
+          <MessageCircle size={16} aria-hidden="true" />
+          WhatsApp
+        </a>
+        <a
+          href={`mailto:?subject=${subject}&body=${encodeURIComponent(fullMessage)}`}
+          className={`${buttonStyles("outline", "sm")} w-full`}
+        >
+          <Mail size={16} aria-hidden="true" />
+          Email
+        </a>
+      </div>
+      {canShare && (
+        <Button variant="link" className="mt-3" onClick={() => copy("message")}>
+          <Copy size={14} aria-hidden="true" />
+          {copied === "message" ? "Invite message copied" : "Copy the invite message"}
+        </Button>
+      )}
+
+      <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted">Team code</p>
+          <span className="select-all font-mono text-2xl font-bold tracking-[0.2em] text-ink" aria-label={`Team code ${team.joinCode.split("").join(" ")}`}>
+            {team.joinCode}
+          </span>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => copy("code")}>
+          {copied === "code" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+          {copied === "code" ? "Copied" : "Copy"}
         </Button>
       </div>
-      <p className="mt-3 text-sm text-muted">Share it only with your teammates. The leader can remove anyone who joins by mistake.</p>
+      <p className="mt-3 text-sm text-muted">
+        Anyone with this code or link can join while there is space, so share it only with your teammates. The leader can remove anyone who
+        joins by mistake{canEdit ? " or get a new code, which stops the old code and links working" : ""}.
+      </p>
       {error && !confirming && (
         <Notice tone="error" className="mt-3">
           {error}
         </Notice>
       )}
-      {canReset && (
+      {canEdit && (
         <Button
           variant="link"
           className="mt-3"
@@ -390,6 +483,8 @@ function TeamCodePanel({ team, canReset }: { team: Team; canReset: boolean }) {
         </Button>
       )}
 
+      {canEdit && isLeader && <InviteForm team={team} />}
+
       <ConfirmDialog
         open={confirming}
         title="Get a new team code?"
@@ -399,7 +494,7 @@ function TeamCodePanel({ team, canReset }: { team: Team; canReset: boolean }) {
         onConfirm={reset}
         onClose={() => setConfirming(false)}
       >
-        The current code {team.joinCode} stops working immediately. Members who already joined stay in the team.
+        The current code {team.joinCode} and any invite links you shared stop working immediately. Members who already joined stay in the team.
       </ConfirmDialog>
     </Panel>
   );

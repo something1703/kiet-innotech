@@ -3,6 +3,7 @@ import { event, focusDomains } from "@/lib/content";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
+import { Slider } from "@/components/ui/Slider";
 import { tones } from "./tones";
 
 /*
@@ -106,13 +107,21 @@ export function FocusDomains() {
           <Reveal className="mx-auto max-w-md">
             <CentreCard unit={(n) => `${n}px`} flow />
           </Reveal>
-          <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {focusDomains.map((domain, index) => (
-              <Reveal as="li" key={domain.title} delay={(index % 3) * 70}>
-                <DomainCard domain={domain} unit={(n) => `${n}px`} flow />
-              </Reveal>
-            ))}
-          </ul>
+          <div className="mt-4 md:mt-8">
+            <Slider
+              label="Focus domains"
+              gridClassName="md:grid-cols-2 md:gap-4 lg:grid-cols-3"
+              slides={focusDomains.map((domain, index) => ({
+                key: domain.title,
+                className: "flex",
+                content: (
+                  <Reveal delay={(index % 3) * 70} className="flex w-full">
+                    <DomainCard domain={domain} unit={(n) => `${n}px`} flow />
+                  </Reveal>
+                ),
+              }))}
+            />
+          </div>
         </div>
       </div>
     </Section>
@@ -150,7 +159,7 @@ function DomainCard({ domain, style, unit, flow = false }: { domain: (typeof foc
   const tone = tones[domain.tone];
   return (
     <div
-      className={`${flow ? "relative h-full" : "absolute"} flex items-center rounded-2xl border ${tone.card} shadow-[0_14px_30px_-22px_rgb(11_22_51/0.4)]`}
+      className={`${flow ? "relative h-full w-full" : "absolute"} flex items-center rounded-2xl border ${tone.card} shadow-[0_14px_30px_-22px_rgb(11_22_51/0.4)]`}
       style={{ ...style, padding: unit(16), columnGap: unit(16) }}
     >
       <span

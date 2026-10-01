@@ -41,7 +41,7 @@ export default function NewTeamPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeading eyebrow="Step 2 of 4" title="Create your team">
         You will be the team leader. After creating the team you can add 1 to 4 registered students from{" "}
-        {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing your team code or inviting them by email. Your team goes to {route}.
+        {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing an invite link with your team code. Your team goes to {route}.
       </PageHeading>
 
       {invitations.length > 0 && (

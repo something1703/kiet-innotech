@@ -3,6 +3,7 @@ import { benefits } from "@/lib/content";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
+import { Slider } from "@/components/ui/Slider";
 import { tones } from "./tones";
 
 /*
@@ -76,13 +77,23 @@ export function Benefits() {
           <h2 className="font-display text-4xl font-bold tracking-tight text-ink sm:text-5xl">Participation Benefits</h2>
           <Words size="0.8rem" gap="0.75rem" className="mt-4 justify-center" />
         </Reveal>
-        <ul className="mt-14 grid gap-x-5 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-          {benefits.map((benefit, index) => (
-            <Reveal as="li" key={benefit.title} delay={(index % 3) * 80}>
-              <BenefitCard benefit={benefit} unit={(n) => `${n}px`} flow />
-            </Reveal>
-          ))}
-        </ul>
+        {/* Phones: a slider (the badges stick out above the cards, hence the extra top padding). Tablets: a grid. */}
+        <div className="mt-8 md:mt-14">
+          <Slider
+            label="Participation benefits"
+            padTop="pt-10"
+            gridClassName="md:grid-cols-2 md:gap-x-5 md:gap-y-12 lg:grid-cols-3"
+            slides={benefits.map((benefit, index) => ({
+              key: benefit.title,
+              className: "flex",
+              content: (
+                <Reveal delay={(index % 3) * 80} className="flex w-full">
+                  <BenefitCard benefit={benefit} unit={(n) => `${n}px`} flow />
+                </Reveal>
+              ),
+            }))}
+          />
+        </div>
       </div>
     </Section>
   );
@@ -113,7 +124,7 @@ function BenefitCard({ benefit, unit, style, flow = false }: BenefitCardProps) {
   const tone = tones[benefit.tone];
   return (
     <div
-      className={`${flow ? "relative h-full" : "absolute"} rounded-3xl ${tone.card} shadow-[0_18px_40px_-24px_rgb(11_22_51/0.35)]`}
+      className={`${flow ? "relative h-full w-full" : "absolute"} rounded-3xl ${tone.card} shadow-[0_18px_40px_-24px_rgb(11_22_51/0.35)]`}
       style={{ ...style, padding: `${unit(42)} ${unit(24)} ${unit(20)}` }}
     >
       <span

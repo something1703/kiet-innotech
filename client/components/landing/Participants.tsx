@@ -1,6 +1,7 @@
 import { ChevronRight, GraduationCap, School, University } from "lucide-react";
 import { participantTracks } from "@/lib/content";
 import { Reveal } from "@/components/ui/Reveal";
+import { Slider } from "@/components/ui/Slider";
 import { Section, SectionHeading } from "@/components/ui/Section";
 
 const trackIcons = [University, GraduationCap, School];
@@ -19,12 +20,18 @@ export function Participants() {
           description="KIET teams compete at department level first. Teams from other colleges and schools go straight to the Grand Finale."
         />
 
-        <ul className="grid gap-6 lg:grid-cols-3">
-          {participantTracks.map((track, index) => {
+        <Slider
+          label="Ways to participate"
+          tone="dark"
+          gridClassName="md:gap-6 lg:grid-cols-3"
+          slides={participantTracks.map((track, index) => {
             const TrackIcon = trackIcons[index];
-            return (
-              <Reveal as="li" key={track.title} delay={index * 120}>
-                <div className="flex h-full flex-col rounded-3xl border border-white/10 bg-white/[0.04] p-7 backdrop-blur-sm transition duration-300 hover:border-brand-400/50 hover:bg-white/[0.07]">
+            return {
+              key: track.title,
+              className: "flex",
+              content: (
+                <Reveal delay={index * 120} className="flex w-full">
+                  <div className="flex h-full w-full flex-col rounded-3xl border border-white/10 bg-white/[0.04] p-7 backdrop-blur-sm transition duration-300 hover:border-brand-400/50 hover:bg-white/[0.07]">
                   <div className="flex items-center gap-4">
                     <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-300">
                       <TrackIcon size={24} aria-hidden="true" />
@@ -64,10 +71,11 @@ export function Participants() {
                     ))}
                   </ul>
                 </div>
-              </Reveal>
-            );
+                </Reveal>
+              ),
+            };
           })}
-        </ul>
+        />
       </div>
     </Section>
   );

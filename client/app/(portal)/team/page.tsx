@@ -67,7 +67,7 @@ function CreatedNotice() {
   if (params.get("created") !== "1" || team.members.length > 1 || team.invitations.length > 0) return null;
   return (
     <Notice tone="success" title="Team created">
-      Now add your teammates: share the team code, or invite them by email. You need at least one more member before you can submit.
+      Now add your teammates: tap Share invite below and send it on WhatsApp or anywhere else. You need at least one more member before you can submit.
     </Notice>
   );
 }

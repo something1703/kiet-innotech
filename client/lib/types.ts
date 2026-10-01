@@ -63,7 +63,7 @@ export type Team = {
   id: string;
   /** Human-friendly reference, e.g. "IT26-0042". */
   code: string;
-  /** Private code the leader shares so students can join without an email invitation, e.g. "K7PQ-3XM9". */
+  /** Private code the leader shares so students can join without an invitation, e.g. "K7PQ-3XM9". */
   joinCode: string;
   name: string;
   category: number;
