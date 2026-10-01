@@ -27,7 +27,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const registration = useRegistrationState();
   const { opens, closes } = useRegistrationDates();
   const registrationMessages = {
-    upcoming: `Registration opens on ${longDate(opens)}.`,
+    upcoming: `Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}.`,
     open: `Registration is open until ${longDateTime(closes)}.`,
     closed: `Registration closed on ${longDate(closes)}. Teams are now locked.`,
   };

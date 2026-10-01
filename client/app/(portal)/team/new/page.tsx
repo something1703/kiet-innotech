@@ -19,7 +19,7 @@ export default function NewTeamPage() {
   const { me, team, invitations, refresh } = usePortal();
   const profile = me.profile!;
   const registration = useRegistrationState();
-  const { opens } = useRegistrationDates();
+  const { opens, closes } = useRegistrationDates();
   const { run, pending, error } = useAction();
   const created = useRef(false);
 
@@ -58,7 +58,7 @@ export default function NewTeamPage() {
 
       {registration !== "open" ? (
         <Panel>
-          <Notice tone={registration === "closed" ? "warning" : "info"} title={registration === "closed" ? "Registration has closed" : `Registration opens on ${longDate(opens)}`}>
+          <Notice tone={registration === "closed" ? "warning" : "info"} title={registration === "closed" ? "Registration has closed" : `Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}`}>
             {registration === "closed" ? "New teams can no longer be created." : "You can create your team once registration opens."}
           </Notice>
           <Link href="/dashboard" className={`${buttonStyles("outline", "sm")} mt-6`}>

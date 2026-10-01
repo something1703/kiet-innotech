@@ -36,7 +36,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
   const next = safeNext(useSearchParams().get("next"));
   const session = useSession();
   const registration = useRegistrationState();
-  const { opens } = useRegistrationDates();
+  const { opens, closes } = useRegistrationDates();
   const registrationSentence = useRegistrationSentence();
   // Only after a client-side trip from the portal, so this never differs from the prerendered page.
   const [ended] = useState(sessionEnded);
@@ -135,7 +135,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               </Notice>
             )}
             {registration === "upcoming" && isRegister && (
-              <Notice tone="info" title={`Registration opens on ${longDate(opens)}`}>
+              <Notice tone="info" title={`Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}`}>
                 You can sign in now, but profiles and teams can only be created once registration opens.
               </Notice>
             )}

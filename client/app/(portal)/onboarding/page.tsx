@@ -16,7 +16,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { me, refresh } = usePortal();
   const registration = useRegistrationState();
-  const { opens } = useRegistrationDates();
+  const { opens, closes } = useRegistrationDates();
   const { run, pending, error } = useAction();
 
   const save = async (input: Parameters<typeof api.saveProfile>[0]) => {
@@ -34,7 +34,7 @@ export default function OnboardingPage() {
       </PageHeading>
 
       {registration === "upcoming" && (
-        <Notice tone="info" title={`Registration opens on ${longDate(opens)}`} className="mb-6">
+        <Notice tone="info" title={`Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}`} className="mb-6">
           You can fill in your profile once registration opens. Please come back then.
         </Notice>
       )}

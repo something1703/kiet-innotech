@@ -17,7 +17,7 @@ import { useAction } from "./useAction";
 /** For a student without a team: start one as leader, or join one with the code the leader shared. */
 export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: boolean }) {
   const registration = useRegistrationState();
-  const { opens } = useRegistrationDates();
+  const { opens, closes } = useRegistrationDates();
 
   return (
     <Panel
@@ -29,7 +29,7 @@ export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: bool
       }
     >
       {registration !== "open" ? (
-        <Notice tone="info">{registration === "closed" ? "Registration has closed." : `Teams can be created and joined from ${longDate(opens)}.`}</Notice>
+        <Notice tone="info">{registration === "closed" ? "Registration has closed." : `Teams can be created and joined from ${longDate(opens)} to ${longDate(closes)}.`}</Notice>
       ) : (
         <div className="grid gap-8 md:grid-cols-2 md:gap-0 md:divide-x md:divide-line">
           <section aria-labelledby="create-title" className="md:pr-8">

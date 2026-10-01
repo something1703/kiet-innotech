@@ -33,6 +33,17 @@ export const navLinks = [
   { label: "Contact", href: "#contact" },
 ];
 
+/**
+ * The registration dates VISITORS SEE. Edit these by hand if registration is moved or extended.
+ * They are deliberately independent of the server's registration window: the backend can open or
+ * close registration whenever operations need (that is what gates the register button and the API),
+ * while every date shown on the site, in the hero, timeline, ticker and notices, comes from here.
+ */
+export const registrationDisplay = {
+  opens: "2026-10-03T00:00:00+05:30",
+  closes: "2026-10-12T23:59:59+05:30",
+};
+
 export const liveUpdates = [
   "Registrations are open until 12 October 2026",
   "No registration fee for any participant",

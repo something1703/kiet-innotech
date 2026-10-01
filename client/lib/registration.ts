@@ -2,8 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import { send } from "./api/http";
+import { registrationDisplay } from "./content";
 import { apiMode } from "./auth/session";
-import { REGISTRATION_CLOSES, REGISTRATION_OPENS, registrationState, type RegistrationState } from "./rules";
+import { registrationState, type RegistrationState } from "./rules";
 import type { RegistrationWindow } from "./types";
 
 /*
@@ -51,7 +52,6 @@ function subscribe(onChange: () => void) {
   };
 }
 
-const windowSnapshot = () => server;
 const stateSnapshot = () => server?.state ?? registrationState();
 
 /**
@@ -62,8 +62,25 @@ export function useRegistrationState(): RegistrationState | null {
   return useSyncExternalStore(subscribe, stateSnapshot, () => null);
 }
 
-/** The opening and closing moments: the server's, or the planned ones until it answers. Same on the server and first paint. */
+/**
+ * The opening and closing dates VISITORS SEE: fixed in content.ts, edited by hand, and never taken from the
+ * server. The server's window (above) still decides whether registration actually works; it can open earlier
+ * or close later for operations without a visitor ever seeing a different date.
+ */
 export function useRegistrationDates(): { opens: string; closes: string } {
-  const known = useSyncExternalStore(subscribe, windowSnapshot, () => null);
-  return known ?? { opens: REGISTRATION_OPENS, closes: REGISTRATION_CLOSES };
+  return registrationDisplay;
+}
+
+/** Whether registration is upcoming, open or closed by the DISPLAYED dates, so the wording on the page never disagrees with them. Null on the server. */
+export function useDisplayedRegistrationState(): RegistrationState | null {
+  return useSyncExternalStore(
+    () => () => {},
+    () => {
+      const now = new Date();
+      if (now < new Date(registrationDisplay.opens)) return "upcoming";
+      if (now > new Date(registrationDisplay.closes)) return "closed";
+      return "open";
+    },
+    () => null,
+  );
 }

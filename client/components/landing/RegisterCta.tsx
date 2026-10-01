@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
+import { useDisplayedRegistrationState, useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { useRegistrationRange } from "@/lib/schedule-content";
 import { longDate } from "@/lib/format";
 
@@ -22,14 +22,14 @@ export function RegisterCta({ label, className }: { label: string; className: st
 
 /** One line about the registration window, in the past tense once it has closed. */
 export function RegistrationNote() {
-  const state = useRegistrationState();
+  const state = useDisplayedRegistrationState();
   const { opens, closes } = useRegistrationDates();
   if (state === "closed") return `Registration closed on ${longDate(closes)}. Registered students can sign in to see their team and results.`;
   if (state === "upcoming") return `Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}. It is free, and it takes just a few minutes.`;
   return `Registrations are open until ${longDate(closes)}. It is free, and it takes just a few minutes.`;
 }
 
-/** "3 - 12 Oct 2026", following the dates organisers have set. */
+/** "3 - 12 Oct 2026": opening and closing date as displayed. */
 export function RegistrationRange() {
   return useRegistrationRange();
 }
