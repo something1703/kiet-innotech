@@ -76,3 +76,11 @@ def test_adding_the_same_admin_twice_at_once(as_user):
 
 def test_dotted_initials_match():
     assert rules.normalise_institution("K.I.E.T. Group") == rules.normalise_institution("KIET Group")
+
+
+def test_there_is_no_fifth_year(as_user):
+    for profile in (kiet_profile(year=5), college_profile(year=5)):
+        response = as_user("a@kiet.edu" if profile["participant_type"] == "kiet" else "a@gmail.com").put("/me/profile", profile)
+        assert response.status_code == 422, response.text
+        assert "year of study" in response.json()["detail"]
+    assert as_user("b@kiet.edu").put("/me/profile", kiet_profile(year=4)).status_code == 200

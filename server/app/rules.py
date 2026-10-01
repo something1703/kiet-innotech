@@ -30,7 +30,7 @@ DEPARTMENTS = [
 
 KIET_COURSES = ["B.Tech", "M.Tech", "MCA", "MBA", "B.Pharm", "M.Pharm", "Diploma", "Other"]
 COLLEGE_COURSES = ["B.Tech / B.E.", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "BBA", "MBA", "B.Pharm", "Diploma", "Other"]
-COLLEGE_YEARS = [1, 2, 3, 4, 5]
+COLLEGE_YEARS = [1, 2, 3, 4]
 SCHOOL_CLASSES = [6, 7, 8, 9, 10, 11, 12]
 
 DOMAINS = [

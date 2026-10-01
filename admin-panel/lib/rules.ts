@@ -28,7 +28,7 @@ export const participantTypeLabels: Record<ParticipantType, string> = {
 
 export const kietCourses = ["B.Tech", "M.Tech", "MCA", "MBA", "B.Pharm", "M.Pharm", "Diploma", "Other"];
 export const collegeCourses = ["B.Tech / B.E.", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "BBA", "MBA", "B.Pharm", "Diploma", "Other"];
-export const collegeYears = [1, 2, 3, 4, 5];
+export const collegeYears = [1, 2, 3, 4];
 export const schoolClasses = [6, 7, 8, 9, 10, 11, 12];
 
 export function isKietEmail(email: string) {
