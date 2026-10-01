@@ -4,7 +4,15 @@
  */
 import type { AdminTeam, AdminTeamMember, AdminUser, AuditEntry } from "../admin-types";
 import { categories, departments, domains } from "../content";
-import { JOIN_CODE_ALPHABET, KIET_EMAIL_DOMAIN, KIET_INSTITUTION, categoryEligibility } from "../rules";
+import {
+  JOIN_CODE_ALPHABET,
+  KIET_EMAIL_DOMAIN,
+  KIET_INSTITUTION,
+  NOMINATIONS_DEADLINE,
+  REGISTRATION_CLOSES,
+  REGISTRATION_OPENS,
+  categoryEligibility,
+} from "../rules";
 import type { Invitation, ParticipantType, Profile, TeamStatus } from "../types";
 import { demoAdmins } from "./demo-admins";
 
@@ -26,12 +34,14 @@ export type MockDb = {
   nominationsUpdated: { department: string; at: string; by: string }[];
   publishedAt: string | null;
   publishedBy: string | null;
+  /** The schedule organisers can change (registration window, nominations deadline). */
+  schedule: { opens: string; closes: string; deadline: string | null; customised: boolean; updatedBy: string | null; updatedAt: string | null };
   /** Latest timestamp handed out, so new actions always sort after the seeded October data. */
   clock: number;
   seq: number;
 };
 
-export const MOCK_DB_VERSION = 1;
+export const MOCK_DB_VERSION = 2;
 
 // ---------- Seeded PRNG (mulberry32) ----------
 
@@ -507,6 +517,7 @@ export function createSeed(): MockDb {
     nominationsUpdated: [],
     publishedAt: null,
     publishedBy: null,
+    schedule: { opens: REGISTRATION_OPENS, closes: REGISTRATION_CLOSES, deadline: NOMINATIONS_DEADLINE, customised: false, updatedBy: null, updatedAt: null },
     clock,
     seq: auditSeq,
   };

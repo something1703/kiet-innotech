@@ -71,6 +71,10 @@ set explicitly.
 - **Rate limiting**: invitations per team per day, and join-code attempts per student (stored in PostgreSQL, shared by
   all workers). Caddy caps request bodies at 1 MB.
 - **Admins**: people in `SUPER_ADMIN_EMAILS` are always super admins and add department admins in the admin panel.
+- **Schedule**: `REGISTRATION_OPENS`, `REGISTRATION_CLOSES` and `NOMINATIONS_DEADLINE` are only the *planned* dates. A super admin
+  changes them (or opens/closes registration on the spot) on the admin panel's Schedule page; the change is stored in the
+  database and applies to every student's next request, with no redeploy. Department admins can no longer change
+  nominations after the deadline; super admins always can.
 
 ## How it works
 
@@ -105,7 +109,8 @@ teammates cannot break the rules. `tests/test_concurrency.py` fires such races i
 
 ### Endpoints
 
-Sign-in: `POST /auth/google` (and `POST /dev/token` in development).
+Sign-in: `POST /auth/google` (and `POST /dev/token` in development). Public: `GET /config` (the registration window,
+from the server's clock, for pages that need it before anyone signs in).
 
 Student portal (`client/lib/api/live.ts`): `GET /me` (includes the registration window the server enforces), `PUT /me/profile`, `GET /me/team`, `GET /me/invitations`,
 `POST /teams`, `POST /teams/join`, `POST /teams/{id}/join-code/reset`, `PATCH /teams/{id}`, `DELETE /teams/{id}`, `POST /teams/{id}/submit`, `POST /teams/{id}/leave`,
@@ -115,5 +120,6 @@ Student portal (`client/lib/api/live.ts`): `GET /me` (includes the registration 
 Admin panel (`admin-panel/lib/api/live.ts`, which documents scoping and errors in detail): `GET /admin/me`,
 `GET /admin/stats`, `GET /admin/teams`, `GET /admin/teams/export`, `GET /admin/teams/{id}`,
 `POST /admin/teams/{id}/withdraw|disqualify|restore`, `GET /admin/students`, `GET /admin/students/export`,
-`GET /admin/finalists`, `PUT /admin/finalists/{department}`, `GET /admin/finalists/summary`,
+`GET|PUT /admin/schedule` and `POST /admin/schedule/open-now|close-now` (registration window and nominations deadline; any
+admin reads, only a super admin changes), `GET /admin/finalists`, `PUT /admin/finalists/{department}`, `GET /admin/finalists/summary`,
 `POST /admin/results/publish`, `GET|POST /admin/admins`, `DELETE /admin/admins/{email}`, `GET /admin/audit`.

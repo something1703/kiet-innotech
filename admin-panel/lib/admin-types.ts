@@ -42,7 +42,10 @@ export type AuditAction =
   | "results.published"
   | "admin.added"
   | "admin.removed"
-  | "team.code_reset";
+  | "team.code_reset"
+  | "schedule.updated"
+  | "schedule.opened"
+  | "schedule.closed";
 
 export type AuditEntry = {
   id: string;
@@ -150,6 +153,38 @@ export type Stats = {
   byDomain: { domain: string; teams: number }[];
   /** Super admin only: other colleges and schools with the most registered students. */
   topInstitutions: { institution: string; participantType: ParticipantType; city: string; students: number; teams: number }[] | null;
+  schedule: Schedule;
+};
+
+export type RegistrationState = "upcoming" | "open" | "closed";
+
+/** The registration window as the server enforces it. */
+export type RegistrationWindow = {
+  state: RegistrationState;
+  /** ISO 8601 with an offset. */
+  opens: string;
+  closes: string;
+};
+
+/** The event schedule an organiser can change: registration window and the finalist nominations deadline. */
+export type Schedule = {
+  registration: RegistrationWindow;
+  nominationsDeadline: string | null;
+  /** False once the deadline has passed (department admins are then locked out of nominations). */
+  nominationsOpen: boolean;
+  /** True once an organiser saved a change; false while the planned dates apply. */
+  customised: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  /** The server's clock, so the page never depends on the browser's. */
+  serverTime: string;
+  planned: { registrationOpens: string; registrationCloses: string; nominationsDeadline: string | null };
+};
+
+export type ScheduleInput = {
+  registrationOpens: string;
+  registrationCloses: string;
+  nominationsDeadline: string | null;
 };
 
 export type TimelinePoint = {
@@ -192,6 +227,10 @@ export type FinalistCategory = {
 
 export type FinalistBoard = {
   department: string;
+  /** Department admins' nominations are due by then. Null = no deadline. */
+  nominationsDeadline: string | null;
+  /** True when the deadline has passed and the signed-in admin can no longer change this board (super admins still can). */
+  nominationsLocked: boolean;
   /** Set once the super admin publishes results; nominations are then read-only. */
   publishedAt: string | null;
   updatedAt: string | null;

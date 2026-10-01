@@ -1,8 +1,9 @@
 import Image from "next/image";
+import type { ReactNode } from "react";
 import { CalendarDays, MapPin, Ticket } from "lucide-react";
 import { event } from "@/lib/content";
 import { Countdown } from "./Countdown";
-import { RegisterCta } from "./RegisterCta";
+import { RegisterCta, RegistrationRange } from "./RegisterCta";
 
 const facts = [
   { icon: CalendarDays, label: event.finaleLabel },
@@ -82,7 +83,7 @@ export function Hero() {
           <Countdown to={event.finaleDate} endsAt={event.finaleEndDate} />
 
           <div className="mt-8 space-y-4 border-t border-white/10 pt-6">
-            <Milestone label="Registrations" value="3 - 12 Oct 2026" />
+            <Milestone label="Registrations" value={<RegistrationRange />} />
             <Milestone label="Department level" value="22 - 24 Oct 2026" />
             <Milestone label="Grand Finale" value="30 Oct 2026" highlight />
           </div>
@@ -92,7 +93,7 @@ export function Hero() {
   );
 }
 
-function Milestone({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+function Milestone({ label, value, highlight = false }: { label: string; value: ReactNode; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-slate-400">{label}</span>

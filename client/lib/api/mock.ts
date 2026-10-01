@@ -5,6 +5,8 @@
 import { getSession } from "../auth/session";
 import {
   KIET_INSTITUTION,
+  REGISTRATION_CLOSES,
+  REGISTRATION_OPENS,
   TEAM_MAX_SIZE,
   categoryEligibility,
   JOIN_CODE_ALPHABET,
@@ -19,6 +21,7 @@ import {
   sameInstitution,
   submissionChecks,
 } from "../rules";
+import { longDate } from "../format";
 import type { Invitation, Profile, ProfileInput, Team, TeamInput, TeamMember } from "../types";
 import { ApiError, type StudentApi } from "./types";
 
@@ -165,8 +168,8 @@ function requireProfile(db: Db) {
 
 function requireOpen() {
   const state = registrationState();
-  if (state === "upcoming") throw new ApiError("Registration opens on 3 October 2026.", 403);
-  if (state === "closed") throw new ApiError("Registration closed on 12 October 2026. Teams can no longer be changed.", 403);
+  if (state === "upcoming") throw new ApiError(`Registration opens on ${longDate(REGISTRATION_OPENS)}.`, 403);
+  if (state === "closed") throw new ApiError(`Registration closed on ${longDate(REGISTRATION_CLOSES)}. Teams can no longer be changed.`, 403);
 }
 
 function teamOf(db: Db, userId: string) {

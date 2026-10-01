@@ -8,10 +8,11 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
-
-from .config import Settings
+from zoneinfo import ZoneInfo
 
 ParticipantType = Literal["kiet", "college", "school"]
+
+IST = ZoneInfo("Asia/Kolkata")
 
 KIET_EMAIL_DOMAIN = "kiet.edu"
 KIET_INSTITUTION = "KIET Deemed to be University"
@@ -162,13 +163,11 @@ def finalist_quota(department: str, category: int) -> int:
 RegistrationState = Literal["upcoming", "open", "closed"]
 
 
-def registration_state(settings: Settings, now: datetime | None = None) -> RegistrationState:
-    if settings.force_registration_open:
-        return "open"
+def window_state(opens: datetime, closes: datetime, now: datetime | None = None) -> RegistrationState:
     now = now or datetime.now(UTC)
-    if now < settings.registration_opens:
+    if now < opens:
         return "upcoming"
-    if now > settings.registration_closes:
+    if now > closes:
         return "closed"
     return "open"
 

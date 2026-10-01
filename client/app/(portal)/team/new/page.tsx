@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { draftKeys } from "@/lib/drafts";
-import { useRegistrationState } from "@/lib/registration";
+import { longDate } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import type { TeamInput } from "@/lib/types";
 import { Notice, buttonStyles } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
@@ -18,6 +19,7 @@ export default function NewTeamPage() {
   const { me, team, invitations, refresh } = usePortal();
   const profile = me.profile!;
   const registration = useRegistrationState();
+  const { opens } = useRegistrationDates();
   const { run, pending, error } = useAction();
   const created = useRef(false);
 
@@ -56,7 +58,7 @@ export default function NewTeamPage() {
 
       {registration !== "open" ? (
         <Panel>
-          <Notice tone={registration === "closed" ? "warning" : "info"} title={registration === "closed" ? "Registration has closed" : "Registration opens on 3 October 2026"}>
+          <Notice tone={registration === "closed" ? "warning" : "info"} title={registration === "closed" ? "Registration has closed" : `Registration opens on ${longDate(opens)}`}>
             {registration === "closed" ? "New teams can no longer be created." : "You can create your team once registration opens."}
           </Notice>
           <Link href="/dashboard" className={`${buttonStyles("outline", "sm")} mt-6`}>

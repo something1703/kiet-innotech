@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { GraduationCap, LayoutDashboard, LogOut, Menu, ShieldCheck, Trophy, Users, X } from "lucide-react";
+import { CalendarClock, GraduationCap, LayoutDashboard, LogOut, Menu, ShieldCheck, Trophy, Users, X } from "lucide-react";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { API_MODE } from "@/lib/auth/session";
@@ -17,6 +17,7 @@ const nav = [
   { href: "/teams", label: "Teams", Icon: Users, superOnly: false },
   { href: "/students", label: "Students", Icon: GraduationCap, superOnly: false },
   { href: "/finalists", label: "Finalists", Icon: Trophy, superOnly: false },
+  { href: "/schedule", label: "Schedule", Icon: CalendarClock, superOnly: true },
   { href: "/admins", label: "Admins", Icon: ShieldCheck, superOnly: true },
 ];
 

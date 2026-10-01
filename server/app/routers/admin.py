@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
-from ..auth import CurrentAdmin
+from ..auth import CurrentAdmin, SuperAdmin
 from ..config import Settings, get_settings
 from ..db import get_db
 from ..schemas import (
@@ -18,13 +18,17 @@ from ..schemas import (
     FinalistBoardOut,
     FinalistSummaryOut,
     NominationsInput,
+    OpenNowInput,
     PublishOut,
     ReasonInput,
+    ScheduleInput,
+    ScheduleOut,
     StatsOut,
     StudentPage,
     TeamPage,
 )
 from ..services import admin as service
+from ..services import schedule
 from ..services.admin import StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -39,8 +43,8 @@ def me(admin: CurrentAdmin) -> AdminOut:
 
 
 @router.get("/stats")
-def stats(admin: CurrentAdmin, db: Db) -> StatsOut:
-    return service.stats(db, admin)
+def stats(admin: CurrentAdmin, db: Db, settings: AppSettings) -> StatsOut:
+    return service.stats(db, admin, settings)
 
 
 @router.get("/teams")
@@ -91,21 +95,53 @@ def finalist_summary(admin: CurrentAdmin, db: Db) -> FinalistSummaryOut:
 
 
 @router.get("/finalists")
-def finalist_board(admin: CurrentAdmin, db: Db, department: Annotated[str | None, Query(max_length=20)] = None) -> FinalistBoardOut:
+def finalist_board(
+    admin: CurrentAdmin, db: Db, settings: AppSettings, department: Annotated[str | None, Query(max_length=20)] = None
+) -> FinalistBoardOut:
     # A department admin can omit the department and gets their own board.
-    return service.finalist_board(db, admin, department or admin.department or "")
+    return service.finalist_board(db, admin, department or admin.department or "", settings)
 
 
 @router.put("/finalists/{department}")
 def save_finalists(
-    department: Annotated[str, Path(max_length=20)], data: NominationsInput, admin: CurrentAdmin, db: Db
+    department: Annotated[str, Path(max_length=20)], data: NominationsInput, admin: CurrentAdmin, db: Db, settings: AppSettings
 ) -> FinalistBoardOut:
-    return service.save_finalists(db, admin, department, data)
+    return service.save_finalists(db, admin, department, data, settings)
 
 
 @router.post("/results/publish")
 def publish_results(admin: CurrentAdmin, db: Db) -> PublishOut:
     return service.publish_results(db, admin)
+
+
+@router.get("/schedule")
+def get_schedule(admin: CurrentAdmin, db: Db, settings: AppSettings) -> ScheduleOut:
+    """Every admin can see the schedule; only a super admin can change it."""
+    return schedule.to_out(schedule.load(db, settings), settings)
+
+
+@router.put("/schedule")
+def set_schedule(data: ScheduleInput, admin: SuperAdmin, db: Db, settings: AppSettings) -> ScheduleOut:
+    window = schedule.update(
+        db,
+        settings,
+        admin.email,
+        opens=data.registration_opens,
+        closes=data.registration_closes,
+        deadline=data.nominations_deadline,
+    )
+    return schedule.to_out(window, settings)
+
+
+@router.post("/schedule/open-now")
+def open_registration_now(admin: SuperAdmin, db: Db, settings: AppSettings, data: OpenNowInput | None = None) -> ScheduleOut:
+    closes = data.registration_closes if data else None
+    return schedule.to_out(schedule.open_now(db, settings, admin.email, closes=closes), settings)
+
+
+@router.post("/schedule/close-now")
+def close_registration_now(admin: SuperAdmin, db: Db, settings: AppSettings) -> ScheduleOut:
+    return schedule.to_out(schedule.close_now(db, settings, admin.email), settings)
 
 
 @router.get("/admins")

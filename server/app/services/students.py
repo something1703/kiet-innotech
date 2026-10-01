@@ -7,8 +7,7 @@ constraints back up the rules that span teams (one team per student, unique team
 """
 
 import uuid
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import timedelta
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -20,25 +19,19 @@ from ..db import violated_constraint
 from ..errors import ApiError
 from ..models import Invitation, Profile, Team, TeamMember, User, utcnow
 from ..schemas import ProfileInput, TeamInput
-from . import audit, limits
+from . import audit, limits, schedule
 
 # ---------- Shared checks ----------
 
 
-IST = ZoneInfo("Asia/Kolkata")
-
-
-def _day(moment: datetime) -> str:
-    local = moment.astimezone(IST)
-    return f"{local.day} {local:%B %Y}"
-
-
-def require_open(settings: Settings) -> None:
-    state = rules.registration_state(settings)
+def require_open(db: Session, settings: Settings) -> None:
+    """Registration is a window an organiser can move, so it is read from the database on every change."""
+    current = schedule.load(db, settings)
+    state = current.registration_state()
     if state == "upcoming":
-        raise ApiError(f"Registration opens on {_day(settings.registration_opens)}.", 403)
+        raise ApiError(f"Registration opens on {schedule.day(current.opens)}.", 403)
     if state == "closed":
-        raise ApiError(f"Registration closed on {_day(settings.registration_closes)}. Teams can no longer be changed.", 403)
+        raise ApiError(f"Registration closed on {schedule.day(current.closes)}. Teams can no longer be changed.", 403)
 
 
 def _locked(statement):
@@ -151,7 +144,7 @@ def save_profile(db: Session, user: User, data: ProfileInput, settings: Settings
     institution_key = rules.institution_key(data.participant_type, data.institution, data.city)
 
     if profile is None:
-        require_open(settings)
+        require_open(db, settings)
         profile = Profile(user_id=user.id)
         db.add(profile)
     elif _membership(db, user.id) is not None:
@@ -191,7 +184,7 @@ def my_team(db: Session, user: User) -> Team | None:
 
 
 def create_team(db: Session, user: User, data: TeamInput, settings: Settings) -> Team:
-    require_open(settings)
+    require_open(db, settings)
     # Locking the profile keeps it from changing while the team is built from it.
     leader = require_profile(db, user, lock=True)
     if _membership(db, user.id) is not None:
@@ -230,7 +223,7 @@ def create_team(db: Session, user: User, data: TeamInput, settings: Settings) ->
 
 
 def update_team(db: Session, user: User, team_id: uuid.UUID, data: TeamInput, settings: Settings) -> Team:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     if error := rules.category_error(data.category, team.participant_type, _member_years(db, team.id)):
@@ -248,7 +241,7 @@ def update_team(db: Session, user: User, team_id: uuid.UUID, data: TeamInput, se
 
 
 def delete_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings) -> None:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     audit.record(db, user.email, "team.deleted", team, team.name)
@@ -270,7 +263,7 @@ def submission_problem(db: Session, team: Team) -> str | None:
 
 
 def submit_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings) -> tuple[Team, list[emails.Email]]:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     if problem := submission_problem(db, team):
@@ -286,7 +279,7 @@ def submit_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings)
 
 
 def leave_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings) -> None:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=False)
     # A withdrawn team is out of the competition; anyone in it, leader included, may leave to join another team.
     if team.status != "withdrawn":
@@ -299,7 +292,7 @@ def leave_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings) 
 
 
 def remove_member(db: Session, user: User, team_id: uuid.UUID, member_id: uuid.UUID, settings: Settings) -> Team:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     if member_id == user.id:
@@ -318,7 +311,7 @@ def remove_member(db: Session, user: User, team_id: uuid.UUID, member_id: uuid.U
 
 
 def invite(db: Session, user: User, team_id: uuid.UUID, email: str, settings: Settings) -> tuple[Team, emails.Email]:
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     email = email.strip().lower()
@@ -402,7 +395,7 @@ def respond(db: Session, user: User, invitation_id: uuid.UUID, accept: bool, set
         db.commit()
         return
 
-    require_open(settings)
+    require_open(db, settings)
     # Lock the team, then the profile. No other path locks a profile and then a team, so this cannot deadlock.
     team = _lock_team(db, invitation.team_id)
     profile = require_profile(db, user, lock=True)
@@ -435,7 +428,7 @@ def respond(db: Session, user: User, invitation_id: uuid.UUID, accept: bool, set
 
 def join_with_code(db: Session, user: User, code: str, settings: Settings) -> Team:
     """Joins the team whose leader shared this code, under the same rules as accepting an invitation."""
-    require_open(settings)
+    require_open(db, settings)
     # 32^8 codes cannot be enumerated at this rate, and a real student needs only a couple of tries.
     limits.hit(f"join:{user.id}", 10, timedelta(minutes=15), "Too many attempts. Check the code with your leader and try again later.")
     join_code = rules.normalise_join_code(code)
@@ -482,7 +475,7 @@ def join_with_code(db: Session, user: User, code: str, settings: Settings) -> Te
 
 def reset_join_code(db: Session, user: User, team_id: uuid.UUID, settings: Settings) -> Team:
     """A new code for the team; the old one stops working, e.g. after it was shared too widely."""
-    require_open(settings)
+    require_open(db, settings)
     team = _lock_own_team(db, user, team_id, leader=True)
     _require_draft(team)
     team.join_code = rules.new_join_code()

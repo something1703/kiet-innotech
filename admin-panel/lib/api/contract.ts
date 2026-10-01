@@ -9,6 +9,8 @@ import type {
   NominationInput,
   Page,
   PublishResult,
+  Schedule,
+  ScheduleInput,
   Stats,
   StudentQuery,
   TeamQuery,
@@ -32,6 +34,13 @@ export interface AdminApi {
 
   listStudents(query: StudentQuery): Promise<Page<AdminStudent>>;
   exportStudents(query: StudentQuery): Promise<AdminStudent[]>;
+
+  /** Registration window and nominations deadline. Any admin can read it; only a super admin can change it. */
+  getSchedule(): Promise<Schedule>;
+  saveSchedule(input: ScheduleInput): Promise<Schedule>;
+  /** Opens registration immediately. `registrationCloses` is needed only if the closing date has already passed. */
+  openRegistrationNow(registrationCloses?: string): Promise<Schedule>;
+  closeRegistrationNow(): Promise<Schedule>;
 
   getFinalists(department: string): Promise<FinalistBoard>;
   saveFinalists(department: string, nominations: NominationInput): Promise<FinalistBoard>;

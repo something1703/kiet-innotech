@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore, type ComponentType } from "react";
 import { ClipboardCheck, ClipboardPen, Lock, Megaphone, Trophy, type LucideProps } from "lucide-react";
-import { event, timeline, type Milestone } from "@/lib/content";
+import { event, type Milestone } from "@/lib/content";
+import { useTimeline } from "@/lib/schedule-content";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
 
@@ -34,6 +35,7 @@ const stages: { icon: ComponentType<LucideProps>; text: string; bg: string; bord
 const number = (index: number) => String(index + 1).padStart(2, "0");
 
 export function Timeline() {
+  const timeline = useTimeline();
   // Read the visitor's clock on the client only; the server render shows every milestone as upcoming.
   const today = useSyncExternalStore(noSubscription, getTodayInIndia, () => null);
   const statuses = timeline.map((milestone) => (today === null ? "upcoming" : getStatus(milestone, today)));

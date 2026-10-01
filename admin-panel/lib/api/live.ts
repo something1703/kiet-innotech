@@ -74,6 +74,23 @@
  *   GET    /admin/students/export?(same filters, no paging)
  *          → AdminStudent[]
  *
+ *   GET    /admin/schedule
+ *          → Schedule { registration: { state, opens, closes }, nominations_deadline | null, nominations_open, customised,
+ *            updated_by, updated_at, server_time, planned: { registration_opens, registration_closes, nominations_deadline } }
+ *          Every admin can read it.
+ *
+ *   PUT    /admin/schedule        (super_admin only)
+ *          body { registration_opens, registration_closes, nominations_deadline | null }, each ISO 8601 WITH an offset.
+ *          422 if closes <= opens, a window over a year, a date outside 2020-2100, or a date without an offset.
+ *          Applies on the very next request of every student; audited ("schedule.updated"). → Schedule
+ *
+ *   POST   /admin/schedule/open-now     (super_admin only)    body {} or { registration_closes }
+ *          Opens registration now. 409 if already open; 422 if the (old or given) closing date is not in the future,
+ *          in which case send a new registration_closes. → Schedule
+ *
+ *   POST   /admin/schedule/close-now    (super_admin only)
+ *          Closes registration now; submitted teams are untouched. 409 if already closed. → Schedule
+ *
  *   GET    /admin/finalists?department=
  *          → FinalistBoard { department, published_at, updated_at, updated_by,
  *            categories: [{ category, quota, teams: TeamSummary[], nominated: team_id[] }] }
@@ -125,6 +142,8 @@ import type {
   FinalistSummary,
   Page,
   PublishResult,
+  Schedule,
+  ScheduleInput,
   Stats,
   StudentQuery,
   TeamQuery,
@@ -256,6 +275,12 @@ export const liveApi: AdminApi = {
   listStudents: (query: StudentQuery) => request<Page<AdminStudent>>("GET", `/admin/students${queryString(query)}`),
   exportStudents: (query: StudentQuery) =>
     request<AdminStudent[]>("GET", `/admin/students/export${queryString(withoutPaging(query))}`),
+
+  getSchedule: () => request<Schedule>("GET", "/admin/schedule"),
+  saveSchedule: (input: ScheduleInput) => request<Schedule>("PUT", "/admin/schedule", input),
+  openRegistrationNow: (registrationCloses) =>
+    request<Schedule>("POST", "/admin/schedule/open-now", registrationCloses ? { registrationCloses } : {}),
+  closeRegistrationNow: () => request<Schedule>("POST", "/admin/schedule/close-now"),
 
   getFinalists: (department) => request<FinalistBoard>("GET", `/admin/finalists${queryString({ department })}`),
   saveFinalists: (department, nominations) =>

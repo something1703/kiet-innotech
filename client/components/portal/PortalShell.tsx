@@ -7,7 +7,8 @@ import type { ReactNode } from "react";
 import { LogOut, RefreshCw } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth/session";
 import { isPath, isUnder } from "@/lib/paths";
-import { useRegistrationState } from "@/lib/registration";
+import { longDate, longDateTime } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { Button, Notice } from "@/components/ui/form";
 import { PortalProvider } from "./PortalProvider";
 
@@ -17,11 +18,6 @@ const tabs = [
   { label: "Profile", href: "/profile" },
 ];
 
-const registrationMessages = {
-  upcoming: "Registration opens on 3 October 2026.",
-  open: "Registration is open until 12 October 2026, 11:59 PM IST.",
-  closed: "Registration closed on 12 October 2026. Teams are now locked.",
-};
 
 /** The frame around every signed-in page: header, section tabs, registration status and footer. */
 export function PortalShell({ children }: { children: ReactNode }) {
@@ -29,6 +25,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const session = useSession();
   const registration = useRegistrationState();
+  const { opens, closes } = useRegistrationDates();
+  const registrationMessages = {
+    upcoming: `Registration opens on ${longDate(opens)}.`,
+    open: `Registration is open until ${longDateTime(closes)}.`,
+    closed: `Registration closed on ${longDate(closes)}. Teams are now locked.`,
+  };
   const onboarding = isPath(pathname, "/onboarding");
 
   return (

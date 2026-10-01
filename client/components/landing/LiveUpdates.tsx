@@ -1,7 +1,10 @@
-import { liveUpdates } from "@/lib/content";
+"use client";
+
+import { useLiveUpdates } from "@/lib/schedule-content";
 
 /** Scrolling news ticker shown under the header. */
 export function LiveUpdates() {
+  const liveUpdates = useLiveUpdates();
   // The list is rendered twice so the marquee can loop seamlessly.
   const items = [...liveUpdates, ...liveUpdates];
 

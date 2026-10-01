@@ -14,7 +14,10 @@ import {
   type FinalistSummary,
   type NominationInput,
   type Page,
+  type RegistrationState,
   type PublishResult,
+  type Schedule,
+  type ScheduleInput,
   type StatusCounts,
   type Stats,
   type StudentQuery,
@@ -23,8 +26,9 @@ import {
   type TimelinePoint,
 } from "../admin-types";
 import { getMockEmail } from "../auth/session";
+import { formatIst } from "../format";
 import { categories, departments } from "../content";
-import { finalistQuota, normaliseInstitution, REGISTRATION_CLOSES, REGISTRATION_OPENS, TEAM_MIN_SIZE } from "../rules";
+import { finalistQuota, NOMINATIONS_DEADLINE, normaliseInstitution, REGISTRATION_CLOSES, REGISTRATION_OPENS, TEAM_MIN_SIZE } from "../rules";
 import type { ParticipantType, TeamStatus } from "../types";
 import { ApiError, DEFAULT_PAGE_SIZE, type AdminApi } from "./contract";
 import { createSeed, MOCK_DB_VERSION, type MockDb, type StudentRecord } from "./seed";
@@ -307,10 +311,14 @@ function nominatedIds(db: MockDb, department: string, category: number) {
   return (entry?.teamIds ?? []).filter((id) => eligible.has(id));
 }
 
-function board(db: MockDb, department: string): FinalistBoard {
+const deadlinePassed = (db: MockDb) => db.schedule.deadline !== null && Date.now() > new Date(db.schedule.deadline).getTime();
+
+function board(db: MockDb, department: string, admin: AdminUser): FinalistBoard {
   const updated = db.nominationsUpdated.find((u) => u.department === department);
   return {
     department,
+    nominationsDeadline: db.schedule.deadline,
+    nominationsLocked: deadlinePassed(db) && admin.role !== "super_admin",
     publishedAt: db.publishedAt,
     updatedAt: updated?.at ?? null,
     updatedBy: updated?.by ?? null,
@@ -401,6 +409,49 @@ function topInstitutionsOf(students: StudentRecord[], active: AdminTeam[]) {
     .slice(0, 10);
 }
 
+// ---------- Schedule (mirrors server/app/services/schedule.py) ----------
+
+const DAY_MS = 86_400_000;
+
+function windowState(opens: string, closes: string): RegistrationState {
+  const at = Date.now();
+  if (at < new Date(opens).getTime()) return "upcoming";
+  if (at > new Date(closes).getTime()) return "closed";
+  return "open";
+}
+
+function scheduleOf(db: MockDb): Schedule {
+  const { opens, closes, deadline, customised, updatedBy, updatedAt } = db.schedule;
+  return {
+    registration: { state: windowState(opens, closes), opens, closes },
+    nominationsDeadline: deadline,
+    nominationsOpen: !deadlinePassed(db),
+    customised,
+    updatedBy,
+    updatedAt,
+    serverTime: new Date().toISOString(),
+    planned: { registrationOpens: REGISTRATION_OPENS, registrationCloses: REGISTRATION_CLOSES, nominationsDeadline: NOMINATIONS_DEADLINE },
+  };
+}
+
+function checkWindow(opens: string, closes: string, deadline: string | null) {
+  const earliest = new Date("2020-01-01T00:00:00Z").getTime();
+  const latest = new Date("2100-01-01T00:00:00Z").getTime();
+  for (const [name, value] of [["opening", opens], ["closing", closes], ["nomination deadline", deadline]] as const) {
+    if (value === null) continue;
+    const time = new Date(value).getTime();
+    if (Number.isNaN(time) || time < earliest || time > latest) throw new ApiError(422, `The ${name} date is not a sensible date.`);
+  }
+  const span = new Date(closes).getTime() - new Date(opens).getTime();
+  if (span <= 0) throw new ApiError(422, "Registration must close after it opens.");
+  if (span > 366 * DAY_MS) throw new ApiError(422, "Registration can stay open for at most a year.");
+}
+
+function writeSchedule(db: MockDb, admin: AdminUser, opens: string, closes: string, deadline: string | null) {
+  checkWindow(opens, closes, deadline);
+  db.schedule = { opens, closes, deadline, customised: true, updatedBy: admin.email, updatedAt: new Date().toISOString() };
+}
+
 export const mockApi: AdminApi = {
   mode: "mock",
 
@@ -458,6 +509,7 @@ export const mockApi: AdminApi = {
         .map(([domain, count]) => ({ domain, teams: count }))
         .sort((a, b) => b.teams - a.teams || a.domain.localeCompare(b.domain)),
       topInstitutions: isSuper ? topInstitutionsOf(students, active) : null,
+      schedule: scheduleOf(db),
     };
     return stats;
   },
@@ -536,11 +588,61 @@ export const mockApi: AdminApi = {
     return clone(filterStudents(db, actor(db), query));
   },
 
+  async getSchedule() {
+    await delay();
+    const db = load();
+    actor(db);
+    return clone(scheduleOf(db));
+  },
+
+  async saveSchedule(input: ScheduleInput) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "change the schedule");
+    writeSchedule(db, admin, input.registrationOpens, input.registrationCloses, input.nominationsDeadline);
+    log(db, { actorEmail: admin.email, action: "schedule.updated", department: null, detail: `Registration ${input.registrationOpens} to ${input.registrationCloses}` });
+    save(db);
+    return clone(scheduleOf(db));
+  },
+
+  async openRegistrationNow(registrationCloses) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "change the schedule");
+    if (windowState(db.schedule.opens, db.schedule.closes) === "open") throw new ApiError(409, "Registration is already open.");
+    const closes = registrationCloses ?? db.schedule.closes;
+    const opens = new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
+    if (new Date(closes).getTime() <= Date.now()) {
+      throw new ApiError(422, "The closing date has passed. Choose a new closing date to open registration again.");
+    }
+    writeSchedule(db, admin, opens, closes, db.schedule.deadline);
+    log(db, { actorEmail: admin.email, action: "schedule.opened", department: null, detail: `Registration opened by an organiser; closes ${closes}` });
+    save(db);
+    return clone(scheduleOf(db));
+  },
+
+  async closeRegistrationNow() {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "change the schedule");
+    if (windowState(db.schedule.opens, db.schedule.closes) === "closed") throw new ApiError(409, "Registration is already closed.");
+    const closes = new Date(Math.floor(Date.now() / 1000) * 1000 - 1000).toISOString();
+    const opens = new Date(Math.min(new Date(db.schedule.opens).getTime(), new Date(closes).getTime() - 1000)).toISOString();
+    writeSchedule(db, admin, opens, closes, db.schedule.deadline);
+    log(db, { actorEmail: admin.email, action: "schedule.closed", department: null, detail: "Registration closed by an organiser" });
+    save(db);
+    return clone(scheduleOf(db));
+  },
+
   async getFinalists(department) {
     await delay();
     const db = load();
-    checkBoardAccess(actor(db), department);
-    return clone(board(db, department));
+    const admin = actor(db);
+    checkBoardAccess(admin, department);
+    return clone(board(db, department, admin));
   },
 
   async saveFinalists(department, nominations: NominationInput) {
@@ -549,6 +651,9 @@ export const mockApi: AdminApi = {
     const admin = actor(db);
     checkBoardAccess(admin, department);
     if (db.publishedAt) throw new ApiError(409, "Results have been published. Nominations are locked.");
+    if (deadlinePassed(db) && admin.role !== "super_admin") {
+      throw new ApiError(403, `The nomination deadline passed on ${formatIst(db.schedule.deadline)}. Ask a super admin to change the nominations.`);
+    }
     for (const { category, teamIds } of nominations) {
       if (!categories.some((c) => c.number === category)) throw new ApiError(422, `Unknown category ${category}.`);
       const unique = [...new Set(teamIds)];
@@ -582,7 +687,7 @@ export const mockApi: AdminApi = {
       db.nominationsUpdated.push({ department, at, by: admin.email });
     }
     save(db);
-    return clone(board(db, department));
+    return clone(board(db, department, admin));
   },
 
   async finalistSummary() {

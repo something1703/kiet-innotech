@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { navLinks } from "@/lib/content";
+import { useRegistrationState } from "@/lib/registration";
 
 /** `linkBase` is "/" on pages other than the home page, so section links point back to it. */
 export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Once registration has closed there is nothing left to register for; Login is how students get back to their team.
+  const closed = useRegistrationState() === "closed";
   const [activeId, setActiveId] = useState("");
 
   // Add a shadow once the page is scrolled.
@@ -106,12 +109,14 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
           >
             Login
           </Link>
-          <Link
-            href="/register"
-            className="hidden rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/25 transition hover:-translate-y-0.5 hover:bg-accent-600 sm:inline-flex"
-          >
-            Register
-          </Link>
+          {!closed && (
+            <Link
+              href="/register"
+              className="hidden rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/25 transition hover:-translate-y-0.5 hover:bg-accent-600 sm:inline-flex"
+            >
+              Register
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
@@ -148,7 +153,7 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
               </li>
             ))}
           </ul>
-          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4">
+          <div className={`mt-4 grid gap-3 border-t border-line pt-4 ${closed ? "grid-cols-1" : "grid-cols-2"}`}>
             <Link
               href="/login"
               onClick={closeMenu}
@@ -156,13 +161,15 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
             >
               Login
             </Link>
-            <Link
-              href="/register"
-              onClick={closeMenu}
-              className="rounded-full bg-accent-500 py-3 text-center text-sm font-semibold text-white"
-            >
-              Register
-            </Link>
+            {!closed && (
+              <Link
+                href="/register"
+                onClick={closeMenu}
+                className="rounded-full bg-accent-500 py-3 text-center text-sm font-semibold text-white"
+              >
+                Register
+              </Link>
+            )}
           </div>
         </nav>
       </div>

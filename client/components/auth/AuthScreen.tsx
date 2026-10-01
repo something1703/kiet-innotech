@@ -11,7 +11,9 @@ import { renderGoogleButton } from "@/lib/auth/google";
 import { apiMode, devSignIn, devSignInEnabled, googleClientId, mockSignIn, sessionEnded, signInWithGoogle, useSession } from "@/lib/auth/session";
 import { event, registrationSteps } from "@/lib/content";
 import { normalisePath } from "@/lib/paths";
-import { useRegistrationState } from "@/lib/registration";
+import { longDate } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
+import { useRegistrationSentence } from "@/lib/schedule-content";
 import { Button, Field, Input, Notice } from "@/components/ui/form";
 
 /** Only allow returning to a page on this site, and not to the sign-in pages themselves. */
@@ -25,7 +27,6 @@ function safeNext(next: string | null) {
 }
 
 const facts = [
-  { icon: CalendarDays, label: "Registration open until 12 October 2026" },
   { icon: MapPin, label: `Grand Finale ${event.finaleLabel}, KIET` },
   { icon: Ticket, label: "No registration fee" },
 ];
@@ -35,6 +36,8 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
   const next = safeNext(useSearchParams().get("next"));
   const session = useSession();
   const registration = useRegistrationState();
+  const { opens } = useRegistrationDates();
+  const registrationSentence = useRegistrationSentence();
   // Only after a client-side trip from the portal, so this never differs from the prerendered page.
   const [ended] = useState(sessionEnded);
   const [signingIn, setSigningIn] = useState(false);
@@ -82,7 +85,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               <span className="text-accent-500">Sustainable</span> Viksit Bharat @2047
             </p>
             <ul className="mt-8 hidden space-y-3 sm:block">
-              {facts.map(({ icon: FactIcon, label }) => (
+              {[{ icon: CalendarDays, label: registrationSentence }, ...facts].map(({ icon: FactIcon, label }) => (
                 <li key={label} className="flex items-center gap-3 text-sm text-slate-300">
                   <FactIcon size={18} className="shrink-0 text-brand-400" aria-hidden="true" />
                   {label}
@@ -132,7 +135,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               </Notice>
             )}
             {registration === "upcoming" && isRegister && (
-              <Notice tone="info" title="Registration opens on 3 October 2026">
+              <Notice tone="info" title={`Registration opens on ${longDate(opens)}`}>
                 You can sign in now, but profiles and teams can only be created once registration opens.
               </Notice>
             )}

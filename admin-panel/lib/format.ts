@@ -98,6 +98,9 @@ export const auditLabels: Record<AuditAction, string> = {
   "admin.added": "Admin added",
   "admin.removed": "Admin removed",
   "team.code_reset": "Team code reset",
+  "schedule.updated": "Schedule changed",
+  "schedule.opened": "Registration opened",
+  "schedule.closed": "Registration closed",
 };
 
 export { participantTypeLabels };
@@ -113,4 +116,48 @@ export function plural(count: number, one: string, many = `${one}s`) {
 export function otherMemberDepartments(team: { department: string | null; members: { department: string | null }[] }) {
   if (!team.department) return [];
   return [...new Set(team.members.map((m) => m.department).filter((d): d is string => !!d && d !== team.department))];
+}
+
+// ---------- IST date-time inputs ----------
+
+const IST_OFFSET = "+05:30";
+
+/** An ISO time as the value of a <input type="datetime-local">, in IST ("2026-10-12T23:59"), whatever the browser's zone. */
+export function toIstInput(iso: string | null | undefined) {
+  if (!iso) return "";
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(iso))
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+/** The reverse: a datetime-local value read as IST, as an ISO string with the offset. Empty or invalid gives null. */
+export function fromIstInput(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}:00${IST_OFFSET}`);
+  return Number.isNaN(date.getTime()) ? null : `${value}:00${IST_OFFSET}`;
+}
+
+/** e.g. "12 Oct 2026, 11:59 pm IST" */
+export function formatIst(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return `${new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })} IST`;
 }

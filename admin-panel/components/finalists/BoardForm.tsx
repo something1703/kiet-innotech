@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import type { FinalistBoard } from "@/lib/admin-types";
-import { categoryTitle, formatDateTime } from "@/lib/format";
+import { categoryTitle, formatDateTime, formatIst } from "@/lib/format";
 import { DOUBLE_QUOTA_DEPARTMENTS } from "@/lib/rules";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
@@ -46,7 +46,9 @@ export function BoardForm({
   const [selection, setSelection] = useState<Selection>(() => initialSelection(board));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const locked = board.publishedAt !== null;
+  const published = board.publishedAt !== null;
+  // After the deadline only super admins can still change a board (the server enforces the same rule).
+  const locked = published || board.nominationsLocked;
 
   const original = initialSelection(board);
   const changed = board.categories.filter((c) => [...(selection[c.category] ?? [])].sort().join() !== [...(original[c.category] ?? [])].sort().join());
@@ -112,10 +114,18 @@ export function BoardForm({
         )}
       </div>
 
-      {locked && (
+      {published && (
         <Notice tone="info" title="Nominations are locked">
           Results were published on {formatDateTime(board.publishedAt)}. Nominated teams are finalists; other submitted teams are not selected.
         </Notice>
+      )}
+      {!published && board.nominationsLocked && (
+        <Notice tone="info" title="The nomination deadline has passed">
+          Nominations were due by {formatIst(board.nominationsDeadline)}. Ask a super admin if something has to change.
+        </Notice>
+      )}
+      {!published && !board.nominationsLocked && board.nominationsDeadline && (
+        <p className="text-xs text-muted">Nominations are due by {formatIst(board.nominationsDeadline)}.</p>
       )}
 
       <div className="divide-y divide-line border-y border-line">

@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Check, Mail } from "lucide-react";
 import { api } from "@/lib/api";
-import { timeline } from "@/lib/content";
-import { useRegistrationState } from "@/lib/registration";
+import { dayMonth } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
+import { useTimeline } from "@/lib/schedule-content";
 import { TEAM_MIN_SIZE, participantTypeLabels, yearLabel } from "@/lib/rules";
 import type { Invitation, Team } from "@/lib/types";
 import { Button, Notice, buttonStyles } from "@/components/ui/form";
@@ -144,6 +145,7 @@ function Invitations({ invitations }: { invitations: Invitation[] }) {
 }
 
 function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
+  const { closes } = useRegistrationDates();
   const next =
     team.status !== "draft"
       ? "Nothing more to do. Watch this page for results."
@@ -152,7 +154,7 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
           ? "Invite at least one more member."
           : team.invitations.length > 0
             ? "Wait for pending invitations to be accepted or cancel them, then submit."
-            : "Review your team and submit it before 12 October."
+            : `Review your team and submit it before ${dayMonth(closes)}.`
         : "Your leader will submit the team once everyone has joined.";
 
   const rows = [
@@ -186,6 +188,7 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
 }
 
 function KeyDates() {
+  const timeline = useTimeline();
   return (
     <Panel title="Key dates">
       <ul className="divide-y divide-line">

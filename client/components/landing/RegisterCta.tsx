@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { useRegistrationState } from "@/lib/registration";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
+import { useRegistrationRange } from "@/lib/schedule-content";
+import { longDate } from "@/lib/format";
 
 /**
  * The main call to action on the landing page: register until registration closes, then sign in to see your team.
@@ -20,7 +22,14 @@ export function RegisterCta({ label, className }: { label: string; className: st
 
 /** One line about the registration window, in the past tense once it has closed. */
 export function RegistrationNote() {
-  return useRegistrationState() === "closed"
-    ? "Registration closed on 12 October 2026. Registered students can sign in to see their team and results."
-    : "Registrations are open until 12 October 2026. It is free, and it takes just a few minutes.";
+  const state = useRegistrationState();
+  const { opens, closes } = useRegistrationDates();
+  if (state === "closed") return `Registration closed on ${longDate(closes)}. Registered students can sign in to see their team and results.`;
+  if (state === "upcoming") return `Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}. It is free, and it takes just a few minutes.`;
+  return `Registrations are open until ${longDate(closes)}. It is free, and it takes just a few minutes.`;
+}
+
+/** "3 - 12 Oct 2026", following the dates organisers have set. */
+export function RegistrationRange() {
+  return useRegistrationRange();
 }

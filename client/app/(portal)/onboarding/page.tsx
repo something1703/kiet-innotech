@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { draftKeys } from "@/lib/drafts";
 import { accountName } from "@/lib/format";
-import { useRegistrationState } from "@/lib/registration";
+import { longDate } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { Notice } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
 import { ProfileForm } from "@/components/portal/ProfileForm";
@@ -15,6 +16,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { me, refresh } = usePortal();
   const registration = useRegistrationState();
+  const { opens } = useRegistrationDates();
   const { run, pending, error } = useAction();
 
   const save = async (input: Parameters<typeof api.saveProfile>[0]) => {
@@ -32,7 +34,7 @@ export default function OnboardingPage() {
       </PageHeading>
 
       {registration === "upcoming" && (
-        <Notice tone="info" title="Registration opens on 3 October 2026" className="mb-6">
+        <Notice tone="info" title={`Registration opens on ${longDate(opens)}`} className="mb-6">
           You can fill in your profile once registration opens. Please come back then.
         </Notice>
       )}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
+import { ImportantDates } from "@/components/landing/ImportantDates";
 import {
   categories,
   departmentPrizes,
@@ -11,7 +12,6 @@ import {
   prizePools,
   registrationSteps,
   teamRules,
-  timeline,
 } from "@/lib/content";
 import { formatINR } from "@/lib/format";
 import { TEAM_MAX_SIZE, TEAM_MIN_SIZE } from "@/lib/rules";
@@ -225,17 +225,7 @@ export default function GuidelinesPage() {
           </Block>
 
           <Block id="dates" title="Important dates">
-            <ol className="divide-y divide-line rounded-2xl bg-white ring-1 ring-line">
-              {timeline.map((item) => (
-                <li key={item.title} className="grid gap-1 p-5 sm:grid-cols-[10rem_1fr] sm:gap-6">
-                  <span className="font-display font-bold text-accent-600">{item.dateLabel}</span>
-                  <span>
-                    <span className="block font-semibold text-ink">{item.title}</span>
-                    <span className="text-sm text-muted">{item.description}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <ImportantDates />
           </Block>
         </div>
       </div>

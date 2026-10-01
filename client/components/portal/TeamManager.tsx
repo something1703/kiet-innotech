@@ -8,7 +8,7 @@ import { categories } from "@/lib/content";
 import { draftKeys, hasDraft } from "@/lib/drafts";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { clearPendingJoinCode, inviteMessage, joinLink, pendingJoinCode } from "@/lib/invite";
-import { useRegistrationState } from "@/lib/registration";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { TEAM_MAX_SIZE, openSlots, submissionChecks, yearLabel } from "@/lib/rules";
 import type { RegistrationState, Team } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -382,7 +382,8 @@ function AddTeammates({ team, isLeader, canEdit }: { team: Team; isLeader: boole
   const [canShare] = useState(() => typeof navigator.share === "function");
   const link = joinLink(team.joinCode);
   const slots = openSlots(team);
-  const fullMessage = inviteMessage(team, link);
+  const { closes } = useRegistrationDates();
+  const fullMessage = inviteMessage(team, closes, link);
 
   const copy = async (what: "code" | "message") => {
     try {
@@ -398,7 +399,7 @@ function AddTeammates({ team, isLeader, canEdit }: { team: Team; isLeader: boole
   const share = async () => {
     if (!canShare) return copy("message");
     try {
-      await navigator.share({ title: `Join ${team.name} for InnoTech26`, text: inviteMessage(team), url: link });
+      await navigator.share({ title: `Join ${team.name} for InnoTech26`, text: inviteMessage(team, closes), url: link });
     } catch (err) {
       // Closing the share sheet is not an error; anything else falls back to copying.
       if (!(err instanceof DOMException && err.name === "AbortError")) await copy("message");

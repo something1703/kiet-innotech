@@ -16,6 +16,8 @@ os.environ.update(
     DEV_SIGN_IN="false",
     SUPER_ADMIN_EMAILS="root@kiet.edu",
     FORCE_REGISTRATION_OPEN="true",
+    # Far away, so tests do not start failing when the real deadline passes.
+    NOMINATIONS_DEADLINE="2099-01-01T00:00:00+00:00",
     EMAIL_BACKEND="log",
     CORS_ORIGINS="http://localhost:3000",
 )

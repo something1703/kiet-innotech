@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 from . import rules
 
@@ -109,6 +109,45 @@ class RegistrationOut(BaseModel):
     state: rules.RegistrationState
     opens: datetime
     closes: datetime
+
+
+class PublicConfigOut(BaseModel):
+    """What the public pages need before anyone signs in: the registration window, from the server's clock."""
+
+    registration: RegistrationOut
+    server_time: datetime
+
+
+class ScheduleDatesOut(BaseModel):
+    registration_opens: datetime
+    registration_closes: datetime
+    nominations_deadline: datetime | None
+
+
+class ScheduleOut(BaseModel):
+    """The event schedule an organiser can change (see services/schedule.py)."""
+
+    registration: RegistrationOut
+    nominations_deadline: datetime | None
+    # False once the deadline has passed: department admins can no longer change nominations, super admins still can.
+    nominations_open: bool
+    # True once an organiser saved a change; False while the planned dates from the settings apply.
+    customised: bool
+    updated_by: str | None
+    updated_at: datetime | None
+    server_time: datetime
+    planned: ScheduleDatesOut
+
+
+class ScheduleInput(Input):
+    registration_opens: AwareDatetime
+    registration_closes: AwareDatetime
+    nominations_deadline: AwareDatetime | None = None
+
+
+class OpenNowInput(Input):
+    # Needed only when the old closing date has already passed.
+    registration_closes: AwareDatetime | None = None
 
 
 class MeOut(BaseModel):
@@ -409,6 +448,7 @@ class StatsOut(BaseModel):
     by_domain: list[DomainStats]
     # Super admin only: other colleges and schools with the most registered students.
     top_institutions: list[InstitutionStats] | None
+    schedule: ScheduleOut
 
 
 class FinalistCategoryOut(BaseModel):
@@ -420,6 +460,9 @@ class FinalistCategoryOut(BaseModel):
 
 class FinalistBoardOut(BaseModel):
     department: str
+    nominations_deadline: datetime | None = None
+    # True when the deadline has passed and the signed-in admin can no longer change this board.
+    nominations_locked: bool = False
     published_at: datetime | None
     updated_at: datetime | None
     updated_by: str | None

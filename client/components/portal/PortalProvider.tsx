@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { isSigningOut, useSession } from "@/lib/auth/session";
 import { isPath } from "@/lib/paths";
-import { setServerRegistrationState } from "@/lib/registration";
+import { setServerRegistration } from "@/lib/registration";
 import type { Invitation, Me, Team } from "@/lib/types";
 
 type PortalData = {
@@ -75,7 +75,7 @@ export function PortalProvider({
     return loadPortal().then(
       (result) => {
         if (started !== generation.current) return;
-        setServerRegistrationState(result.me.registration?.state);
+        setServerRegistration(result.me.registration);
         setData(result);
         setError(null);
       },

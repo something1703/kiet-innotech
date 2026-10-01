@@ -6,7 +6,8 @@ import { useState, type FormEvent } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { clearPendingJoinCode, pendingJoinCode } from "@/lib/invite";
-import { useRegistrationState } from "@/lib/registration";
+import { longDate } from "@/lib/format";
+import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { normaliseJoinCode } from "@/lib/rules";
 import { Button, Field, Input, Notice, buttonStyles } from "@/components/ui/form";
 import { Panel } from "./PageHeading";
@@ -16,6 +17,7 @@ import { useAction } from "./useAction";
 /** For a student without a team: start one as leader, or join one with the code the leader shared. */
 export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: boolean }) {
   const registration = useRegistrationState();
+  const { opens } = useRegistrationDates();
 
   return (
     <Panel
@@ -27,7 +29,7 @@ export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: bool
       }
     >
       {registration !== "open" ? (
-        <Notice tone="info">{registration === "closed" ? "Registration has closed." : "Teams can be created and joined from 3 October 2026."}</Notice>
+        <Notice tone="info">{registration === "closed" ? "Registration has closed." : `Teams can be created and joined from ${longDate(opens)}.`}</Notice>
       ) : (
         <div className="grid gap-8 md:grid-cols-2 md:gap-0 md:divide-x md:divide-line">
           <section aria-labelledby="create-title" className="md:pr-8">

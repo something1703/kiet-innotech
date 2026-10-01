@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import rules
-from ..config import Settings, get_settings
+from ..config import Settings
 from ..errors import ApiError
 from ..models import Admin, AppState, AuditEntry, FinalistNomination, Invitation, Profile, Team, TeamMember, User, utcnow
 from ..schemas import (
@@ -46,7 +46,7 @@ from ..schemas import (
     TypeStats,
     YearStats,
 )
-from . import audit
+from . import audit, schedule
 from .serializers import invitation_out, profile_out
 
 RESULTS_KEY = "results_published"
@@ -439,15 +439,16 @@ def _ist_day(moment: datetime) -> date:
     return moment.astimezone(IST).date()
 
 
-def _timeline(profile_times: list[datetime], team_times: list[datetime], submit_times: list[datetime]) -> list[TimelinePoint]:
+def _timeline(
+    window: schedule.Schedule, profile_times: list[datetime], team_times: list[datetime], submit_times: list[datetime]
+) -> list[TimelinePoint]:
     """Daily counts in IST, from registration opening (or the first record) to today, with empty days filled in."""
-    settings = get_settings()
     students = Counter(_ist_day(t) for t in profile_times)
     teams = Counter(_ist_day(t) for t in team_times)
     submitted = Counter(_ist_day(t) for t in submit_times)
     days = set(students) | set(teams) | set(submitted)
-    start = min([_ist_day(settings.registration_opens), *days])
-    end = max([min(_ist_day(utcnow()), _ist_day(settings.registration_closes)), *days])
+    start = min([_ist_day(window.opens), *days])
+    end = max([min(_ist_day(utcnow()), _ist_day(window.closes)), *days])
     if end < start:
         return []
     start = max(start, end - timedelta(days=TIMELINE_MAX_DAYS - 1))
@@ -457,7 +458,8 @@ def _timeline(profile_times: list[datetime], team_times: list[datetime], submit_
     ]
 
 
-def stats(db: Session, admin: Admin) -> StatsOut:
+def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
+    window = schedule.load(db, settings)
     teams = db.execute(
         select(
             Team.id,
@@ -535,8 +537,9 @@ def stats(db: Session, admin: Admin) -> StatsOut:
         recent_submissions=summaries(db, recent),
         results_published_at=published.updated_at if published else None,
         timeline=_timeline(
-            [s.created_at for s in students], [t.created_at for t in teams], [t.submitted_at for t in teams if t.submitted_at]
+            window, [s.created_at for s in students], [t.created_at for t in teams], [t.submitted_at for t in teams if t.submitted_at]
         ),
+        schedule=schedule.to_out(window, settings),
         by_year=[
             YearStats(participant_type=kind, year=year, students=count)
             for (kind, year), count in sorted(Counter((s.participant_type, s.year) for s in students).items())
@@ -594,8 +597,9 @@ def _board_access(admin: Admin, department: str) -> None:
         raise ApiError(f"You can only nominate finalists for {admin.department}.", 403)
 
 
-def finalist_board(db: Session, admin: Admin, department: str) -> FinalistBoardOut:
+def finalist_board(db: Session, admin: Admin, department: str, settings: Settings) -> FinalistBoardOut:
     _board_access(admin, department)
+    window = schedule.load(db, settings)
     eligible = _eligible(db, department)
     eligible_ids = {t.id for t in eligible}
     nominated = [
@@ -605,6 +609,8 @@ def finalist_board(db: Session, admin: Admin, department: str) -> FinalistBoardO
     published = _results_published(db)
     return FinalistBoardOut(
         department=department,
+        nominations_deadline=window.nominations_deadline,
+        nominations_locked=window.nominations_closed() and not _is_super(admin),
         published_at=published.updated_at if published else None,
         updated_at=updated.updated_at if updated else None,
         updated_by=updated.value if updated else None,
@@ -626,8 +632,15 @@ def _lock_state(db: Session, key: str, default: str = "") -> AppState:
     return db.scalar(select(AppState).where(AppState.key == key).with_for_update().execution_options(populate_existing=True))  # type: ignore[return-value]
 
 
-def save_finalists(db: Session, admin: Admin, department: str, data: NominationsInput) -> FinalistBoardOut:
+def save_finalists(db: Session, admin: Admin, department: str, data: NominationsInput, settings: Settings) -> FinalistBoardOut:
     _board_access(admin, department)
+    window = schedule.load(db, settings)
+    if window.nominations_closed() and not _is_super(admin):
+        raise ApiError(
+            f"The nomination deadline passed on {window.nominations_deadline.astimezone(rules.IST):%d %B %Y, %I:%M %p} IST. "  # type: ignore[union-attr]
+            "Ask a super admin to change the nominations.",
+            403,
+        )
     # Same lock as publishing, so nominations cannot change while results are being published.
     _lock_state(db, f"{RESULTS_KEY}_lock")
     if _results_published(db):
@@ -663,7 +676,7 @@ def save_finalists(db: Session, admin: Admin, department: str, data: Nominations
     state.updated_at = utcnow()
     audit.record(db, admin.email, "finalists.updated", detail=f"{department}: categories {sorted(seen_categories)}", department=department)
     db.commit()
-    return finalist_board(db, admin, department)
+    return finalist_board(db, admin, department, settings)
 
 
 def finalist_summary(db: Session, admin: Admin) -> FinalistSummaryOut:

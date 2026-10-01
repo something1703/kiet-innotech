@@ -8,8 +8,8 @@ import type { Stats, StatusCounts } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { timeline } from "@/lib/content";
 import { downloadOverviewExcel } from "@/lib/export";
-import { categoryTitle, formatDate, formatDateTime, formatNumber, typeShortLabels } from "@/lib/format";
-import { REGISTRATION_CLOSES, REGISTRATION_OPENS, registrationState, yearLabel } from "@/lib/rules";
+import { categoryTitle, formatDate, formatDateTime, formatIst, formatNumber, typeShortLabels } from "@/lib/format";
+import { yearLabel } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
 import { teamHref } from "@/lib/routes";
 import { AuditList } from "@/components/audit/AuditList";
@@ -48,26 +48,38 @@ function Headline({ stats }: { stats: Stats }) {
   );
 }
 
-function WindowStrip({ publishedAt }: { publishedAt: string | null }) {
-  const state = registrationState();
+function WindowStrip({ stats }: { stats: Stats }) {
+  const { registration, nominationsDeadline, nominationsOpen } = stats.schedule;
+  const state = registration.state;
+  const isSuper = useAdmin().role === "super_admin";
   const today = new Date().toISOString().slice(0, 10);
-  // Once registration is open, its opening date is no longer "next", even if it opened earlier than planned.
-  const upcoming = timeline.find((m) => m.end >= today && !(state !== "upcoming" && /registrations? open/i.test(m.title)));
+  // The next milestone from the plan, skipping the two registration dates (the live window is shown separately).
+  const upcoming = timeline.find((m) => m.end >= today && !/registrations? (open|close)/i.test(m.title));
   const label =
     state === "open"
-      ? `Open until ${formatDate(REGISTRATION_CLOSES)}`
+      ? `Open until ${formatIst(registration.closes)}`
       : state === "upcoming"
-        ? `Opens ${formatDate(REGISTRATION_OPENS)}`
-        : `Closed on ${formatDate(REGISTRATION_CLOSES)}`;
+        ? `Opens ${formatIst(registration.opens)}`
+        : `Closed on ${formatIst(registration.closes)}`;
   return (
     <div className="flex flex-col gap-2 border-y border-line py-3 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
-      <p className="flex items-center gap-2">
+      <p className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-navy-900">Registration</span>
         <Pill tone={state === "open" ? "green" : state === "upcoming" ? "cyan" : "slate"}>
           {state === "open" ? "Open" : state === "upcoming" ? "Upcoming" : "Closed"}
         </Pill>
         <span className="text-muted">{label}</span>
+        {isSuper && (
+          <Link href="/schedule" className="font-semibold text-brand-700 hover:underline">
+            Change
+          </Link>
+        )}
       </p>
+      {nominationsDeadline && (
+        <p className="text-muted">
+          Nominations {nominationsOpen ? "due" : "were due"} <span className="font-semibold text-navy-900">{formatIst(nominationsDeadline)}</span>
+        </p>
+      )}
       {upcoming && (
         <p className="text-muted">
           Next: <span className="font-semibold text-navy-900">{upcoming.title}</span> · {upcoming.dateLabel}
@@ -75,8 +87,8 @@ function WindowStrip({ publishedAt }: { publishedAt: string | null }) {
       )}
       <p className="text-muted">
         Results:{" "}
-        {publishedAt ? (
-          <span className="font-semibold text-navy-900">published {formatDateTime(publishedAt)}</span>
+        {stats.resultsPublishedAt ? (
+          <span className="font-semibold text-navy-900">published {formatDateTime(stats.resultsPublishedAt)}</span>
         ) : (
           <span className="font-semibold text-navy-900">not published</span>
         )}
@@ -131,7 +143,7 @@ export function OverviewView() {
 
       {data && (
         <>
-          <WindowStrip publishedAt={data.resultsPublishedAt} />
+          <WindowStrip stats={data} />
           <section aria-label="Headline numbers">
             <Headline stats={data} />
           </section>
