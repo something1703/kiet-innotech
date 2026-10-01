@@ -13,8 +13,9 @@ export const KIET_INSTITUTION = "KIET Deemed to be University";
 export const TEAM_MIN_SIZE = 2;
 export const TEAM_MAX_SIZE = 5;
 
-export const REGISTRATION_OPENS = "2026-10-03T00:00:00+05:30";
-export const REGISTRATION_CLOSES = "2026-10-12T23:59:59+05:30";
+// Overridable at build time (deploy.sh passes REGISTRATION_OPENS/CLOSES) so the public pages agree with the server's window.
+export const REGISTRATION_OPENS = process.env.NEXT_PUBLIC_REGISTRATION_OPENS || "2026-10-03T00:00:00+05:30";
+export const REGISTRATION_CLOSES = process.env.NEXT_PUBLIC_REGISTRATION_CLOSES || "2026-10-12T23:59:59+05:30";
 
 /** Departments allowed two finalist teams in Categories 1 to 4. CSE(CS) is deliberately not included. */
 export const DOUBLE_QUOTA_DEPARTMENTS = ["CSE", "CS", "CSE(AI)", "CSE(AIML)"];

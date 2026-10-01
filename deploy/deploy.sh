@@ -63,10 +63,20 @@ remote() {
   fi
 }
 
+current_ami() {
+  local instance
+  instance="$(aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text 2>/dev/null || true)"
+  if [ -n "$instance" ] && [ "$instance" != "None" ]; then
+    aws ec2 describe-instances --instance-ids "$instance" --query 'Reservations[0].Instances[0].ImageId' --output text
+  else
+    aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 --query Parameter.Value --output text
+  fi
+}
+
 deploy_stack() {
   aws cloudformation deploy --stack-name "$STACK" --template-file "$DEPLOY_DIR/cloudformation.yml" \
     --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
-    --parameter-overrides InstanceType="${INSTANCE_TYPE:-t4g.medium}" AlertEmail="${ALERT_EMAIL:-}"
+    --parameter-overrides InstanceType="${INSTANCE_TYPE:-t4g.medium}" AlertEmail="${ALERT_EMAIL:-}" AmiId="$(current_ami)" ${CHANGESET_ONLY:+--no-execute-changeset}
   status
 }
 
@@ -136,6 +146,7 @@ build_site() {
   echo "Building $app..."
   docker run --rm -v "$ROOT/$app:/app" -v "innotech-$app-nm:/app/node_modules" -w /app \
     -e NEXT_PUBLIC_API_MODE=live -e NEXT_PUBLIC_API_URL="$api_url" -e NEXT_PUBLIC_GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_IDS%%,*}" \
+    -e NEXT_PUBLIC_REGISTRATION_OPENS="${REGISTRATION_OPENS:-}" -e NEXT_PUBLIC_REGISTRATION_CLOSES="${REGISTRATION_CLOSES:-}" \
     -e NEXT_TELEMETRY_DISABLED=1 node:22-alpine sh -c "npm ci --no-audit --no-fund && npm run build"
 }
 

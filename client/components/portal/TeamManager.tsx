@@ -327,7 +327,7 @@ function InviteForm({ team }: { team: Team }) {
       </div>
       {sent && (
         <Notice tone="success" className="mt-4">
-          Invitation sent to {sent}.
+          Invitation sent to {sent}. They will see it on their dashboard when they sign in.
         </Notice>
       )}
     </form>

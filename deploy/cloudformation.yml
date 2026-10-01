@@ -9,9 +9,10 @@ Parameters:
     Default: t4g.medium
     AllowedValues: [t4g.small, t4g.medium, t4g.large]
     Description: Resize for registration week if load tests ask for it (stop/start, ~2 minutes).
+  # Pinned by deploy.sh to the image the server already runs. Following "latest" would make every new Amazon Linux
+  # release replace the instance (and its disk) on the next stack update.
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Type: AWS::EC2::Image::Id
   VolumeSizeGiB:
     Type: Number
     Default: 30
