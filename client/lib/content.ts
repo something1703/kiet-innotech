@@ -66,6 +66,14 @@ export const about = {
   ],
 };
 
+/** The "at a glance" cards under the About text, so the event is understood without reading the paragraphs. */
+export const aboutHighlights: { icon: IconName; title: string; text: string; tone: Tone }[] = [
+  { icon: "cpu", title: "Eight categories", text: "AI, software, hardware, start-ups, Gen Z ideas, posters and CyberShield.", tone: "blue" },
+  { icon: "sprout", title: "Built for society", text: "Projects map to the SDGs and the vision of Viksit Bharat @2047.", tone: "green" },
+  { icon: "users", title: "Open to everyone", text: "KIET students, other colleges and school students.", tone: "orange" },
+  { icon: "award", title: "Judged by experts", text: "Faculty and external industry judges score every project.", tone: "purple" },
+];
+
 /** Colour families shared by the landing diagrams (see components/landing/tones.ts). */
 export type Tone = "orange" | "blue" | "green" | "red" | "purple" | "sky" | "amber" | "indigo" | "emerald" | "rose";
 

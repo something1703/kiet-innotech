@@ -1,75 +1,69 @@
 import type { CSSProperties } from "react";
-import { benefits } from "@/lib/content";
+import { benefits, departmentPrizes, institutePrizes } from "@/lib/content";
+import { CountUp } from "@/components/ui/CountUp";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
 import { Slider } from "@/components/ui/Slider";
 import { tones } from "./tones";
 
-/*
- * Desktop diagram: a title card with the benefit cards around it, each joined to it by a coloured line.
- * Everything is placed on a 1200 x 740 design grid and sized in container units, so the diagram
- * scales as one piece. Smaller screens get a stacked layout instead.
- */
-const W = 1200;
-const H = 740;
-const u = (n: number) => `${(n / W) * 100}cqw`;
-const place = (x: number, y: number, w: number, h: number): CSSProperties => ({
-  left: `${(x / W) * 100}%`,
-  top: `${(y / H) * 100}%`,
-  width: `${(w / W) * 100}%`,
-  height: `${(h / H) * 100}%`,
-});
-
-const TITLE = { x: 40, y: 320, w: 470, h: 170 };
-
-// One entry per benefit, in content order: card box, connector path, and the two dot positions.
-const layout = [
-  { box: [60, 85, 270, 215], path: "M60 190 H34 Q20 190 20 204 V391 Q20 405 34 405 H40", dots: [[60, 190], [40, 405]] },
-  { box: [520, 30, 270, 170], path: "M510 350 H636 Q650 350 650 336 V200", dots: [[510, 350], [650, 200]] },
-  { box: [860, 130, 280, 190], path: "M510 378 H986 Q1000 378 1000 364 V320", dots: [[510, 378], [1000, 320]] },
-  { box: [110, 530, 240, 195], path: "M80 490 V613 Q80 627 94 627 H110", dots: [[80, 490], [110, 627]] },
-  { box: [380, 530, 240, 195], path: "M510 462 H636 Q650 462 650 476 V613 Q650 627 636 627 H620", dots: [[510, 462], [620, 627]] },
-  { box: [680, 530, 240, 195], path: "M510 434 H786 Q800 434 800 448 V530", dots: [[510, 434], [800, 530]] },
-  { box: [950, 530, 240, 195], path: "M510 406 H1056 Q1070 406 1070 420 V530", dots: [[510, 406], [1070, 530]] },
-] as const;
-
 const words = ["Learn", "Connect", "Create", "Make an impact"];
 
+type Benefit = (typeof benefits)[number];
+const byTitle = (title: string) => benefits.find((b) => b.title === title)!;
+
+/*
+ * Desktop: a bento layout. A dark title card sits beside the prize pool (the biggest draw, with its number counting up),
+ * and the other benefits are tidy cards of equal weight. Phones and tablets get the title card and a slider/grid instead.
+ */
 export function Benefits() {
+  const prize = byTitle("Prize Pool");
+  const [career, motto, solving, networking, recognition, confidence] = [
+    byTitle("Career & Entrepreneurship"),
+    byTitle("InnoTech Motto"),
+    byTitle("Problem-Solving"),
+    byTitle("Networking"),
+    byTitle("Recognition"),
+    byTitle("Confidence"),
+  ];
+
   return (
     <Section id="benefits">
-      {/* Desktop: connected diagram */}
-      <Reveal className="@container relative mx-auto hidden aspect-[1200/740] w-full max-w-[1200px] xl:block">
-        <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" aria-hidden="true" fill="none">
-          {layout.map((item, index) => {
-            const stroke = tones[benefits[index].tone].stroke;
-            return (
-              <g key={index} stroke={stroke} fill={stroke}>
-                <path d={item.path} fill="none" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-                {item.dots.map(([cx, cy]) => (
-                  <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={5} stroke="none" />
-                ))}
-              </g>
-            );
-          })}
-        </svg>
+      {/* Desktop: bento */}
+      <div className="mx-auto hidden max-w-[1200px] grid-cols-12 gap-5 xl:grid">
+        <Reveal className="relative col-span-4 row-span-2 overflow-hidden rounded-3xl bg-navy-900 p-9 text-white shadow-[0_30px_70px_-30px_rgb(11_22_51/0.6)]">
+          <div className="bg-grid absolute inset-0" aria-hidden="true" />
+          <div className="absolute -right-16 -top-16 size-64 rounded-full bg-brand-500/25 blur-3xl" aria-hidden="true" />
+          <div className="absolute -bottom-20 -left-10 size-56 rounded-full bg-accent-500/20 blur-3xl" aria-hidden="true" />
+          <div className="relative flex h-full flex-col">
+            <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-brand-300">
+              <span className="h-px w-6 bg-current" />
+              Why take part
+            </p>
+            <h2 className="mt-4 font-display text-5xl font-bold leading-[1.05] tracking-tight">Participation Benefits</h2>
+            <p className="mt-4 max-w-xs text-base leading-relaxed text-slate-300">Seven reasons to bring your idea to InnoTech26.</p>
+            <ul className="mt-auto space-y-3 pt-10">
+              {words.map((word, index) => (
+                <li key={word} className="group flex items-center gap-4">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-white/10 font-display text-sm font-bold text-brand-300 ring-1 ring-white/15 transition group-hover:bg-accent-500 group-hover:text-white">
+                    {index + 1}
+                  </span>
+                  <span className="font-display text-xl font-bold uppercase tracking-wide text-white">{word}</span>
+                  <span className="h-px flex-1 bg-gradient-to-r from-white/25 to-transparent" aria-hidden="true" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Reveal>
 
-        <div
-          className="absolute flex flex-col justify-center rounded-3xl bg-white shadow-[0_20px_50px_-20px_rgb(11_22_51/0.25)] ring-1 ring-line"
-          style={{ ...place(TITLE.x, TITLE.y, TITLE.w, TITLE.h), paddingInline: u(44) }}
-        >
-          <h2 className="font-display font-bold leading-[1.05] tracking-tight text-ink" style={{ fontSize: u(46) }}>
-            Participation Benefits
-          </h2>
-          <Words size={u(12.5)} gap={u(11)} className="mt-[1.4cqw] flex-nowrap whitespace-nowrap" />
-        </div>
-
-        {benefits.map((benefit, index) => {
-          const [x, y, w, h] = layout[index].box;
-          return <BenefitCard key={benefit.title} benefit={benefit} style={place(x, y, w, h)} unit={u} />;
-        })}
-      </Reveal>
+        <PrizeCard benefit={prize} />
+        <BentoCard benefit={career} delay={100} className="col-span-4" />
+        <BentoCard benefit={solving} delay={160} className="col-span-4" />
+        <BentoCard benefit={motto} delay={120} className="col-span-3" />
+        <BentoCard benefit={networking} delay={180} className="col-span-3" />
+        <BentoCard benefit={recognition} delay={240} className="col-span-3" />
+        <BentoCard benefit={confidence} delay={300} className="col-span-3" />
+      </div>
 
       {/* Phones and tablets: title, then the cards in a grid */}
       <div className="xl:hidden">
@@ -98,6 +92,52 @@ export function Benefits() {
     </Section>
   );
 }
+
+/** A desktop card: icon badge, title and text, lifting slightly on hover. */
+function BentoCard({ benefit, delay, className = "" }: { benefit: Benefit; delay: number; className?: string }) {
+  const tone = tones[benefit.tone];
+  return (
+    <Reveal delay={delay} className={`group relative overflow-hidden rounded-3xl border ${tone.card} p-7 shadow-[0_18px_40px_-26px_rgb(11_22_51/0.35)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgb(11_22_51/0.4)] ${className}`}>
+      <span className={`flex size-14 items-center justify-center rounded-2xl ring-4 ring-white transition duration-300 group-hover:scale-110 group-hover:-rotate-6 ${tone.badge}`}>
+        <Icon name={benefit.icon} className="size-7" />
+      </span>
+      <h3 className={`mt-5 font-display text-lg font-extrabold uppercase leading-tight tracking-wide ${tone.title}`}>{benefit.title}</h3>
+      <p className="mt-2 text-[15px] leading-normal text-navy-800">{benefit.text}</p>
+    </Reveal>
+  );
+}
+
+/** The prize pool, wider than the rest, with the headline amount counting up. */
+function PrizeCard({ benefit }: { benefit: Benefit }) {
+  const tone = tones[benefit.tone];
+  return (
+    <Reveal delay={60} className={`group relative col-span-8 overflow-hidden rounded-3xl border ${tone.card} p-8 shadow-[0_18px_40px_-26px_rgb(11_22_51/0.35)]`}>
+      <div className="absolute -right-10 -top-10 size-52 rounded-full bg-emerald-200/50 blur-3xl" aria-hidden="true" />
+      <div className="relative flex items-center gap-8">
+        <span className={`flex size-20 shrink-0 items-center justify-center rounded-3xl ring-4 ring-white transition duration-300 group-hover:scale-105 ${tone.badge}`}>
+          <Icon name={benefit.icon} className="size-10" />
+        </span>
+        <div className="min-w-0">
+          <h3 className={`font-display text-lg font-extrabold uppercase tracking-wide ${tone.title}`}>{benefit.title}</h3>
+          <p className="mt-1 font-display text-6xl font-extrabold leading-none tracking-tight text-navy-900">
+            <CountUp value={5} prefix="₹" suffix=" lakh+" />
+          </p>
+          <p className="mt-3 text-[15px] leading-normal text-navy-800">{benefit.text}</p>
+        </div>
+        <dl className="ml-auto w-80 shrink-0 divide-y divide-emerald-200/70 self-stretch rounded-2xl bg-white/70 px-5 py-1 ring-1 ring-emerald-100">
+          {[...institutePrizes.map((p) => ({ label: p.title, value: `${money(p.first)} / ${money(p.second)}` })), { label: "Each department, 1st place", value: money(departmentPrizes[0].first) }].map((row) => (
+            <div key={row.label} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
+              <dt className="text-navy-800">{row.label}</dt>
+              <dd className="whitespace-nowrap font-display font-bold tabular-nums text-emerald-800">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </Reveal>
+  );
+}
+
+const money = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 
 function Words({ size, gap, className = "" }: { size: string; gap: string; className?: string }) {
   return (
