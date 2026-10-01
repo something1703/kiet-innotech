@@ -54,40 +54,40 @@ export function About() {
           </Reveal>
         </div>
 
-        {/* Photo collage */}
+        {/* Photo collage: last year's fest */}
         <Reveal delay={150} className="relative">
-          <div className="grid grid-cols-5 grid-rows-[auto_auto] gap-4">
-            <div className="relative col-span-5 aspect-[16/9] overflow-hidden rounded-3xl sm:col-span-3 sm:row-span-2 sm:aspect-auto">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <figure className="relative col-span-2 aspect-[16/10] overflow-hidden rounded-3xl shadow-[0_24px_50px_-28px_rgb(11_22_51/0.45)]">
               <Image
-                src="/images/kiet/ai-skills-lab.jpg"
-                alt="Students working in the KIET AI Skills Lab"
+                src="/images/innotech25/crew.webp"
+                alt="The InnoTech'25 volunteers and organisers on stage"
                 fill
-                sizes="(min-width: 1024px) 30vw, (min-width: 640px) 60vw, 100vw"
+                sizes="(min-width: 1024px) 38vw, 100vw"
                 className="object-cover transition-transform duration-700 hover:scale-105"
               />
-            </div>
-            <div className="relative col-span-5 hidden aspect-[4/3] overflow-hidden rounded-3xl sm:col-span-2 sm:block">
+            </figure>
+            <figure className="relative aspect-[4/3] overflow-hidden rounded-3xl shadow-[0_20px_40px_-26px_rgb(11_22_51/0.4)]">
               <Image
-                src="/images/kiet/infra-2.webp"
-                alt="KIET academic block"
+                src="/images/innotech25/winners.webp"
+                alt="A winning team at InnoTech'25 with their prize cheque"
                 fill
-                sizes="(min-width: 1024px) 20vw, 40vw"
+                sizes="(min-width: 1024px) 19vw, 50vw"
+                className="object-cover object-[50%_70%] transition-transform duration-700 hover:scale-105"
+              />
+            </figure>
+            <figure className="relative aspect-[4/3] overflow-hidden rounded-3xl shadow-[0_20px_40px_-26px_rgb(11_22_51/0.4)]">
+              <Image
+                src="/images/innotech25/innogeeks.webp"
+                alt="The Innogeeks team at their stall at InnoTech'25"
+                fill
+                sizes="(min-width: 1024px) 19vw, 50vw"
                 className="object-cover transition-transform duration-700 hover:scale-105"
               />
-            </div>
-            <div className="relative col-span-5 hidden aspect-[4/3] overflow-hidden rounded-3xl sm:col-span-2 sm:block">
-              <Image
-                src="/images/kiet/auditorium.webp"
-                alt="KIET auditorium during an event"
-                fill
-                sizes="(min-width: 1024px) 20vw, 40vw"
-                className="object-cover transition-transform duration-700 hover:scale-105"
-              />
-            </div>
+            </figure>
           </div>
-          <div className="absolute -bottom-6 -left-4 hidden rounded-2xl bg-navy-900 px-6 py-4 text-white shadow-xl sm:block">
-            <p className="font-display text-3xl font-bold text-brand-400">SDG</p>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-300">Aligned projects</p>
+          <div className="absolute -left-3 -top-4 rounded-2xl bg-navy-900 px-5 py-3 text-white shadow-xl sm:-left-5">
+            <p className="font-display text-xl font-bold leading-none text-brand-400">InnoTech&apos;25</p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-slate-300">Last year, 14 Nov 2025</p>
           </div>
         </Reveal>
       </div>

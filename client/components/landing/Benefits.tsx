@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { benefits, departmentPrizes, institutePrizes } from "@/lib/content";
+import { benefits } from "@/lib/content";
 import { CountUp } from "@/components/ui/CountUp";
 import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
@@ -41,8 +41,7 @@ export function Benefits() {
               Why take part
             </p>
             <h2 className="mt-4 font-display text-5xl font-bold leading-[1.05] tracking-tight">Participation Benefits</h2>
-            <p className="mt-4 max-w-xs text-base leading-relaxed text-slate-300">Seven reasons to bring your idea to InnoTech26.</p>
-            <ul className="mt-auto space-y-3 pt-10">
+            <ul className="mt-auto space-y-4 pt-10">
               {words.map((word, index) => (
                 <li key={word} className="group flex items-center gap-4">
                   <span className="flex size-9 items-center justify-center rounded-full bg-white/10 font-display text-sm font-bold text-brand-300 ring-1 ring-white/15 transition group-hover:bg-accent-500 group-hover:text-white">
@@ -124,20 +123,10 @@ function PrizeCard({ benefit }: { benefit: Benefit }) {
           </p>
           <p className="mt-3 text-[15px] leading-normal text-navy-800">{benefit.text}</p>
         </div>
-        <dl className="ml-auto w-80 shrink-0 divide-y divide-emerald-200/70 self-stretch rounded-2xl bg-white/70 px-5 py-1 ring-1 ring-emerald-100">
-          {[...institutePrizes.map((p) => ({ label: p.title, value: `${money(p.first)} / ${money(p.second)}` })), { label: "Each department, 1st place", value: money(departmentPrizes[0].first) }].map((row) => (
-            <div key={row.label} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
-              <dt className="text-navy-800">{row.label}</dt>
-              <dd className="whitespace-nowrap font-display font-bold tabular-nums text-emerald-800">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
       </div>
     </Reveal>
   );
 }
-
-const money = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 
 function Words({ size, gap, className = "" }: { size: string; gap: string; className?: string }) {
   return (

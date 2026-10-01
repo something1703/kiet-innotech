@@ -5,6 +5,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section } from "@/components/ui/Section";
 import { Slider } from "@/components/ui/Slider";
+import { Celebrate } from "./Celebrate";
 import { tones } from "./tones";
 
 /*
@@ -136,7 +137,10 @@ function CentreCard({ style, unit, flow = false }: { style?: CSSProperties; unit
         style={{ top: unit(-10), width: unit(270), height: unit(250) }}
         aria-hidden="true"
       />
-      <Trophy id={flow ? "stacked" : "diagram"} className="absolute left-1/2 -translate-x-1/2" style={{ top: unit(-40), width: unit(230), height: unit(220) }} />
+      {/* The trophy floats, twinkles, and throws confetti once when it scrolls into view (and again when touched). */}
+      <Celebrate glow={false} className="absolute left-1/2 -translate-x-1/2" style={{ top: unit(-40), width: unit(230), height: unit(220) }}>
+        <Trophy id={flow ? "stacked" : "diagram"} className="animate-bob h-full w-full" />
+      </Celebrate>
       <p className="relative font-bold uppercase tracking-[0.3em] text-accent-500" style={{ fontSize: unit(15) }}>
         Finale day
       </p>
@@ -283,11 +287,14 @@ function Trophy({ id, className, style }: { id: string; className?: string; styl
       </defs>
       {/* Orbit ring behind the cup */}
       <ellipse cx="100" cy="118" rx="86" ry="17" fill="none" stroke="#fdba74" strokeWidth="3" opacity="0.7" />
-      {/* Spark lines */}
+      {/* Spark lines, mirrored on both sides */}
       <g stroke="#f26b21" strokeWidth="3.5" strokeLinecap="round">
         <path d="M40 22 L50 36" />
         <path d="M58 10 L60 26" />
         <path d="M26 42 L42 46" />
+        <path d="M160 22 L150 36" />
+        <path d="M142 10 L140 26" />
+        <path d="M174 42 L158 46" />
       </g>
       {/* Handles */}
       <path d="M58 44 C 26 42, 26 86, 62 92" fill="none" stroke={`url(#${gold})`} strokeWidth="10" strokeLinecap="round" />

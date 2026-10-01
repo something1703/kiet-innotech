@@ -33,7 +33,20 @@ const SPARKLES = [
  * confetti when it first scrolls into view. Touching or hovering it throws the confetti again.
  * All of it stops for visitors who prefer reduced motion (see globals.css).
  */
-export function Celebrate({ children, scale = 1 }: { children: ReactNode; scale?: number }) {
+export function Celebrate({
+  children,
+  scale = 1,
+  glow = true,
+  className = "relative isolate inline-flex",
+  style,
+}: {
+  children: ReactNode;
+  scale?: number;
+  /** A warm glow behind the child; turn off when the child already sits in one. */
+  glow?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   // 0 = not yet, then 1, 2, ... for each burst; the number is the piece key so the animation restarts.
   const [burst, setBurst] = useState(0);
@@ -57,11 +70,13 @@ export function Celebrate({ children, scale = 1 }: { children: ReactNode; scale?
   return (
     <div
       ref={ref}
-      className="relative isolate inline-flex"
-      style={{ "--s": scale } as React.CSSProperties}
+      className={className}
+      style={{ ...style, "--s": scale } as React.CSSProperties}
       onPointerEnter={() => setBurst((n) => (n ? n + 1 : 0))}
     >
-      <span className="animate-glow pointer-events-none absolute -z-10 inset-[-18%] rounded-full bg-[radial-gradient(circle,rgb(251_191_36/0.45),rgb(124_58_237/0.18)_55%,transparent_72%)]" aria-hidden="true" />
+      {glow && (
+        <span className="animate-glow pointer-events-none absolute -z-10 inset-[-18%] rounded-full bg-[radial-gradient(circle,rgb(251_191_36/0.45),rgb(124_58_237/0.18)_55%,transparent_72%)]" aria-hidden="true" />
+      )}
       {children}
       <span className="pointer-events-none absolute inset-0" aria-hidden="true">
         {SPARKLES.map((sparkle, i) => (
