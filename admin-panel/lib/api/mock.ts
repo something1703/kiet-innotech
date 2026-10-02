@@ -649,6 +649,40 @@ export const mockApi: AdminApi = {
     return setStatus(db, admin, team, status, "team.restored", `Restored to ${status}. Reason: ${text}`);
   },
 
+  async reopenTeam(id, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "reopen teams");
+    const team = findTeam(db, admin, id);
+    const text = requireReason(reason);
+    if (team.status !== "submitted") throw new ApiError(409, "Only a submitted team can be reopened.");
+    if (windowState(db.schedule.opens, db.schedule.closes) !== "open") throw new ApiError(409, "Registration is closed. Reopen it on the Schedule page first.");
+    if (db.publishedAt && team.route === "department") throw new ApiError(409, "Department results have been published, so KIET teams can no longer be reopened.");
+    team.status = "draft";
+    team.submittedAt = null;
+    team.result = "pending";
+    for (const nomination of db.nominations) nomination.teamIds = nomination.teamIds.filter((teamId) => teamId !== team.id);
+    log(db, { actorEmail: admin.email, action: "team.reopened", teamId: team.id, teamCode: team.code, department: team.department, detail: `Sent back to draft. Reason: ${text}` });
+    save(db);
+    return clone(team);
+  },
+
+  async dissolveTeam(id, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "dissolve teams");
+    const team = findTeam(db, admin, id);
+    const text = requireReason(reason);
+    if (team.result === "finalist") throw new ApiError(409, "This team is a published finalist, so it cannot be dissolved.");
+    for (const student of db.students) if (student.teamId === team.id) student.teamId = null;
+    for (const nomination of db.nominations) nomination.teamIds = nomination.teamIds.filter((teamId) => teamId !== team.id);
+    db.teams = db.teams.filter((t) => t.id !== team.id);
+    log(db, { actorEmail: admin.email, action: "team.dissolved", teamId: team.id, teamCode: team.code, department: team.department, detail: `${team.name} dissolved. Reason: ${text}` });
+    save(db);
+  },
+
   async listStudents(query) {
     await delay();
     const db = load();

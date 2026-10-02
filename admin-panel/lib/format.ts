@@ -118,6 +118,8 @@ export const auditLabels: Record<AuditAction, string> = {
   "student.created": "Student registered",
   "student.banned": "Student banned",
   "student.unbanned": "Ban lifted",
+  "team.reopened": "Team sent back to draft",
+  "team.dissolved": "Team dissolved",
 };
 
 export const roundLabels = { department: "Departmental", final: "Grand Finale" } as const;

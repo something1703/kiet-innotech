@@ -64,7 +64,9 @@ export type AuditAction =
   | "judging.scored"
   | "student.created"
   | "student.banned"
-  | "student.unbanned";
+  | "student.unbanned"
+  | "team.reopened"
+  | "team.dissolved";
 
 export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging" | "student";
 

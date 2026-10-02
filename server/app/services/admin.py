@@ -528,6 +528,70 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     return admin_teams(db, [team])[0]
 
 
+# ---------- Reopening and dissolving teams ----------
+
+
+def _judging_blocker(db: Session, team: Team) -> str | None:
+    """Why a team cannot be reopened or dissolved because judging has started for it, or None."""
+    if db.scalar(select(func.count()).select_from(Score).where(Score.team_id == team.id)):
+        return "This team has already been scored by judges."
+    if db.scalar(select(func.count()).select_from(PanelTeam).where(PanelTeam.team_id == team.id)):
+        return "This team is allotted to a judging room or panel. Remove it from there on the Judging page first."
+    if db.get(FinalTent, team.id) is not None:
+        return "This team has a Grand Finale tent. Clear the tent on the Judging page first."
+    return None
+
+
+def reopen_team(db: Session, admin: Admin, settings: Settings, team_id: uuid.UUID, reason: str) -> AdminTeamOut:
+    """Sends a submitted team back to draft so its leader can fix it and submit again. Super admins only."""
+    _require_super(admin, "reopen teams")
+    team = _visible_team(db, admin, team_id, lock=True)
+    if team.status != "submitted":
+        raise ApiError(
+            "Only a submitted team can be reopened. Use Restore for a withdrawn or disqualified team."
+            if team.status != "draft"
+            else "This team is already a draft.",
+            409,
+        )
+    # The leader can only edit and submit while registration is open, so reopening outside it would strand the team.
+    if schedule.load(db, settings).registration_state() != "open":
+        raise ApiError(
+            "Registration is closed, so the leader could not edit or submit the team again. Reopen it on the Schedule page first.",
+            409,
+        )
+    if team.route == "department" and _results_published(db) is not None:
+        raise ApiError("Department results have been published, so KIET teams can no longer be reopened.", 409)
+    if blocked := _judging_blocker(db, team):
+        raise ApiError(blocked, 409)
+
+    team.status, team.submitted_at, team.status_reason, team.result = "draft", None, None, "pending"
+    # A draft cannot be nominated; this frees the place for another team.
+    db.execute(delete(FinalistNomination).where(FinalistNomination.team_id == team.id))
+    audit.record(db, admin.email, "team.reopened", team, f"Sent back to draft. Reason: {reason}")
+    db.commit()
+    return admin_teams(db, [team])[0]
+
+
+def dissolve_team(db: Session, admin: Admin, team_id: uuid.UUID, reason: str) -> None:
+    """Deletes a team and frees all its members to join or create another. The history stays in the audit log."""
+    _require_super(admin, "dissolve teams")
+    team = _visible_team(db, admin, team_id, lock=True)
+    if team.result == "finalist":
+        raise ApiError("This team is a published finalist, so it cannot be dissolved. Disqualify it instead.", 409)
+    if blocked := _judging_blocker(db, team):
+        raise ApiError(blocked, 409)
+    members = db.scalars(select(User.email).join(TeamMember, TeamMember.user_id == User.id).where(TeamMember.team_id == team.id)).all()
+    audit.record(
+        db,
+        admin.email,
+        "team.dissolved",
+        team,
+        f"{team.name} dissolved; {len(members)} members freed ({', '.join(members)}). Reason: {reason}",
+    )
+    db.delete(team)
+    db.commit()
+
+
 # ---------- Banning ----------
 
 

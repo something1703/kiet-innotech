@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Ban, RotateCcw, ShieldX, UserMinus } from "lucide-react";
+import { ArrowLeft, Ban, RotateCcw, ShieldX, Trash2, Undo2, UserMinus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { AdminTeam } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -20,7 +20,7 @@ import { SectionTitle } from "@/components/ui/PageHeader";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { TableFrame, tdClass, Th } from "@/components/ui/Table";
 
-type Action = "withdraw" | "disqualify" | "restore" | "ban";
+type Action = "withdraw" | "disqualify" | "restore" | "ban" | "reopen" | "dissolve";
 
 const actionCopy: Record<Action, { title: string; confirm: string; tone: "primary" | "danger"; description: (team: AdminTeam) => ReactNode }> = {
   withdraw: {
@@ -40,6 +40,28 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
     description: (team) => (
       <>
         <strong className="text-navy-900">{team.name}</strong> ({team.code}) will be disqualified from InnoTech26. Only the super admin can restore it.
+      </>
+    ),
+  },
+  reopen: {
+    title: "Send back to draft",
+    confirm: "Send back to draft",
+    tone: "primary",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) becomes a draft again, so its leader can change the members and details and
+        submit it once more. Any finalist nomination is removed. This works only while registration is open, and not once the team is in judging.
+      </>
+    ),
+  },
+  dissolve: {
+    title: "Dissolve team",
+    confirm: "Dissolve team",
+    tone: "danger",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) is deleted and its {team.members.length} members are free to join or create
+        another team. This cannot be undone; the history stays in the activity log.
       </>
     ),
   },
@@ -111,6 +133,7 @@ export function TeamDetail() {
 }
 
 function TeamView({ id }: { id: string }) {
+  const router = useRouter();
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const [notFound, setNotFound] = useState(false);
@@ -145,21 +168,32 @@ function TeamView({ id }: { id: string }) {
   const canDisqualify = isSuper && canWithdraw;
   const canRestore = isSuper && (t.status === "withdrawn" || t.status === "disqualified");
   const canBan = isSuper;
+  const canReopen = isSuper && t.status === "submitted";
+  const canDissolve = isSuper;
 
   async function run(kind: Action, reason: string) {
+    if (kind === "dissolve") {
+      await api.dissolveTeam(t.id, reason);
+      router.replace("/teams");
+      return;
+    }
     const updated =
       kind === "withdraw"
         ? await api.withdrawTeam(t.id, reason)
         : kind === "disqualify"
           ? await api.disqualifyTeam(t.id, reason)
-          : kind === "ban"
+          : kind === "reopen"
+            ? await api.reopenTeam(t.id, reason)
+            : kind === "ban"
             ? await api.banTeam(t.id, reason, banMembers)
             : await api.restoreTeam(t.id, reason);
     team.setData(updated);
     history.reload();
     setAction(null);
     setDone(
-      kind === "ban"
+      kind === "reopen"
+        ? `${updated.code} is a draft again. Its leader can now change it and submit it once more.`
+        : kind === "ban"
         ? `${updated.code} is banned (disqualified)${banMembers ? " and its members can no longer use the portal" : ""}.`
         : `${updated.code} is now ${statusLabels[updated.status].toLowerCase()}.`,
     );
@@ -183,7 +217,7 @@ function TeamView({ id }: { id: string }) {
               {otherDepartments.length > 0 && <Pill tone="navy">Mixed departments</Pill>}
             </div>
           </div>
-          {(canWithdraw || canDisqualify || canRestore || canBan) && (
+          {(canWithdraw || canDisqualify || canRestore || canBan || canReopen || canDissolve) && (
             <div className="flex flex-wrap gap-2">
               {canWithdraw && (
                 <Button variant="secondary" onClick={() => setAction("withdraw")}>
@@ -195,6 +229,18 @@ function TeamView({ id }: { id: string }) {
                 <Button variant="danger" onClick={() => setAction("disqualify")}>
                   <Ban aria-hidden="true" className="size-4" />
                   Disqualify
+                </Button>
+              )}
+              {canReopen && (
+                <Button variant="secondary" onClick={() => setAction("reopen")}>
+                  <Undo2 aria-hidden="true" className="size-4" />
+                  Send back to draft
+                </Button>
+              )}
+              {canDissolve && (
+                <Button variant="secondary" className="text-red-700" onClick={() => setAction("dissolve")}>
+                  <Trash2 aria-hidden="true" className="size-4" />
+                  Dissolve
                 </Button>
               )}
               {canBan && (
@@ -341,6 +387,7 @@ function TeamView({ id }: { id: string }) {
           confirmLabel={actionCopy[action].confirm}
           tone={actionCopy[action].tone}
           reasonLabel="Reason"
+          typeToConfirm={action === "dissolve" ? t.name : undefined}
           onConfirm={(reason) => run(action, reason)}
           onClose={() => setAction(null)}
         >

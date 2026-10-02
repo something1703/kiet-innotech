@@ -129,6 +129,10 @@
  *          (same institution, category eligibility, 1-5 members or 2-5 to submit, unique name); the leader must be in the
  *          caller's scope. → AdminTeam (201)
  *
+ *   POST   /admin/teams/{id}/reopen    (super_admin) body { reason } → AdminTeam (draft). 409 unless submitted and registration is
+ *          open, once KIET results are published, or when the team is allotted to a room/panel, scored or has a tent.
+ *   POST   /admin/teams/{id}/dissolve  (super_admin) body { reason } → 204. Deletes the team and frees its members; 409 for a
+ *          published finalist or a team in judging.
  *   POST   /admin/students    body ProfileInput + { email } → AdminStudent (201). Scoped like the student list.
  *   POST   /admin/students/{user_id}/ban | /unban   (super_admin) body { reason } → AdminStudent
  *   POST   /admin/teams/{id}/ban   (super_admin) body { reason, ban_members } → AdminTeam (disqualified)
@@ -311,6 +315,8 @@ export const liveApi: AdminApi = {
   withdrawTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/withdraw`, { reason }),
   disqualifyTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/disqualify`, { reason }),
   restoreTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/restore`, { reason }),
+  reopenTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/reopen`, { reason }),
+  dissolveTeam: (teamId, reason) => request<void>("POST", `/admin/teams/${id(teamId)}/dissolve`, { reason }),
 
   listStudents: (query: StudentQuery) => request<Page<AdminStudent>>("GET", `/admin/students${queryString(query)}`),
   exportStudents: (query: StudentQuery) =>

@@ -23,6 +23,8 @@ const tones: Partial<Record<string, PillTone>> = {
   "student.banned": "red",
   "student.unbanned": "cyan",
   "student.created": "green",
+  "team.reopened": "orange",
+  "team.dissolved": "red",
 };
 
 /** A ruled, newest-first list of audit log entries. */

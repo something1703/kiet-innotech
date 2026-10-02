@@ -47,6 +47,10 @@ export interface AdminApi {
   withdrawTeam(id: string, reason: string): Promise<AdminTeam>;
   disqualifyTeam(id: string, reason: string): Promise<AdminTeam>;
   restoreTeam(id: string, reason: string): Promise<AdminTeam>;
+  /** Super admin: sends a submitted team back to draft (registration must be open; not once judging has started). */
+  reopenTeam(id: string, reason: string): Promise<AdminTeam>;
+  /** Super admin: deletes a team and frees its members. The history stays in the audit log. */
+  dissolveTeam(id: string, reason: string): Promise<void>;
 
   listStudents(query: StudentQuery): Promise<Page<AdminStudent>>;
   exportStudents(query: StudentQuery): Promise<AdminStudent[]>;

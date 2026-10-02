@@ -92,6 +92,19 @@ def create_team(data: AdminTeamInput, admin: CurrentAdmin, db: Db, settings: App
     return service.create_team(db, admin, data, settings)
 
 
+@router.post("/teams/{team_id}/reopen")
+def reopen_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminTeamOut:
+    """Super admin: sends a submitted team back to draft (registration must be open)."""
+    return service.reopen_team(db, admin, settings, team_id, data.reason)
+
+
+@router.post("/teams/{team_id}/dissolve", status_code=status.HTTP_204_NO_CONTENT)
+def dissolve_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> Response:
+    """Super admin: deletes a team and frees its members."""
+    service.dissolve_team(db, admin, team_id, data.reason)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/teams/{team_id}")
 def get_team(team_id: uuid.UUID, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
     return service.get_team(db, admin, team_id)
