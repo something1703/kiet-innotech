@@ -7,6 +7,7 @@ const variants = {
   outline: "border border-navy-800/15 bg-white text-navy-800 hover:border-navy-800",
   ghost: "text-navy-800 hover:bg-surface",
   danger: "border border-red-200 bg-white text-red-700 hover:border-red-500 hover:bg-red-50",
+  destructive: "bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700",
   link: "text-accent-600 underline-offset-4 hover:underline",
 };
 

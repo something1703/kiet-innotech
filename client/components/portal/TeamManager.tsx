@@ -516,7 +516,7 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
   };
 
   return (
-    <Panel title="Submit your team" description="Once submitted, members and category are locked for good.">
+    <Panel title="Submit your team" description="Once submitted, the team and all its members are locked for good.">
       <ul className="space-y-3">
         {checks.map((check) => (
           <li key={check.label} className="flex gap-3 text-sm">
@@ -551,15 +551,37 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
 
       <ConfirmDialog
         open={confirming}
-        title={`Submit ${team.name}?`}
-        confirmLabel="Submit team"
+        title={`Lock and submit ${team.name}?`}
+        confirmLabel="Lock team and submit"
+        confirmVariant="destructive"
         pending={pending}
         error={error}
+        typeToConfirm={team.name}
+        typeToConfirmLabel="team name"
         onConfirm={submit}
         onClose={() => setConfirming(false)}
       >
-        After submission you cannot add or remove members or change the category. If any member withdraws later, the team is not
-        considered further.
+        <p className="font-semibold text-ink">This locks the whole team, and it cannot be undone from here.</p>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li>
+            <strong className="text-ink">All {team.members.length} members are locked in:</strong> nobody can leave, and nobody can be added or removed.
+            They cannot join or create another team.
+          </li>
+          <li>The team name, category, domain, project title and abstract can no longer be changed.</li>
+          <li>If a member withdraws later, the team is not considered further.</li>
+          <li>Only the organisers can change a submitted team, and only for a good reason.</li>
+        </ul>
+        <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Members being locked</p>
+          <ul className="mt-1.5 space-y-0.5 text-ink">
+            {team.members.map((member) => (
+              <li key={member.userId}>
+                {member.fullName} {member.role === "leader" && <span className="text-xs text-muted">(leader)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="mt-4">Check every name, the category and the project details before you continue.</p>
       </ConfirmDialog>
     </Panel>
   );
