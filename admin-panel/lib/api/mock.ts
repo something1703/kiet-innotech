@@ -630,7 +630,7 @@ export const mockApi: AdminApi = {
     return setStatus(db, admin, team, "disqualified", "team.disqualified", `Disqualified. Reason: ${text}`);
   },
 
-  async restoreTeam(id, reason) {
+  async restoreTeam(id, reason, unbanMembers = false) {
     await delay();
     const db = load();
     const admin = actor(db);
@@ -646,6 +646,11 @@ export const mockApi: AdminApi = {
       throw new ApiError(409, "Members have left this team since it was withdrawn, so it cannot be restored.");
     }
     const status: TeamStatus = team.submittedAt ? "submitted" : "draft";
+    if (unbanMembers) {
+      for (const student of db.students) {
+        if (student.teamId === team.id) (student as StudentRecord & { bannedAt?: string | null }).bannedAt = null;
+      }
+    }
     return setStatus(db, admin, team, status, "team.restored", `Restored to ${status}. Reason: ${text}`);
   },
 

@@ -72,3 +72,43 @@ def test_organisers_register_students(world, as_user):  # noqa: F811
     college = root.post("/admin/students", {**college_profile(), "email": "college.kid@gmail.com"})
     assert college.status_code == 201 and college.json()["institution"] == "ABES Engineering College"
     assert root.get("/admin/activity", params={"kind": "student"}).json()["total"] == 2
+
+
+def test_restoring_a_banned_team_can_also_lift_its_members_bans(world, as_user):  # noqa: F811
+    root, team = world["root"], world["teams"]["cse_b"]
+    root.post(f"/admin/teams/{team['id']}/ban", {"reason": "Plagiarised project", "ban_members": True})
+    members = root.get(f"/admin/teams/{team['id']}").json()["members"]
+    assert [m["banned"] for m in members] == [True, True]
+
+    # Restoring alone leaves the bans in place.
+    restored = root.post(f"/admin/teams/{team['id']}/restore", {"reason": "Cleared after review"})
+    assert restored.status_code == 200 and restored.json()["status"] == "submitted"
+    assert [m["banned"] for m in restored.json()["members"]] == [True, True]
+    assert as_user("c@kiet.edu").get("/me").status_code == 403
+
+    # Restoring with the option lifts them, and says so in the log.
+    root.post(f"/admin/teams/{team['id']}/disqualify", {"reason": "Second look needed"})
+    again = root.post(f"/admin/teams/{team['id']}/restore", {"reason": "Cleared after review", "unban_members": True})
+    assert [m["banned"] for m in again.json()["members"]] == [False, False]
+    assert as_user("c@kiet.edu").get("/me").status_code == 200
+    actions = [e["action"] for e in root.get("/admin/audit", params={"team_id": team["id"], "limit": 10}).json()]
+    assert "student.unbanned" in actions
+
+
+def test_the_ban_option_is_ignored_for_everyone_but_super_admins(world):  # noqa: F811
+    team = world["teams"]["cse_a"]
+    assert world["cse"].post(f"/admin/teams/{team['id']}/restore", {"reason": "Cleared", "unban_members": True}).status_code == 403
+
+
+def test_outside_admins_see_student_events_for_their_students(world, as_user):  # noqa: F811
+    root = world["root"]
+    root.post("/admin/admins", {"email": "outside@gmail.com", "name": "Outside Desk", "role": "outside_admin", "department": None})
+    outside = as_user("outside@gmail.com")
+    college_id = students(root, type="college")["r@gmail.com"]["user_id"]
+    kiet_id = students(root)["a@kiet.edu"]["user_id"]
+    root.post(f"/admin/students/{college_id}/ban", {"reason": "Fake identity"})
+    root.post(f"/admin/students/{kiet_id}/ban", {"reason": "Fake identity"})
+    root.post("/admin/students", {**college_profile(), "email": "walk.in@gmail.com"})
+    seen = [e["detail"] for e in outside.get("/admin/activity", params={"kind": "student", "page_size": 50}).json()["items"]]
+    assert any("r@gmail.com" in d for d in seen) and any("walk.in@gmail.com" in d for d in seen)
+    assert not any("a@kiet.edu" in d for d in seen)

@@ -218,13 +218,13 @@ def admin_teams(db: Session, teams: list[Team]) -> list[AdminTeamOut]:
         return []
     members: dict[uuid.UUID, list[AdminMemberOut]] = defaultdict(list)
     rows = db.execute(
-        select(TeamMember, Profile, User.email)
+        select(TeamMember, Profile, User.email, User.banned_at)
         .join(Profile, Profile.user_id == TeamMember.user_id)
         .join(User, User.id == TeamMember.user_id)
         .where(TeamMember.team_id.in_(ids))
         .order_by(TeamMember.joined_at)
     ).all()
-    for member, profile, email in rows:
+    for member, profile, email, banned_at in rows:
         members[member.team_id].append(
             AdminMemberOut(
                 user_id=member.user_id,
@@ -238,6 +238,7 @@ def admin_teams(db: Session, teams: list[Team]) -> list[AdminTeamOut]:
                 phone=profile.phone,
                 roll_number=profile.roll_number,
                 institution=profile.institution,
+                banned=banned_at is not None,
             )
         )
     pending: dict[uuid.UUID, list[Invitation]] = defaultdict(list)
@@ -386,7 +387,13 @@ def _results_published(db: Session) -> AppState | None:
 
 
 def change_status(
-    db: Session, admin: Admin, team_id: uuid.UUID, action: Literal["withdraw", "disqualify", "restore"], reason: str
+    db: Session,
+    admin: Admin,
+    team_id: uuid.UUID,
+    action: Literal["withdraw", "disqualify", "restore"],
+    reason: str,
+    *,
+    unban_members: bool = False,
 ) -> AdminTeamOut:
     if action in ("disqualify", "restore"):
         _require_super(admin, f"{action} teams")
@@ -407,6 +414,19 @@ def change_status(
             nominated = db.get(FinalistNomination, team.id) is not None
             team.result = "finalist" if nominated else "not_selected"
         audit.record(db, admin.email, "team.restored", team, reason)
+        if unban_members:
+            lifted = db.scalars(
+                select(User)
+                .join(TeamMember, TeamMember.user_id == User.id)
+                .where(TeamMember.team_id == team.id, User.banned_at.is_not(None))
+                .with_for_update(of=User)
+            ).all()
+            for member in lifted:
+                member.banned_at = member.banned_reason = member.banned_by = None
+            if lifted:
+                audit.record(
+                    db, admin.email, "student.unbanned", team, f"With the restored team {team.code}: {', '.join(m.email for m in lifted)}"
+                )
     else:
         if team.status not in ("draft", "submitted"):
             raise ApiError(f"This team is already {team.status}.", 409)
@@ -623,7 +643,14 @@ def ban_student(db: Session, admin: Admin, user_id: uuid.UUID, reason: str) -> A
     if user.banned_at is not None:
         raise ApiError("This student is already banned.", 409)
     note = _ban(db, admin, user, reason)
-    audit.record(db, admin.email, "student.banned", detail=f"{user.email}: {reason}.{note}", department=profile.department)
+    audit.record(
+        db,
+        admin.email,
+        "student.banned",
+        detail=f"{user.email}: {reason}.{note}",
+        department=profile.department,
+        participant_type=profile.participant_type,
+    )
     db.commit()
     return _one_student(db, admin, user_id)
 
@@ -637,7 +664,14 @@ def unban_student(db: Session, admin: Admin, user_id: uuid.UUID, reason: str) ->
     if user.banned_at is None:
         raise ApiError("This student is not banned.", 409)
     user.banned_at = user.banned_reason = user.banned_by = None
-    audit.record(db, admin.email, "student.unbanned", detail=f"{user.email}: {reason}", department=profile.department)
+    audit.record(
+        db,
+        admin.email,
+        "student.unbanned",
+        detail=f"{user.email}: {reason}",
+        department=profile.department,
+        participant_type=profile.participant_type,
+    )
     db.commit()
     return _one_student(db, admin, user_id)
 
@@ -713,6 +747,7 @@ def create_student(db: Session, admin: Admin, data: AdminStudentInput) -> AdminS
         "student.created",
         detail=f"{data.email} ({data.full_name}), registered by an organiser",
         department=data.department,
+        participant_type=data.participant_type,
     )
     _commit(
         db,

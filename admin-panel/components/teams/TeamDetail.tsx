@@ -147,6 +147,7 @@ function TeamView({ id }: { id: string }) {
   const history = useQuery(team.data ? `team-audit:${id}` : null, () => api.audit({ teamId: id, limit: 100 }));
   const [action, setAction] = useState<Action | null>(null);
   const [banMembers, setBanMembers] = useState(true);
+  const [unbanMembers, setUnbanMembers] = useState(true);
   const [done, setDone] = useState<string | null>(null);
 
   if (notFound && !team.data) return <TeamNotFound known />;
@@ -168,6 +169,7 @@ function TeamView({ id }: { id: string }) {
   const canDisqualify = isSuper && canWithdraw;
   const canRestore = isSuper && (t.status === "withdrawn" || t.status === "disqualified");
   const canBan = isSuper;
+  const bannedCount = t.members.filter((m) => m.banned).length;
   const canReopen = isSuper && t.status === "submitted";
   const canDissolve = isSuper;
 
@@ -186,7 +188,7 @@ function TeamView({ id }: { id: string }) {
             ? await api.reopenTeam(t.id, reason)
             : kind === "ban"
             ? await api.banTeam(t.id, reason, banMembers)
-            : await api.restoreTeam(t.id, reason);
+            : await api.restoreTeam(t.id, reason, unbanMembers);
     team.setData(updated);
     history.reload();
     setAction(null);
@@ -321,6 +323,11 @@ function TeamView({ id }: { id: string }) {
               <tr key={m.userId}>
                 <td className={`${tdClass} whitespace-nowrap font-semibold text-navy-900`}>
                   {m.fullName} {m.role === "leader" && <Pill tone="navy">Leader</Pill>}
+                  {m.banned && (
+                    <span className="mt-0.5 block">
+                      <Pill tone="red">Banned</Pill>
+                    </span>
+                  )}
                 </td>
                 <td className={tdClass}>
                   <a href={`mailto:${m.email}`} className="break-all text-brand-700 hover:underline">
@@ -391,6 +398,15 @@ function TeamView({ id }: { id: string }) {
           onConfirm={(reason) => run(action, reason)}
           onClose={() => setAction(null)}
         >
+          {action === "restore" && bannedCount > 0 && (
+            <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-xl bg-amber-50 px-3 py-3 text-sm">
+              <input type="checkbox" checked={unbanMembers} onChange={(e) => setUnbanMembers(e.target.checked)} className="mt-0.5 size-4 accent-brand-600" />
+              <span>
+                <span className="font-semibold text-navy-900">Also lift the ban on {bannedCount} banned {bannedCount === 1 ? "member" : "members"}</span>
+                <span className="block text-xs text-muted">Restoring alone leaves them banned, so they still cannot sign in to the portal.</span>
+              </span>
+            </label>
+          )}
           {action === "ban" && (
             <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-xl bg-red-50 px-3 py-3 text-sm">
               <input type="checkbox" checked={banMembers} onChange={(e) => setBanMembers(e.target.checked)} className="mt-0.5 size-4 accent-red-600" />

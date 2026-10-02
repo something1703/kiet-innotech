@@ -36,13 +36,13 @@ export function teamsCsv(teams: AdminTeam[]) {
 export function studentsCsv(students: AdminStudent[]) {
   const header = [
     "Name", "Email", "Phone", "Participant type", "Institution", "City", "Department", "Course",
-    "Year / class", "Roll number", "Team code", "Team name", "Team role", "Team status", "Registered at (IST)",
+    "Year / class", "Roll number", "Team code", "Team name", "Team role", "Team status", "Registered at (IST)", "Access",
   ];
   const rows = students.map((s) => [
     s.fullName, s.email, asText(s.phone), typeShortLabels[s.participantType], s.institution, s.city, s.department ?? "",
     s.course, yearLabel(s.year, s.participantType), asText(s.rollNumber), s.team?.code ?? "", s.team?.name ?? "",
     s.team ? (s.team.role === "leader" ? "Leader" : "Member") : "", s.team ? statusLabels[s.team.status] : "",
-    formatCsvDateTime(s.createdAt),
+    formatCsvDateTime(s.createdAt), s.bannedAt ? "Banned" : "Active",
   ]);
   return toCsv(header, rows);
 }
@@ -143,6 +143,8 @@ export async function downloadStudentsExcel(students: AdminStudent[]) {
         { header: "Team role", width: 10, value: (s) => (s.team ? (s.team.role === "leader" ? "Leader" : "Member") : "") },
         { header: "Team status", width: 12, value: (s) => (s.team ? statusLabels[s.team.status] : "Not in a team") },
         { header: "Registered (IST)", width: 20, value: (s) => formatCsvDateTime(s.createdAt) },
+        { header: "Access", width: 10, value: (s) => (s.bannedAt ? "Banned" : "Active") },
+        { header: "Ban reason", width: 30, value: (s) => s.bannedReason ?? "" },
       ],
       students,
     ),

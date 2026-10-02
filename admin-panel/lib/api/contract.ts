@@ -46,7 +46,8 @@ export interface AdminApi {
   createTeam(input: AdminTeamInput): Promise<AdminTeam>;
   withdrawTeam(id: string, reason: string): Promise<AdminTeam>;
   disqualifyTeam(id: string, reason: string): Promise<AdminTeam>;
-  restoreTeam(id: string, reason: string): Promise<AdminTeam>;
+  /** `unbanMembers` also lifts the ban on every banned member (e.g. after the team was banned with its members). */
+  restoreTeam(id: string, reason: string, unbanMembers?: boolean): Promise<AdminTeam>;
   /** Super admin: sends a submitted team back to draft (registration must be open; not once judging has started). */
   reopenTeam(id: string, reason: string): Promise<AdminTeam>;
   /** Super admin: deletes a team and frees its members. The history stays in the audit log. */

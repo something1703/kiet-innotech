@@ -361,6 +361,8 @@ class AdminMemberOut(MemberOut):
     phone: str
     roll_number: str
     institution: str
+    # Set when an organiser has banned this student from the portal.
+    banned: bool = False
 
 
 class AdminTeamOut(TeamOut):
@@ -412,6 +414,11 @@ class AdminStudentInput(ProfileInput):
     @classmethod
     def check_email(cls, value: str) -> str:
         return _email(value)
+
+
+class RestoreInput(ReasonInput):
+    # Also lift the ban on every banned member (e.g. after the team was banned together with its members).
+    unban_members: bool = False
 
 
 class TeamBanInput(Input):

@@ -38,6 +38,7 @@ from ..schemas import (
     PublishOut,
     RankingsOut,
     ReasonInput,
+    RestoreInput,
     RoundOut,
     ScheduleInput,
     ScheduleOut,
@@ -121,8 +122,8 @@ def disqualify_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, 
 
 
 @router.post("/teams/{team_id}/restore")
-def restore_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
-    return service.change_status(db, admin, team_id, "restore", data.reason)
+def restore_team(team_id: uuid.UUID, data: RestoreInput, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
+    return service.change_status(db, admin, team_id, "restore", data.reason, unban_members=data.unban_members)
 
 
 @router.post("/students", status_code=status.HTTP_201_CREATED)

@@ -95,6 +95,8 @@ export type AdminTeamMember = TeamMember & {
   phone: string;
   rollNumber: string;
   institution: string;
+  /** Banned from the portal by an organiser. */
+  banned?: boolean;
 };
 
 export type AdminTeam = Omit<Team, "members"> & {
