@@ -56,7 +56,6 @@ DOMAINS = [
 class Category:
     number: int
     title: str
-    open_to_schools: bool = False
     first_year_only: bool = False
 
 
@@ -67,9 +66,9 @@ CATEGORIES = {
         Category(2, "AI Solutions for Automation"),
         Category(3, "Automation and Robotics"),
         Category(4, "From Concept to Reality"),
-        Category(5, "Start Small, Scale Big, Sustain Always", open_to_schools=True),
+        Category(5, "Start Small, Scale Big, Sustain Always"),
         Category(6, "Gen Z to Budding Innovators", first_year_only=True),
-        Category(7, "Creative Visions for a Sustainable Future", open_to_schools=True),
+        Category(7, "Creative Visions for a Sustainable Future"),
         Category(8, "CyberShield"),
     ]
 }
@@ -149,8 +148,6 @@ def category_error(category: int, participant_type: str, years: list[int]) -> st
     info = CATEGORIES.get(category)
     if info is None:
         return "Unknown category."
-    if participant_type == "school" and not info.open_to_schools:
-        return "School teams can only enter the poster categories (5 and 7)."
     if info.first_year_only and any(year != 1 for year in years):
         return "Only teams where every member is a first-year student can enter this category."
     return None

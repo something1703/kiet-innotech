@@ -32,7 +32,7 @@ const contents = [
 
 const eligibilityRows: { label: string; values: [string, string, string] }[] = [
   { label: "Sign in with", values: ["Official @kiet.edu Google account", "Any Google account", "Any Google account"] },
-  { label: "Categories", values: ["Any one of the eight", "Any one of the eight", "Poster categories 5 and 7"] },
+  { label: "Categories", values: ["Any one of the eight", "Any one of the eight", "Any one of the eight"] },
   { label: "Team", values: [`${TEAM_MIN_SIZE} to ${TEAM_MAX_SIZE} KIET students, any branch`, `${TEAM_MIN_SIZE} to ${TEAM_MAX_SIZE} students of the same college`, `${TEAM_MIN_SIZE} to ${TEAM_MAX_SIZE} students of the same school`] },
   { label: "Route", values: ["Department round, then Grand Finale", "Directly to the Grand Finale", "Directly to the Grand Finale"] },
   { label: "Competes for", values: ["Department and institute prizes", "Institute level prizes", "Best School Project/Poster"] },
@@ -157,7 +157,6 @@ export default function GuidelinesPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-display text-lg font-bold text-ink">{category.title}</h3>
                       <Tag tone={category.isPoster ? "accent" : "brand"}>{category.isPoster ? "Poster" : "Project"}</Tag>
-                      {category.openToSchools && <Tag tone="navy">Open to schools</Tag>}
                       {category.firstYearOnly && <Tag tone="navy">First year only</Tag>}
                     </div>
                     <p className="mt-1 text-muted">{category.summary}</p>

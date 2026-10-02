@@ -105,7 +105,6 @@ export type Category = {
   summary: string;
   topics: string[];
   isPoster: boolean;
-  openToSchools: boolean;
   firstYearOnly: boolean;
   rubric: RubricGroup;
 };
@@ -123,7 +122,6 @@ export const categories: Category[] = [
       "Bioinformatics and Healthcare Solutions",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: false,
     rubric: "software",
   },
@@ -139,7 +137,6 @@ export const categories: Category[] = [
       "Intelligent Process Automation",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: false,
     rubric: "software",
   },
@@ -156,7 +153,6 @@ export const categories: Category[] = [
       "NLP-Based Intelligent Systems",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: false,
     rubric: "hardware",
   },
@@ -172,7 +168,6 @@ export const categories: Category[] = [
       "Green Energy and Clean Technology",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: false,
     rubric: "hardware",
   },
@@ -189,7 +184,6 @@ export const categories: Category[] = [
       "Registered Firms and MSME Solutions",
     ],
     isPoster: true,
-    openToSchools: true,
     firstYearOnly: false,
     rubric: "startup",
   },
@@ -204,7 +198,6 @@ export const categories: Category[] = [
       "All team members must be first-year students",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: true,
     rubric: "genz",
   },
@@ -222,7 +215,6 @@ export const categories: Category[] = [
       "Ideas without Software or Hardware Implementation",
     ],
     isPoster: true,
-    openToSchools: true,
     firstYearOnly: false,
     rubric: "poster",
   },
@@ -239,7 +231,6 @@ export const categories: Category[] = [
       "AI and Quantum-enabled Security",
     ],
     isPoster: false,
-    openToSchools: false,
     firstYearOnly: false,
     rubric: "cybershield",
   },
@@ -271,7 +262,7 @@ export const participantTracks = [
     audience: "Budding Engineers",
     steps: ["Register", "Finale"],
     points: [
-      "Participate in the two poster categories (5 and 7)",
+      "Choose any one of the eight categories",
       "Teams go directly to the institute level finale",
       "Compete for the Best School Project/Poster award",
     ],

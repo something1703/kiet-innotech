@@ -24,7 +24,7 @@ const typeIcons = { kiet: University, college: GraduationCap, school: School };
 const typeNotes: Record<ParticipantType, string> = {
   kiet: "Department round, then the Grand Finale",
   college: "Straight to the Grand Finale, any category",
-  school: "Straight to the Grand Finale, poster categories",
+  school: "Straight to the Grand Finale, any category",
 };
 
 type ProfileFormProps = {

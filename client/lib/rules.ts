@@ -126,9 +126,6 @@ export type Eligibility = { allowed: true } | { allowed: false; reason: string }
 export function categoryEligibility(categoryNumber: number, type: ParticipantType, years: number[]): Eligibility {
   const category = categories.find((c) => c.number === categoryNumber);
   if (!category) return { allowed: false, reason: "Unknown category." };
-  if (type === "school" && !category.openToSchools) {
-    return { allowed: false, reason: "School teams can only enter the poster categories (5 and 7)." };
-  }
   if (category.firstYearOnly && years.some((year) => year !== 1)) {
     return { allowed: false, reason: "Only teams where every member is a first-year student can enter this category." };
   }

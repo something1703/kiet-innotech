@@ -80,7 +80,7 @@ export default function DashboardPage() {
               {profile.participantType === "kiet"
                 ? `KIET teams are first evaluated at the department round (22 to 24 October). Each department nominates its best team in every category for the Grand Finale on 30 October.`
                 : profile.participantType === "school"
-                  ? "School teams compete in the poster categories (5 and 7) and go straight to the Grand Finale on 30 October at KIET."
+                  ? "School teams can enter any category and go straight to the Grand Finale on 30 October at KIET."
                   : "Teams from other colleges go straight to the Grand Finale on 30 October at KIET."}
             </p>
             <p className="mt-4 text-sm text-muted">

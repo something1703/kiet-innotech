@@ -131,8 +131,10 @@ def test_team_names_unique_ignoring_case_and_spaces(student, team_of):
 
 def test_category_rules(student):
     school = student("kid@gmail.com", school_profile())
-    assert "poster categories" in school.post("/teams", team_input(category=1)).json()["detail"]
-    assert school.post("/teams", team_input(category=5)).status_code == 201
+    # Schools may enter any category (only category 6, for first-year students, is out of reach).
+    assert school.post("/teams", team_input(category=1)).status_code == 201
+    for number, email in ((3, "kid3@gmail.com"), (8, "kid8@gmail.com"), (5, "kid5@gmail.com")):
+        assert student(email, school_profile()).post("/teams", team_input(name=f"School {number}", category=number)).status_code == 201
 
     third_year = student("a@kiet.edu", kiet_profile(year=3))
     assert "first-year" in third_year.post("/teams", team_input(category=6)).json()["detail"]

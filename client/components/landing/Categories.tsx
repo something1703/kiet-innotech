@@ -10,7 +10,6 @@ const filters: { label: string; match: (category: Category) => boolean }[] = [
   { label: "All", match: () => true },
   { label: "Projects", match: (category) => !category.isPoster },
   { label: "Posters", match: (category) => category.isPoster },
-  { label: "Open to schools", match: (category) => category.openToSchools },
 ];
 
 export function Categories() {
