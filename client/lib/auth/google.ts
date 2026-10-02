@@ -26,6 +26,7 @@ type GoogleAccountsId = {
       shape?: "rectangular" | "pill" | "circle" | "square";
       logo_alignment?: "left" | "center";
       width?: number;
+      locale?: string;
     },
   ): void;
 };
@@ -102,6 +103,8 @@ export async function renderGoogleButton(
     shape: "pill",
     text: context === "signup" ? "signup_with" : "continue_with",
     logo_alignment: "center",
+    // The site is in English; without this Google picks the button's language from the visitor's browser.
+    locale: "en",
     // Google accepts 200 to 400 pixels.
     width: Math.max(200, Math.min(400, Math.floor(parent.clientWidth))),
   });

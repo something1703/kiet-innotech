@@ -18,7 +18,7 @@ type GoogleId = {
   }): void;
   renderButton(
     parent: HTMLElement,
-    options: { type: "standard"; theme: "outline"; size: "large"; text: "signin_with"; shape: "pill"; logo_alignment: "left"; width: number },
+    options: { type: "standard"; theme: "outline"; size: "large"; text: "signin_with"; shape: "pill"; logo_alignment: "left"; width: number; locale: string },
   ): void;
   disableAutoSelect(): void;
 };
@@ -85,6 +85,8 @@ export async function renderGoogleButton(parent: HTMLElement, onCredential: (cre
     text: "signin_with",
     shape: "pill",
     logo_alignment: "left",
+    // The panel is in English; without this Google picks the button's language from the visitor's browser.
+    locale: "en",
     width: Math.min(400, Math.max(200, parent.clientWidth)),
   });
 }
