@@ -37,7 +37,7 @@ App = Literal["portal", "admin"]
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 SESSION_ISSUER = "innotech-api"
-BANNED = "Your InnoTech26 account has been suspended by the organisers. Contact the help desk if you think this is a mistake."
+BANNED = "Your InnoTech26 account has been suspended by the organisers. If you think this is a mistake, write to innotech@kiet.edu."
 # Writing last_seen_at on every request would double the write load; once every few minutes is enough.
 LAST_SEEN_RESOLUTION = timedelta(minutes=5)
 

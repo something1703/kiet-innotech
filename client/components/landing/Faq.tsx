@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { faqs } from "@/lib/content";
 import { Reveal } from "@/components/ui/Reveal";
+import { MailLink } from "@/components/ui/MailLink";
 import { Section, SectionHeading } from "@/components/ui/Section";
 
 export function Faq() {
@@ -16,7 +17,11 @@ export function Faq() {
           <SectionHeading
             eyebrow="FAQ"
             title="Frequently asked questions"
-            description="Cannot find your answer? Visit the help desk on campus or contact the organising team."
+            description={
+              <>
+                Cannot find your answer? Write to <MailLink /> or visit the help desk on campus.
+              </>
+            }
             align="left"
           />
         </div>

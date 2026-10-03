@@ -72,7 +72,7 @@ def _lock_own_team(db: Session, user: User, team_id: uuid.UUID, *, leader: bool)
 LOCKED_MESSAGES = {
     "submitted": "This team has been submitted and is locked.",
     "withdrawn": "This team has been withdrawn. You can leave it and then join or create another team.",
-    "disqualified": "This team has been disqualified. Contact the organising team if you have questions.",
+    "disqualified": "This team has been disqualified. If you have questions, write to innotech@kiet.edu.",
 }
 
 
@@ -169,7 +169,7 @@ def save_profile(db: Session, user: User, data: ProfileInput, settings: Settings
     profile.roll_number = data.roll_number
     _commit(
         db,
-        dict([("uq_profiles_kiet_roll_number", ("This roll number is already registered. Contact the help desk if it is yours.", 409))]),
+        dict([("uq_profiles_kiet_roll_number", ("This roll number is already registered. If it is yours, write to innotech@kiet.edu.", 409))]),
     )
     return profile
 

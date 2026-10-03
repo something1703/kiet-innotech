@@ -8,8 +8,10 @@ import { LogOut, RefreshCw } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth/session";
 import { isPath, isUnder } from "@/lib/paths";
 import { longDate, longDateTime } from "@/lib/format";
+import { event } from "@/lib/content";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { Button, Notice } from "@/components/ui/form";
+import { MailLink } from "@/components/ui/MailLink";
 import { PortalProvider } from "./PortalProvider";
 
 const tabs = [
@@ -108,10 +110,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <footer className="border-t border-line bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <p>InnoTech26, KIET Deemed to be University</p>
-          <p className="flex gap-5">
+          <p className="flex flex-wrap gap-x-5 gap-y-1">
             <Link href="/guidelines" className="font-semibold text-navy-800 hover:text-accent-500">Guidelines</Link>
             <Link href="/#faq" className="font-semibold text-navy-800 hover:text-accent-500">FAQ</Link>
-            <Link href="/#contact" className="font-semibold text-navy-800 hover:text-accent-500">Contact</Link>
+            <a href={`mailto:${event.email}`} className="font-semibold text-navy-800 hover:text-accent-500">{event.email}</a>
           </p>
         </div>
       </footer>
@@ -134,7 +136,7 @@ function PortalFailed({ message, retry }: { message: string; retry: () => void }
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <Notice tone="error" title="We could not load your details">
-        {message} If this keeps happening, contact the InnoTech help desk.
+        {message} If this keeps happening, write to <MailLink />.
       </Notice>
       <Button variant="dark" onClick={retry}>
         <RefreshCw size={16} aria-hidden="true" />

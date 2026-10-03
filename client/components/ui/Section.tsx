@@ -18,7 +18,7 @@ export function Section({ id, className = "", children }: SectionProps) {
 type SectionHeadingProps = {
   eyebrow: string;
   title: string;
-  description?: string;
+  description?: ReactNode;
   align?: "center" | "left";
   tone?: "light" | "dark";
 };

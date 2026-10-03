@@ -36,6 +36,7 @@ def send(email: Email, settings: Settings | None = None) -> None:
         body_html = "<br>".join(html.escape(line) for line in email.text.splitlines())
         _ses_client(settings.ses_region).send_email(
             FromEmailAddress=settings.email_sender,
+            ReplyToAddresses=[settings.contact_email],
             Destination={"ToAddresses": [email.to]},
             Content={
                 "Simple": {
@@ -59,7 +60,8 @@ def invitation(to: str, team_name: str, team_code: str, leader_name: str, settin
         text=(
             f"{leader_name} has invited you to join the team {team_name} ({team_code}) for InnoTech26.\n\n"
             f"Sign in to accept or decline the invitation: {settings.portal_url}/dashboard\n\n"
-            "You can be part of only one team. If you were not expecting this email, you can ignore it."
+            "You can be part of only one team. If you were not expecting this email, you can ignore it.\n\n"
+            f"Questions? Write to {settings.contact_email}."
         ),
     )
 
@@ -72,6 +74,7 @@ def team_submitted(to: str, team_name: str, team_code: str, settings: Settings |
         text=(
             f"Your team {team_name} ({team_code}) has been submitted for InnoTech26. "
             "Members and category are now locked.\n\n"
-            f"You can view your team at {settings.portal_url}/team"
+            f"You can view your team at {settings.portal_url}/team\n\n"
+            f"Questions? Write to {settings.contact_email}."
         ),
     )

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Globe, MapPin, Navigation } from "lucide-react";
+import { Globe, Mail, MapPin, Navigation } from "lucide-react";
 import { event, navLinks } from "@/lib/content";
 
 /** `linkBase` is "/" on pages other than the home page, so section links point back to it. */
@@ -28,6 +28,15 @@ export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
             <li className="flex gap-3">
               <Globe size={18} className="shrink-0 text-brand-400" aria-hidden="true" />
               {event.website}
+            </li>
+            <li className="flex gap-3">
+              <Mail size={18} className="mt-0.5 shrink-0 text-brand-400" aria-hidden="true" />
+              <span>
+                Questions or requests:{" "}
+                <a href={`mailto:${event.email}`} className="font-semibold text-white underline-offset-2 hover:text-brand-400 hover:underline">
+                  {event.email}
+                </a>
+              </span>
             </li>
           </ul>
         </div>

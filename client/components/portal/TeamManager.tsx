@@ -13,6 +13,7 @@ import { TEAM_MAX_SIZE, openSlots, submissionChecks, yearLabel } from "@/lib/rul
 import type { RegistrationState, Team } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button, Field, Input, Notice, Pill, buttonStyles } from "@/components/ui/form";
+import { MailLink } from "@/components/ui/MailLink";
 import { Panel } from "./PageHeading";
 import { usePortal } from "./PortalProvider";
 import { TeamForm } from "./TeamForm";
@@ -27,7 +28,7 @@ export function TeamStatusNotice({ team }: { team: Team }) {
   if (team.status === "withdrawn" || team.status === "disqualified") {
     return (
       <Notice tone="error" title={team.status === "withdrawn" ? "Team withdrawn" : "Team disqualified"}>
-        This team is no longer considered for InnoTech26. Contact the organising team if you have questions.
+        This team is no longer considered for InnoTech26. If you have questions, write to <MailLink />.
       </Notice>
     );
   }

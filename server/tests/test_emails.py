@@ -22,8 +22,10 @@ def test_ses_request_shape(monkeypatch, settings):
     sent = fake.sent[0]
     assert sent["Destination"] == {"ToAddresses": ["b@kiet.edu"]}
     assert sent["FromEmailAddress"] == settings.email_sender
+    assert sent["ReplyToAddresses"] == ["innotech@kiet.edu"]
     body = sent["Content"]["Simple"]["Body"]
     assert "Code <Crafters>" in body["Text"]["Data"]
+    assert "Write to innotech@kiet.edu" in body["Text"]["Data"]
     # Student-typed text is escaped in the HTML part.
     assert "Code &lt;Crafters&gt;" in body["Html"]["Data"]
 

@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Invitation emails: "ses" sends through Amazon SES, "log" only writes them to the log.
     email_backend: Literal["ses", "log"] = "log"
     email_sender: str = "InnoTech26 <no-reply@innotech.kiet.edu>"
+    # Where students write with questions; also the Reply-To of every email.
+    contact_email: str = "innotech@kiet.edu"
     ses_region: str = ""
     portal_url: str = "https://innotech.kiet.edu"
 

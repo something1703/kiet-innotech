@@ -15,6 +15,7 @@ import { longDate } from "@/lib/format";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { useRegistrationSentence } from "@/lib/schedule-content";
 import { Button, Field, Input, Notice } from "@/components/ui/form";
+import { MailLink } from "@/components/ui/MailLink";
 
 /** Only allow returning to a page on this site, and not to the sign-in pages themselves. */
 function safeNext(next: string | null) {
@@ -180,6 +181,9 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               <Link href="/guidelines" className="font-semibold text-accent-600 hover:underline">
                 Read the guidelines
               </Link>
+            </p>
+            <p className="text-sm text-muted">
+              Trouble signing in? Write to <MailLink className="font-semibold text-accent-600 hover:underline" />
             </p>
           </div>
 

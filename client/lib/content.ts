@@ -16,6 +16,8 @@ export const event = {
   venue: "KIET Deemed to be University, Delhi-NCR, Ghaziabad",
   organiser: "Department of Information Technology & CSE (Cyber Security)",
   website: "innotech.kiet.edu",
+  /** Where students write with any question or request. */
+  email: "innotech@kiet.edu",
   address:
     "KIET Deemed to be University, Delhi-NCR, Meerut Road (NH-58), Ghaziabad, Uttar Pradesh 201206",
   mapUrl: "https://maps.google.com/?q=KIET+Group+of+Institutions+Ghaziabad",
@@ -532,5 +534,10 @@ export const faqs = [
     question: "I am a KIET student. Can I sign in with my personal Gmail?",
     answer:
       "No. KIET students must sign in with their official @kiet.edu Google account. A personal Gmail account can only register as a student of another college or a school.",
+  },
+  {
+    question: "Whom do I contact with a question or request?",
+    answer:
+      "Write to innotech@kiet.edu from the email you registered with. Mention your name and, if you have one, your team code (for example IT26-0042), so the organising team can help you quickly.",
   },
 ];

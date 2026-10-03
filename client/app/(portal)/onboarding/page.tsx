@@ -7,6 +7,7 @@ import { accountName } from "@/lib/format";
 import { longDate } from "@/lib/format";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { Notice } from "@/components/ui/form";
+import { MailLink } from "@/components/ui/MailLink";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
 import { ProfileForm } from "@/components/portal/ProfileForm";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -40,7 +41,7 @@ export default function OnboardingPage() {
       )}
       {registration === "closed" && (
         <Notice tone="warning" title="Registration has closed" className="mb-6">
-          New profiles can no longer be created. Contact the InnoTech help desk if you think this is a mistake.
+          New profiles can no longer be created. If you think this is a mistake, write to <MailLink />.
         </Notice>
       )}
 

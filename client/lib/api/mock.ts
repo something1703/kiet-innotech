@@ -206,7 +206,7 @@ function requireLedTeam(db: Db, teamId: string) {
 const lockedMessages: Record<Exclude<StoredTeam["status"], "draft">, string> = {
   submitted: "This team has been submitted and is locked.",
   withdrawn: "This team has been withdrawn. You can leave it and then join or create another team.",
-  disqualified: "This team has been disqualified. Contact the organising team if you have questions.",
+  disqualified: "This team has been disqualified. If you have questions, write to innotech@kiet.edu.",
 };
 
 function requireDraft(team: StoredTeam) {
@@ -283,7 +283,7 @@ export const mockApi: StudentApi = {
     const rollTaken =
       normalised.participantType === "kiet" &&
       db.profiles.some((p) => p.email !== email && p.participantType === "kiet" && p.rollNumber === normalised.rollNumber);
-    if (rollTaken) throw new ApiError("This roll number is already registered. Contact the help desk if it is yours.", 409);
+    if (rollTaken) throw new ApiError("This roll number is already registered. If it is yours, write to innotech@kiet.edu.", 409);
 
     const profile: Profile = existing
       ? { ...existing, ...normalised }
