@@ -5,8 +5,30 @@ import { event, navLinks } from "@/lib/content";
 /** `linkBase` is "/" on pages other than the home page, so section links point back to it. */
 export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
   return (
-    <footer id="contact" className="relative overflow-hidden bg-navy-950 text-slate-300">
+    <footer className="relative overflow-hidden bg-navy-950 text-slate-300">
       <div className="bg-grid absolute inset-0" aria-hidden="true" />
+
+      <div className="relative mx-auto max-w-7xl px-4 pt-14 sm:px-6 lg:px-8">
+        <div id="contact" className="flex scroll-mt-24 flex-col gap-5 rounded-3xl bg-white/[0.06] p-6 ring-1 ring-white/15 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div className="flex items-start gap-4">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent-500 text-white shadow-lg shadow-accent-500/30">
+              <Mail size={22} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="font-display text-xl font-bold text-white sm:text-2xl">Questions or requests?</h2>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-300">
+                Write to the organising team. Use the email you registered with and mention your team code, so we can help you quickly.
+              </p>
+            </div>
+          </div>
+          <a
+            href={`mailto:${event.email}`}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent-500 px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-accent-500/30 transition hover:bg-accent-600 [overflow-wrap:anywhere] sm:text-lg"
+          >
+            {event.email}
+          </a>
+        </div>
+      </div>
 
       <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1.4fr] lg:px-8">
         <div>
@@ -28,15 +50,6 @@ export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
             <li className="flex gap-3">
               <Globe size={18} className="shrink-0 text-brand-400" aria-hidden="true" />
               {event.website}
-            </li>
-            <li className="flex gap-3">
-              <Mail size={18} className="mt-0.5 shrink-0 text-brand-400" aria-hidden="true" />
-              <span>
-                Questions or requests:{" "}
-                <a href={`mailto:${event.email}`} className="font-semibold text-white underline-offset-2 hover:text-brand-400 hover:underline">
-                  {event.email}
-                </a>
-              </span>
             </li>
           </ul>
         </div>

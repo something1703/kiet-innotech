@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { LayoutDashboard, Menu, X } from "lucide-react";
 import { useSession } from "@/lib/auth/session";
 import { navLinks } from "@/lib/content";
@@ -56,6 +56,18 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
   }, [menuOpen]);
 
   const closeMenu = () => setMenuOpen(false);
+
+  // The open menu locks page scrolling, which throws off the browser's own jump to a section and lands it too far down.
+  // So on this page the menu closes first and the scroll happens once it has gone.
+  const goToSection = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
+    closeMenu();
+    if (linkBase) return; // Another page: the link loads the home page at that section.
+    event.preventDefault();
+    window.setTimeout(() => {
+      document.querySelector(hash)?.scrollIntoView({ block: "start" });
+      history.replaceState(null, "", hash);
+    }, 350);
+  };
 
   return (
     <header
@@ -165,7 +177,7 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
               <li key={link.href}>
                 <a
                   href={`${linkBase}${link.href}`}
-                  onClick={closeMenu}
+                  onClick={(event) => goToSection(event, link.href)}
                   className="block rounded-xl px-4 py-3 text-base font-semibold text-navy-800 transition hover:bg-surface hover:text-accent-500"
                 >
                   {link.label}
