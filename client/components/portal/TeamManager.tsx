@@ -569,7 +569,6 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
           </li>
           <li>The team name, category, domain, project title and abstract can no longer be changed.</li>
           <li>If a member withdraws later, the team is not considered further.</li>
-          <li>Only the organisers can change a submitted team, and only for a good reason.</li>
         </ul>
         <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Members being locked</p>
