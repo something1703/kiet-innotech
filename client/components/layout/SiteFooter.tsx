@@ -46,7 +46,11 @@ export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
           <ul className="mt-5 grid grid-cols-2 gap-3 text-sm">
             {navLinks.map((link) => (
               <li key={link.href}>
-                <a href={`${linkBase}${link.href}`} className="transition-colors hover:text-brand-400">
+                {/* The footer is the Contact section, so its own link opens an email instead of scrolling nowhere. */}
+                <a
+                  href={link.href === "#contact" ? `mailto:${event.email}` : `${linkBase}${link.href}`}
+                  className="transition-colors hover:text-brand-400"
+                >
                   {link.label}
                 </a>
               </li>
