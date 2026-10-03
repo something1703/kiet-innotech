@@ -223,7 +223,7 @@ function ScoreDialog({ panel, team, onClose, onSaved }: { panel: JudgePanel; tea
       <div className="space-y-5">
         <section className="space-y-2 rounded-xl bg-surface px-4 py-3 text-sm">
           <p className="font-semibold text-navy-900">{team.projectTitle}</p>
-          <p className="whitespace-pre-line text-muted">{team.abstract}</p>
+          <p className="whitespace-pre-line text-muted [overflow-wrap:anywhere]">{team.abstract}</p>
           <p className="text-xs text-muted">
             {team.domain} · {team.members.map((m) => `${m.fullName}${m.role === "leader" ? " (leader)" : ""}, ${yearLabel(m.year, team.participantType)}`).join(" · ")}
           </p>

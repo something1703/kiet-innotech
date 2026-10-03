@@ -45,9 +45,9 @@ export default function DashboardPage() {
       )}
 
       <Panel className="mb-6">
-        <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
+        <ol className="grid grid-cols-[minmax(0,1fr)] gap-6 sm:grid-cols-[repeat(2,minmax(0,1fr))] lg:grid-cols-[repeat(4,minmax(0,1fr))] lg:gap-0 lg:divide-x lg:divide-line">
           {steps.map((step, index) => (
-            <li key={step.title} className="flex gap-4 lg:px-6 lg:first:pl-0 lg:last:pr-0">
+            <li key={step.title} className="flex min-w-0 gap-4 lg:px-6 lg:first:pl-0 lg:last:pr-0">
               <span
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                   step.done ? "bg-emerald-500 text-white" : "bg-surface text-muted ring-1 ring-line"
@@ -68,7 +68,7 @@ export default function DashboardPage() {
         </ol>
       </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
         <div className="min-w-0 space-y-6">
           {!team && invitations.length > 0 && <Invitations invitations={invitations} />}
           {team ? <TeamSummary team={team} isLeader={team.leaderId === profile.userId} /> : <CreateOrJoin hasInvitations={invitations.length > 0} />}
@@ -169,9 +169,9 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
     <Panel title="Your team">
       <dl className="divide-y divide-line">
         {rows.map(([label, value]) => (
-          <div key={label} className="grid gap-1 py-3 first:pt-0 sm:grid-cols-[8rem_1fr] sm:gap-4">
+          <div key={label} className="grid gap-1 py-3 first:pt-0 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4">
             <dt className="text-sm text-muted">{label}</dt>
-            <dd className="break-words font-semibold text-ink">{value}</dd>
+            <dd className="font-semibold text-ink [overflow-wrap:anywhere]">{value}</dd>
           </div>
         ))}
       </dl>

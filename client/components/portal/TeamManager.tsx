@@ -88,7 +88,7 @@ export function TeamManager({ team }: { team: Team }) {
   return (
     <>
     <OtherTeamInvite team={team} />
-    <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
       <div className="min-w-0 space-y-6">
         <Panel
           title="Members"
@@ -128,14 +128,14 @@ export function TeamManager({ team }: { team: Team }) {
                   ["Domain", team.domain],
                   ["Project title", team.projectTitle],
                 ].map(([label, value]) => (
-                  <div key={label} className="grid gap-1 py-3.5 first:pt-0 sm:grid-cols-[9rem_1fr] sm:gap-4">
+                  <div key={label} className="grid gap-1 py-3.5 first:pt-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                     <dt className="text-sm text-muted">{label}</dt>
-                    <dd className="break-words font-semibold text-ink">{value}</dd>
+                    <dd className="font-semibold text-ink [overflow-wrap:anywhere]">{value}</dd>
                   </div>
                 ))}
-                <div className="grid gap-1 py-3.5 sm:grid-cols-[9rem_1fr] sm:gap-4">
+                <div className="grid gap-1 py-3.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
                   <dt className="text-sm text-muted">Abstract</dt>
-                  <dd className="whitespace-pre-line break-words leading-relaxed text-navy-800">{team.abstract}</dd>
+                  <dd className="whitespace-pre-line leading-relaxed text-navy-800 [overflow-wrap:anywhere]">{team.abstract}</dd>
                 </div>
               </dl>
               {canEdit && (

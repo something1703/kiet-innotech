@@ -103,9 +103,9 @@ function ProfileDetails({ profile }: { profile: Profile }) {
   return (
     <dl className="divide-y divide-line">
       {rows.map(([label, value]) => (
-        <div key={label} className="grid gap-1 py-3.5 first:pt-0 last:pb-0 sm:grid-cols-[12rem_1fr] sm:gap-4">
+        <div key={label} className="grid gap-1 py-3.5 first:pt-0 last:pb-0 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4">
           <dt className="text-sm text-muted">{label}</dt>
-          <dd className="break-words font-semibold text-ink">{value}</dd>
+          <dd className="font-semibold text-ink [overflow-wrap:anywhere]">{value}</dd>
         </div>
       ))}
     </dl>

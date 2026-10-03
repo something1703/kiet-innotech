@@ -298,7 +298,7 @@ function TeamView({ id }: { id: string }) {
           <SectionTitle id="team-project" title="Project" />
           <div className="border-t border-line pt-3">
             <h3 className="font-display text-lg font-semibold text-navy-900">{t.projectTitle || "Untitled project"}</h3>
-            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-navy-800">{t.abstract || "No abstract yet."}</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-navy-800 [overflow-wrap:anywhere]">{t.abstract || "No abstract yet."}</p>
           </div>
         </section>
       </div>
