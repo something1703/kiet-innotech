@@ -229,7 +229,8 @@ export function profileErrors(input: ProfileInput, email: string): Partial<Recor
     if (!input.department || !departments.includes(input.department)) errors.department = "Choose your department.";
     if (!kietCourses.includes(input.course)) errors.course = "Choose your course.";
     if (!collegeYears.includes(input.year)) errors.year = "Choose your year of study.";
-    if (!/^\d{10,15}$/.test(input.rollNumber.trim())) errors.rollNumber = "Enter your university roll number (digits only).";
+    // Any format (MCA and MBA numbers differ from B.Tech ones); still required.
+    if (!input.rollNumber.trim()) errors.rollNumber = "Enter your university roll number.";
   } else {
     const label = input.participantType === "school" ? "school" : "college";
     if (input.institution.trim().length < 3) errors.institution = `Enter the full name of your ${label}.`;

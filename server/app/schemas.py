@@ -60,8 +60,10 @@ class ProfileInput(Input):
                 raise ValueError("Choose your course.")
             if self.year not in rules.COLLEGE_YEARS:
                 raise ValueError("Choose your year of study.")
-            if not self.roll_number.isdigit() or not 10 <= len(self.roll_number) <= 15:
-                raise ValueError("Enter your university roll number (digits only).")
+            # Any format (MCA and MBA numbers differ from B.Tech ones); still required and unique.
+            self.roll_number = rules.normalise_roll_number(self.roll_number)
+            if not self.roll_number:
+                raise ValueError("Enter your university roll number.")
             self.institution, self.city = rules.KIET_INSTITUTION, rules.KIET_CITY
             return self
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminStudent, AdminUser } from "@/lib/admin-types";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { collegeCourses, collegeYears, isKietEmail, kietCourses, schoolClasses, yearLabel } from "@/lib/rules";
 import type { ParticipantType } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -53,7 +53,7 @@ export function AddStudentDialog({ admin, onClose, onCreated }: { admin: AdminUs
       type !== "kiet" && city.trim().length < 2 && "the city",
       type !== "school" && !course && "the course",
       !years.includes(year) && (type === "school" ? "the class" : "the year"),
-      type === "kiet" && !/^\d{10,15}$/.test(rollNumber.trim()) && "the university roll number (digits)",
+      type === "kiet" && !rollNumber.trim() && "the university roll number",
       type === "college" && rollNumber.trim().length < 3 && "the enrolment or roll number",
     ].filter(Boolean);
     if (scopeProblem) return setError(scopeProblem);
@@ -114,7 +114,7 @@ export function AddStudentDialog({ admin, onClose, onCreated }: { admin: AdminUs
             <Select id="new-department" value={department} onChange={(e) => setDepartment(e.target.value)} disabled={admin.role === "admin"}>
               <option value="">Choose a department</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>

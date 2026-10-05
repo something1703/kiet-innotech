@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { GraduationCap, School, University } from "lucide-react";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { clearDraft, hasDraft, readDraft, writeDraft } from "@/lib/drafts";
 import { accountName } from "@/lib/format";
 import {
@@ -178,7 +178,7 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
                 <option value="">Choose department</option>
                 {departments.map((d) => (
                   <option key={d} value={d}>
-                    {d}
+                    {departmentLabel(d)}
                   </option>
                 ))}
               </Select>
@@ -194,8 +194,8 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
               </Select>
             </Field>
             <YearField values={values} error={errors.year} locked={lockInstitution} onChange={(year) => set("year", year)} />
-            <Field id="rollNumber" label="University roll number" error={errors.rollNumber}>
-              <Input id="rollNumber" inputMode="numeric" value={values.rollNumber} invalid={!!errors.rollNumber} maxLength={profileMaxLength.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} placeholder="e.g. 2300290100012" />
+            <Field id="rollNumber" label="University roll number" error={errors.rollNumber} hint="As on your ID card.">
+              <Input id="rollNumber" value={values.rollNumber} invalid={!!errors.rollNumber} maxLength={profileMaxLength.rollNumber} onChange={(e) => set("rollNumber", e.target.value)} placeholder="e.g. 2300290100012" />
             </Field>
           </>
         ) : (

@@ -48,7 +48,7 @@ def test_profile_validation_messages(as_user):
         (kiet_profile(phone="12345"), "10-digit Indian mobile"),
         (kiet_profile(department="XYZ"), "Choose your department"),
         (kiet_profile(year=9), "year of study"),
-        (kiet_profile(roll="ABC"), "roll number"),
+        (kiet_profile(roll=" "), "roll number"),
         ({**kiet_profile(), "is_admin": True}, "is admin"),
     ]
     for body, message in cases:
@@ -69,6 +69,31 @@ def test_duplicate_kiet_roll_number_rejected(as_user):
     response = as_user("b@kiet.edu").put("/me/profile", kiet_profile(roll="2300290100012"))
     assert response.status_code == 409
     assert "roll number is already registered" in response.json()["detail"]
+
+
+def test_kiet_roll_number_any_format(as_user):
+    # MCA and MBA roll numbers differ from B.Tech ones, so any format is accepted; stored tidied (single spaces, upper case).
+    cases = [
+        ("mba@kiet.edu", {"department": "KSOM", "course": "MBA"}, "202510116100068", "202510116100068"),
+        ("mca@kiet.edu", {"department": "MCA", "course": "MCA"}, "202510115100018", "202510115100018"),
+        ("x@kiet.edu", {"department": "KSOM", "course": "MBA"}, "  kiet/mba/24 - 017 ", "KIET/MBA/24 - 017"),
+        ("y@kiet.edu", {"department": "CSE", "course": "B.Tech"}, "cse-001", "CSE-001"),
+        ("z@kiet.edu", {"department": "IT", "course": "B.Tech"}, "12345", "12345"),
+    ]
+    for email, fields, typed, stored in cases:
+        response = as_user(email).put("/me/profile", kiet_profile(roll=typed, **fields))
+        assert response.status_code == 200, response.json()
+        assert response.json()["roll_number"] == stored
+
+
+def test_kiet_roll_number_still_required_and_unique(as_user):
+    response = as_user("a@kiet.edu").put("/me/profile", kiet_profile(department="KSOM", course="MBA", roll="   "))
+    assert response.status_code == 422
+    assert "roll number" in response.json()["detail"]
+    assert as_user("b@kiet.edu").put("/me/profile", kiet_profile(department="MCA", course="MCA", roll="mca-001")).status_code == 200
+    # The same number typed differently is still a duplicate.
+    response = as_user("c@kiet.edu").put("/me/profile", kiet_profile(department="MCA", course="MCA", roll=" MCA-001 "))
+    assert response.status_code == 409
 
 
 def test_locked_profile_fields_in_team(student, team_of):

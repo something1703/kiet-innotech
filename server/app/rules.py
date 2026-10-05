@@ -29,6 +29,11 @@ DEPARTMENTS = [
     "EN", "EC", "ELCE", "ME", "VLSI", "AM", "MCA", "KSOM", "KSOP",
 ]  # fmt: skip
 
+def normalise_roll_number(value: str) -> str:
+    """Single spaces and upper case, so the same roll number typed twice is still caught as a duplicate."""
+    return " ".join(value.split()).upper()
+
+
 KIET_COURSES = ["B.Tech", "M.Tech", "MCA", "MBA", "B.Pharm", "M.Pharm", "Diploma", "Other"]
 COLLEGE_COURSES = ["B.Tech / B.E.", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "BBA", "MBA", "B.Pharm", "Diploma", "Other"]
 COLLEGE_YEARS = [1, 2, 3, 4]

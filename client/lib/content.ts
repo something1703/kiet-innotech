@@ -398,6 +398,10 @@ export const departments = [
   "KSOP",
 ];
 
+/** What a department is called in dropdowns. The stored value stays the code, e.g. KSOM. */
+const departmentLabels: Record<string, string> = { KSOM: "MBA (KSOM)" };
+export const departmentLabel = (department: string) => departmentLabels[department] ?? department;
+
 /** Cash totals per level, from the prize tables above; the department pool counts every department. */
 export const prizePools = {
   institute: institutePrizes.reduce((sum, p) => sum + p.awards * (p.first + p.second), 0),
