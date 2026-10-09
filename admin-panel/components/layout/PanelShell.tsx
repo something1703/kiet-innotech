@@ -19,6 +19,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { clubDepartment } from "@/lib/content";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { API_MODE } from "@/lib/auth/session";
@@ -65,6 +66,8 @@ const nav: { title: string; items: NavItem[] }[] = [
 ];
 
 function visible(item: NavItem, admin: AdminUser) {
+  // COE KIET teams go straight to the Grand Finale, so their admin has no finalists to nominate.
+  if (item.href === "/finalists" && admin.role === "admin" && admin.department === clubDepartment) return false;
   return item.roles.includes(admin.role) || (item.href === "/judge" && admin.judge === true);
 }
 

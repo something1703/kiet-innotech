@@ -5,6 +5,7 @@ import { Lock, LockOpen, ScrollText } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Judging, JudgingRound } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
+import { clubDepartment } from "@/lib/content";
 import { formatDateTime, roundLabels } from "@/lib/format";
 import { isTypeAdmin, scopeName } from "@/lib/scope";
 import { useQuery } from "@/lib/use-query";
@@ -42,7 +43,9 @@ const roundRules: Record<JudgingRound, string[]> = {
 export function JudgingView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
-  const rounds: JudgingRound[] = admin.role === "admin" ? ["department"] : isTypeAdmin(admin) ? ["final"] : ["department", "final"];
+  // COE KIET teams skip the department round, so their admin sees the Grand Finale only.
+  const coeAdmin = admin.role === "admin" && admin.department === clubDepartment;
+  const rounds: JudgingRound[] = coeAdmin ? ["final"] : admin.role === "admin" ? ["department"] : isTypeAdmin(admin) ? ["final"] : ["department", "final"];
   const { params, update } = useUrlParams();
   const round = pickParam(params, "round", rounds) ?? rounds[0];
   const tabs: { key: Tab; label: string }[] = [

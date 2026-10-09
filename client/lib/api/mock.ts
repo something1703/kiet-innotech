@@ -10,6 +10,7 @@ import {
   STARTUP_COURSE,
   TEAM_MAX_SIZE,
   categoryEligibility,
+  directFinaleKind,
   JOIN_CODE_ALPHABET,
   inviteError,
   lengthError,
@@ -19,6 +20,7 @@ import {
   profileErrors,
   registrationState,
   registrationWindow,
+  routeFor,
   sameInstitution,
   submissionChecks,
   teamSizeLimits,
@@ -116,6 +118,8 @@ function seed(): Db {
     result: "pending",
     createdAt: seededAt,
     submittedAt: null,
+    approvalRequired: false,
+    approvedAt: null,
   };
 
   return { version: 1, seq: 1, profiles, teams: [team], invitations: [] };
@@ -332,13 +336,15 @@ export const mockApi: StudentApi = {
       participantType: leader.participantType,
       institution: leader.institution,
       department: leader.department,
-      route: leader.participantType === "kiet" ? "department" : "finale",
+      route: routeFor(leader.participantType, leader.department),
       leaderId: leader.userId,
       memberships: [{ userId: leader.userId, role: "leader", joinedAt: now() }],
       status: "draft",
       result: "pending",
       createdAt: now(),
       submittedAt: null,
+      approvalRequired: directFinaleKind(leader.participantType, leader.department) !== null,
+      approvedAt: null,
     };
     db.teams.push(team);
     declinePendingInvitations(db, leader.email);

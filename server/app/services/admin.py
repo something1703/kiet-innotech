@@ -220,6 +220,8 @@ def summaries(db: Session, teams: list[Team]) -> list[TeamSummaryOut]:
             member_count=counts.get(t.id, 0),
             project_title=t.project_title,
             submitted_at=t.submitted_at,
+            approval_required=t.approval_required,
+            approved_at=t.approved_at,
             leader_year=next((year for role, year in years[t.id] if role == "leader"), None),
             member_years=[year for _, year in years[t.id]],
         )
@@ -286,6 +288,8 @@ def admin_teams(db: Session, teams: list[Team]) -> list[AdminTeamOut]:
             result=t.result,
             created_at=t.created_at,
             submitted_at=t.submitted_at,
+            approval_required=t.approval_required,
+            approved_at=t.approved_at,
         )
         for t in teams
     ]
@@ -305,6 +309,8 @@ class TeamFilters(Paging):
     status: Literal["draft", "submitted", "withdrawn", "disqualified"] | None = None
     type: rules.ParticipantType | None = None
     route: Literal["department", "finale"] | None = None
+    # Startup and COE KIET entries: waiting for an admin to accept them, or already accepted.
+    approval: Literal["pending", "approved"] | None = None
     # Teams with at least one member in this year (college) or class (school).
     year: int | None = Field(default=None, ge=1, le=12)
     # Teams whose leader is in this year or class.
@@ -327,6 +333,10 @@ def _team_query(admin: Admin, f: TeamFilters):
         conditions.append(Team.participant_type == f.type)
     if f.route:
         conditions.append(Team.route == f.route)
+    if f.approval == "pending":
+        conditions.append(and_(Team.approval_required.is_(True), Team.approved_at.is_(None)))
+    elif f.approval == "approved":
+        conditions.append(and_(Team.approval_required.is_(True), Team.approved_at.is_not(None)))
     if f.year:
         member, member_profile = aliased(TeamMember), aliased(Profile)
         conditions.append(
@@ -529,7 +539,8 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
         raise ApiError(f"{taken[0]} is already in team IT26-{taken[1]:04d}.", 409)
     if error := rules.category_error(data.category, leader.participant_type, [found[e][1].year for e in emails]):
         raise ApiError(error, 422)
-    route = "department" if leader.participant_type == "kiet" else "finale"
+    route = rules.route_for(leader.participant_type, leader.department)
+    needs_approval = rules.needs_approval(leader.participant_type, leader.department)
     if data.submit and route == "department" and _results_published(db):
         raise ApiError("Results have been published, so new KIET teams can be created as drafts only.", 409)
 
@@ -546,6 +557,10 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
         institution_key=leader.institution_key,
         department=leader.department,
         route=route,
+        approval_required=needs_approval,
+        # An entry an organiser creates is accepted by that organiser.
+        approved_at=now if needs_approval else None,
+        approved_by=admin.email if needs_approval else None,
         leader_id=leader_user.id,
         status="submitted" if data.submit else "draft",
         submitted_at=now if data.submit else None,
@@ -567,6 +582,46 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     if data.submit:
         audit.record(db, admin.email, "team.submitted", team, "Submitted by an organiser")
     _commit(db, dict([ALREADY_IN_TEAM, NAME_TAKEN, CODE_TAKEN]))
+    return admin_teams(db, [team])[0]
+
+
+# ---------- Accepting startup and COE KIET entries ----------
+
+
+def _require_approver(admin: Admin) -> None:
+    """Super admins, the startup admin and the COE KIET admin accept the entries they are responsible for."""
+    if _is_super(admin) or admin.role == "startup_admin" or (admin.role == "admin" and admin.department == rules.CLUB_DEPARTMENT):
+        return
+    raise ApiError("Only a super admin, the startups admin or the COE KIET admin can accept entries.", 403)
+
+
+def approve_team(db: Session, admin: Admin, team_id: uuid.UUID) -> AdminTeamOut:
+    """Accepts a submitted startup or COE KIET entry as a legal entry, so it qualifies for the Grand Finale."""
+    _require_approver(admin)
+    team = _visible_team(db, admin, team_id, lock=True)
+    if not team.approval_required:
+        raise ApiError("This team does not need approval.", 409)
+    if team.status != "submitted":
+        raise ApiError("Only a submitted entry can be accepted." if team.status == "draft" else f"This entry is {team.status}.", 409)
+    if team.approved_at is not None:
+        raise ApiError("This entry has already been accepted.", 409)
+    team.approved_at, team.approved_by = utcnow(), admin.email
+    audit.record(db, admin.email, "team.approved", team, "Accepted as a legal entry for the Grand Finale")
+    db.commit()
+    return admin_teams(db, [team])[0]
+
+
+def revoke_approval(db: Session, admin: Admin, team_id: uuid.UUID, reason: str) -> AdminTeamOut:
+    """Takes the acceptance back, so the entry no longer qualifies. Not possible once judging has begun for it."""
+    _require_approver(admin)
+    team = _visible_team(db, admin, team_id, lock=True)
+    if not team.approval_required or team.approved_at is None:
+        raise ApiError("This entry has not been accepted.", 409)
+    if blocked := _judging_blocker(db, team):
+        raise ApiError(blocked, 409)
+    team.approved_at = team.approved_by = None
+    audit.record(db, admin.email, "team.approval_revoked", team, f"Acceptance withdrawn. Reason: {reason}")
+    db.commit()
     return admin_teams(db, [team])[0]
 
 
@@ -607,6 +662,8 @@ def reopen_team(db: Session, admin: Admin, settings: Settings, team_id: uuid.UUI
         raise ApiError(blocked, 409)
 
     team.status, team.submitted_at, team.status_reason, team.result = "draft", None, None, "pending"
+    # An entry that is edited and submitted again is accepted again.
+    team.approved_at = team.approved_by = None
     # A draft cannot be nominated; this frees the place for another team.
     db.execute(delete(FinalistNomination).where(FinalistNomination.team_id == team.id))
     audit.record(db, admin.email, "team.reopened", team, f"Sent back to draft. Reason: {reason}")
@@ -971,8 +1028,14 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
     including = Counter((t.participant_type, year) for t in active for year in {y for _, y in team_years[t.id]})
     student_years = Counter((s.participant_type, s.year) for s in students)
 
+    awaiting = db.scalar(
+        select(func.count())
+        .select_from(Team)
+        .where(team_scope(admin), Team.status == "submitted", Team.approval_required.is_(True), Team.approved_at.is_(None))
+    )
     return StatsOut(
         department=admin.department if admin.role == "admin" else None,
+        awaiting_approval=awaiting or 0,
         students=len(students),
         students_in_teams=sum(1 for s in students if s.in_team),
         pending_invitations=pending or 0,
@@ -1064,7 +1127,9 @@ def _eligible(db: Session, department: str | None = None, lock: bool = False) ->
 
 
 def _board_access(admin: Admin, department: str) -> None:
-    if department not in rules.DEPARTMENTS:
+    if department == rules.CLUB_DEPARTMENT:
+        raise ApiError("COE KIET teams go straight to the Grand Finale, so they are not nominated.", 404)
+    if department not in rules.NOMINATING_DEPARTMENTS:
         raise ApiError(f'Unknown department "{department}".', 404)
     if not _is_super(admin) and department != admin.department:
         raise ApiError(f"You can only nominate finalists for {admin.department}.", 403)
@@ -1180,7 +1245,7 @@ def finalist_summary(db: Session, admin: Admin, settings: Settings) -> FinalistS
                     for number in rules.CATEGORIES
                 ],
             )
-            for department in rules.DEPARTMENTS
+            for department in rules.NOMINATING_DEPARTMENTS
         ],
         direct_teams=summaries(db, direct),
     )

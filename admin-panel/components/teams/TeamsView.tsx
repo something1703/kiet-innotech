@@ -35,6 +35,7 @@ import { numClass, SortableTh, TableFrame, tdClass, Th } from "@/components/ui/T
 const statuses: TeamStatus[] = ["draft", "submitted", "withdrawn", "disqualified"];
 const types: ParticipantType[] = ["kiet", "college", "school", "startup"];
 const routes: TeamRoute[] = ["department", "finale"];
+const approvals = ["pending", "approved"] as const;
 const sorts: TeamSort[] = ["code", "name", "category", "department", "status", "members", "submitted_at", "leader_year"];
 const memberYears = (team: AdminTeam) =>
   [...team.members].sort((a, b) => Number(b.role === "leader") - Number(a.role === "leader") || a.year - b.year).map((m) => m.year);
@@ -46,6 +47,8 @@ export function TeamsView() {
   const outside = admin.role === "outside_admin";
   // A startup has no year of study, so a startup admin sees no year filters or columns.
   const startupOnly = admin.role === "startup_admin";
+  // Startup and COE KIET entries wait for an admin to accept them; only their admins (and super admins) see those.
+  const seesApprovals = isSuper || startupOnly || (admin.role === "admin" && admin.department === clubDepartment);
   // Super admins filter by every type; outside admins between colleges and schools; startup admins see one type only.
   const typeChoices = isSuper ? types : outside ? types.filter((t) => t === "college" || t === "school") : [];
   const router = useRouter();
@@ -63,6 +66,7 @@ export function TeamsView() {
     status: pickParam(params, "status", statuses),
     type: typeChoices.length ? pickParam(params, "type", typeChoices) : undefined,
     route: isSuper ? pickParam(params, "route", routes) : undefined,
+    approval: seesApprovals ? pickParam(params, "approval", approvals) : undefined,
     year: intParam(params, "year", 1, 12),
     leaderYear: intParam(params, "leader_year", 1, 12),
     q: params.get("q")?.trim().slice(0, MAX_SEARCH_LENGTH) || undefined,
@@ -73,7 +77,7 @@ export function TeamsView() {
   };
   const key = JSON.stringify(query);
   const { data, error, loading } = useQuery(key, () => api.listTeams(query));
-  const filtered = Boolean(query.department || query.category || query.status || query.type || query.route || query.year || query.leaderYear || query.q);
+  const filtered = Boolean(query.department || query.category || query.status || query.type || query.route || query.approval || query.year || query.leaderYear || query.q);
   const yearChoices = [
     ...(query.type === "school" ? [] : [1, 2, 3, 4].map((y) => ({ value: y, label: yearLabel(y) }))),
     ...(typeChoices.includes("school") && query.type !== "college" ? [6, 7, 8, 9, 10, 11, 12].map((y) => ({ value: y, label: yearLabel(y, "school") })) : []),
@@ -150,7 +154,7 @@ export function TeamsView() {
           value={query.q ?? ""}
           onSearch={(q) => update({ q })}
         />
-        <div className={`grid grid-cols-2 gap-3 ${isSuper ? "md:grid-cols-4 xl:grid-cols-7" : outside ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4"}`}>
+        <div className={`grid grid-cols-2 gap-3 ${isSuper ? "md:grid-cols-4 xl:grid-cols-8" : outside ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4"}`}>
           {isSuper && (
             <Field label="Department" htmlFor="filter-department">
               <Select id="filter-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
@@ -204,6 +208,15 @@ export function TeamsView() {
                 {typeChoices.map((t) => (
                   <option key={t} value={t}>{typeShortLabels[t]}</option>
                 ))}
+              </Select>
+            </Field>
+          )}
+          {seesApprovals && (
+            <Field label="Approval" htmlFor="filter-approval">
+              <Select id="filter-approval" value={query.approval ?? ""} onChange={(e) => update({ approval: e.target.value })}>
+                <option value="">Any</option>
+                <option value="pending">Awaiting approval</option>
+                <option value="approved">Accepted</option>
               </Select>
             </Field>
           )}
@@ -354,6 +367,11 @@ export function TeamsView() {
                       )}
                       <td className={tdClass}>
                         <StatusPill status={team.status} />
+                        {team.approvalRequired && (
+                          <span className="mt-0.5 block">
+                            <Pill tone={team.approvedAt ? "green" : "orange"}>{team.approvedAt ? "Accepted" : "Awaiting approval"}</Pill>
+                          </span>
+                        )}
                       </td>
                       <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(team.submittedAt)}</td>
                       <td className={tdClass}>{team.result !== "pending" ? <ResultPill result={team.result} /> : <span className="text-muted">—</span>}</td>

@@ -13,7 +13,7 @@ export function teamsCsv(teams: AdminTeam[]) {
   const header = [
     "Team code", "Team name", "Category", "Category title", "Domain", "Project title",
     "Participant type", "Institution", "Team department", "Route", "Status", "Result",
-    "Team created (IST)", "Submitted at (IST)", "Member count", "Member role", "Member name", "Member email",
+    "Team created (IST)", "Submitted at (IST)", "Approval", "Member count", "Member role", "Member name", "Member email",
     "Member phone", "Roll number", "Member department", "Technical club", "Course", "Year / class", "Joined at (IST)",
   ];
   const rows = teams.flatMap((team) => {
@@ -21,6 +21,7 @@ export function teamsCsv(teams: AdminTeam[]) {
       team.code, team.name, team.category, categoryTitle(team.category), team.domain, team.projectTitle,
       typeShortLabels[team.participantType], team.institution, team.department ?? "", routeLabels[team.route],
       statusLabels[team.status], resultLabels[team.result], formatCsvDateTime(team.createdAt), formatCsvDateTime(team.submittedAt),
+      team.approvalRequired ? (team.approvedAt ? "Accepted" : "Awaiting approval") : "Not needed",
       team.members.length,
     ];
     if (team.members.length === 0) return [[...teamCells, "", "", "", "", "", "", "", "", "", ""]];
@@ -84,6 +85,7 @@ export async function downloadTeamsExcel(teams: AdminTeam[]) {
       { header: "Route", width: 18, value: (t) => routeLabels[t.route] },
       { header: "Status", width: 12, value: (t) => statusLabels[t.status] },
       { header: "Result", width: 13, value: (t) => resultLabels[t.result] },
+      { header: "Approval", width: 18, value: (t) => (t.approvalRequired ? (t.approvedAt ? "Accepted" : "Awaiting approval") : "Not needed") },
       { header: "Members", width: 9, value: (t) => t.members.length },
       { header: "Pending invitations", width: 10, value: (t) => t.invitations.length },
       { header: "Leader", width: 22, value: (t) => leaderOf(t)?.fullName ?? "" },

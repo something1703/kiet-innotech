@@ -126,12 +126,18 @@ def test_coe_without_a_club_is_refused_and_other_departments_drop_it(as_user):
     assert saved["club"] == ""
 
 
-def test_coe_team_is_a_department_round_team_of_coe(student, team_of):
+def test_coe_team_goes_straight_to_the_grand_finale(student, team_of):
     leader = student("coe1@kiet.edu", club_profile())
     member = student("coe2@kiet.edu", club_profile(club="Coding Club"))
     team = team_of(leader, [member])
-    assert (team["department"], team["route"]) == ("COE", "department")
+    # A COE KIET team is a KIET team of the COE department, but skips the department round.
+    assert (team["department"], team["route"], team["participant_type"]) == ("COE", "finale", "kiet")
     assert {m["club"] for m in team["members"]} == {"Robotics Club", "Coding Club"}
+
+
+def test_other_kiet_teams_still_take_the_department_round(student, team_of):
+    team = team_of(student("cse1@kiet.edu"), [student("cse2@kiet.edu")])
+    assert (team["department"], team["route"]) == ("CSE", "department")
 
 
 # ---------- Admins ----------
@@ -244,6 +250,170 @@ def test_submitted_startups_join_the_grand_finale_judging_pool(as_user):
     assert root.get("/admin/judging/final").json()["unallotted"] == []
     assert founder.post(f"/teams/{team['id']}/submit").status_code == 200
     make_admin(root, "startups@gmail.com", "startup_admin")
+    # Submitted, but still waiting for an admin to accept it.
+    assert root.get("/admin/judging/final").json()["unallotted"] == []
+    assert as_user("startups@gmail.com").post(f"/admin/teams/{team['id']}/approve").status_code == 200
     for who in (root, as_user("startups@gmail.com")):
         pool = who.get("/admin/judging/final").json()["unallotted"]
         assert [t["name"] for t in pool] == ["Greenloop Labs"]
+
+
+def test_coe_is_not_a_nominating_department(as_user, student, team_of):
+    root = as_user("root@kiet.edu")
+    coe_team = team_of(student("coe1@kiet.edu", club_profile()), [student("coe2@kiet.edu", club_profile())], name="Club Crew")
+    assert as_user("coe1@kiet.edu").post(f"/teams/{coe_team['id']}/submit").status_code == 200
+    assert root.post(f"/admin/teams/{coe_team['id']}/approve").status_code == 200
+    summary = root.get("/admin/finalists/summary").json()
+    # No nomination row for COE, and its submitted team is listed with the teams that go directly to the finale.
+    assert "COE" not in {row["department"] for row in summary["matrix"]}
+    assert [t["name"] for t in summary["direct_teams"]] == ["Club Crew"]
+    assert root.get("/admin/finalists", params={"department": "COE"}).status_code == 404
+    assert root.get("/admin/finalists", params={"department": "CSE"}).status_code == 200
+    # They are in the Grand Finale judging pool.
+    assert [t["name"] for t in root.get("/admin/judging/final").json()["unallotted"]] == ["Club Crew"]
+
+
+def test_coe_admin_sees_the_final_round_and_only_coe_teams(as_user, student, team_of):
+    root = as_user("root@kiet.edu")
+    make_admin(root, "coe.admin@kiet.edu", "admin", "COE")
+    desk = as_user("coe.admin@kiet.edu")
+    coe_team = team_of(student("coe1@kiet.edu", club_profile()), [student("coe2@kiet.edu", club_profile())], name="Club Crew")
+    founder = as_user("founder@gmail.com")
+    founder.put("/me/profile", startup_profile())
+    startup_team = founder.post("/teams", team_input(name="Greenloop Labs")).json()
+    assert as_user("coe1@kiet.edu").post(f"/teams/{coe_team['id']}/submit").status_code == 200
+    assert founder.post(f"/teams/{startup_team['id']}/submit").status_code == 200
+    for team in (coe_team, startup_team):
+        assert root.post(f"/admin/teams/{team['id']}/approve").status_code == 200
+
+    # The department round does not exist for them; the finale does.
+    assert desk.get("/admin/judging/department").status_code == 403
+    assert desk.get("/admin/judging/final").status_code == 200
+    assert desk.get("/admin/finalists", params={"department": "CSE"}).status_code == 403
+    assert desk.get("/admin/finalists").status_code == 404  # COE has no nominations to make
+
+    # A finale panel holds every kind of team, but this admin sees only COE ones, in the panel and on its attendance sheet.
+    panel = root.post("/admin/panels", {"round": "final", "name": "Hall A", "location": "Block 1"})
+    assert panel.status_code == 201, panel.text
+    panel_id = panel.json()["id"]
+    allotted = root.put(f"/admin/panels/{panel_id}/teams", {"team_ids": [coe_team["id"], startup_team["id"]]})
+    assert allotted.status_code == 200, allotted.text
+    assert sorted(t["name"] for t in root.get("/admin/judging/final").json()["panels"][0]["teams"]) == ["Club Crew", "Greenloop Labs"]
+    seen = [t["name"] for p in desk.get("/admin/judging/final").json()["panels"] for t in p["teams"]]
+    assert seen == ["Club Crew"], seen
+    sheet = desk.get("/admin/judging/final/attendance", params={"panel_id": panel_id})
+    assert sheet.status_code == 200, sheet.text
+    assert [t["name"] for t in sheet.json()["teams"]] == ["Club Crew"]
+
+    # The startup admin sees the other one.
+    make_admin(root, "startups@gmail.com", "startup_admin")
+    startups = as_user("startups@gmail.com")
+    assert [t["name"] for p in startups.get("/admin/judging/final").json()["panels"] for t in p["teams"]] == ["Greenloop Labs"]
+
+
+# ---------- Accepting entries ----------
+
+
+def submitted_startup(as_user, email: str = "founder@gmail.com", name: str = "Greenloop Labs"):
+    founder = as_user(email)
+    assert founder.put("/me/profile", startup_profile(name=name)).status_code == 200
+    team = founder.post("/teams", team_input(name=name)).json()
+    assert founder.post(f"/teams/{team['id']}/submit").status_code == 200
+    return founder, team
+
+
+def test_new_entries_wait_for_approval_and_stay_out_of_the_finale_pool(as_user, student, team_of):
+    root = as_user("root@kiet.edu")
+    founder, team = submitted_startup(as_user)
+    mine = founder.get("/me/team").json()
+    assert (mine["approval_required"], mine["approved_at"]) == (True, None)
+    # Submitted, but not yet accepted: not part of the Grand Finale pool.
+    assert root.get("/admin/judging/final").json()["unallotted"] == []
+    assert root.get("/admin/stats").json()["awaiting_approval"] == 1
+    # Accepted: it is.
+    assert root.post(f"/admin/teams/{team['id']}/approve").status_code == 200
+    assert [t["name"] for t in root.get("/admin/judging/final").json()["unallotted"]] == ["Greenloop Labs"]
+    assert root.get("/admin/stats").json()["awaiting_approval"] == 0
+    approved = founder.get("/me/team").json()
+    assert approved["approved_at"] is not None
+    # A normal team never needs approval.
+    ordinary = team_of(student("a@kiet.edu"), [student("b@kiet.edu")])
+    assert ordinary["approval_required"] is False
+
+
+def test_only_the_right_admins_can_approve(as_user, student, team_of):
+    root = as_user("root@kiet.edu")
+    _, startup_team = submitted_startup(as_user)
+    coe_team = team_of(student("coe1@kiet.edu", club_profile()), [student("coe2@kiet.edu", club_profile())], name="Club Crew")
+    assert as_user("coe1@kiet.edu").post(f"/teams/{coe_team['id']}/submit").status_code == 200
+    make_admin(root, "startups@gmail.com", "startup_admin")
+    make_admin(root, "coe.admin@kiet.edu", "admin", "COE")
+    make_admin(root, "cse.admin@kiet.edu", "admin", "CSE")
+    make_admin(root, "outside@gmail.com", "outside_admin")
+    startups, coe, cse, outside = (as_user(e) for e in ("startups@gmail.com", "coe.admin@kiet.edu", "cse.admin@kiet.edu", "outside@gmail.com"))
+
+    # Each can accept only their own kind.
+    assert coe.post(f"/admin/teams/{startup_team['id']}/approve").status_code == 403
+    assert startups.post(f"/admin/teams/{coe_team['id']}/approve").status_code == 403
+    assert cse.post(f"/admin/teams/{coe_team['id']}/approve").status_code == 403
+    assert outside.post(f"/admin/teams/{startup_team['id']}/approve").status_code == 403
+    assert startups.post(f"/admin/teams/{startup_team['id']}/approve").status_code == 200
+    assert coe.post(f"/admin/teams/{coe_team['id']}/approve").status_code == 200
+    # Twice is refused, and the activity log keeps who accepted it.
+    assert startups.post(f"/admin/teams/{startup_team['id']}/approve").status_code == 409
+    log = root.get("/admin/audit", params={"limit": 50}).json()
+    assert {e["action"] for e in log if e["action"] == "team.approved"} == {"team.approved"}
+    assert root.get(f"/admin/teams/{coe_team['id']}").json()["approved_at"] is not None
+
+
+def test_approval_needs_a_submitted_entry_and_ordinary_teams_have_none(as_user, student, team_of):
+    root = as_user("root@kiet.edu")
+    founder = as_user("founder@gmail.com")
+    founder.put("/me/profile", startup_profile())
+    draft = founder.post("/teams", team_input(name="Greenloop Labs")).json()
+    assert root.post(f"/admin/teams/{draft['id']}/approve").status_code == 409
+    ordinary = team_of(student("a@kiet.edu"), [student("b@kiet.edu")])
+    assert root.post(f"/admin/teams/{ordinary['id']}/approve").status_code == 409
+
+
+def test_withdrawing_approval_and_reopening_require_acceptance_again(as_user):
+    root = as_user("root@kiet.edu")
+    founder, team = submitted_startup(as_user)
+    assert root.post(f"/admin/teams/{team['id']}/approve").status_code == 200
+    revoked = root.post(f"/admin/teams/{team['id']}/approval/revoke", {"reason": "Not a registered startup"})
+    assert revoked.status_code == 200 and revoked.json()["approved_at"] is None
+    assert root.get("/admin/judging/final").json()["unallotted"] == []
+    assert root.post(f"/admin/teams/{team['id']}/approval/revoke", {"reason": "Not a registered startup"}).status_code == 409
+    # Accepting, then sending it back to draft, clears the acceptance.
+    assert root.post(f"/admin/teams/{team['id']}/approve").status_code == 200
+    assert root.post(f"/admin/teams/{team['id']}/reopen", {"reason": "Fix the title"}).status_code == 200
+    assert root.get(f"/admin/teams/{team['id']}").json()["approved_at"] is None
+
+
+def test_approval_cannot_be_withdrawn_once_the_entry_is_in_a_panel(as_user):
+    root = as_user("root@kiet.edu")
+    _, team = submitted_startup(as_user)
+    root.post(f"/admin/teams/{team['id']}/approve")
+    panel = root.post("/admin/panels", {"round": "final", "name": "Hall A", "location": "Block 1"}).json()
+    assert root.put(f"/admin/panels/{panel['id']}/teams", {"team_ids": [team["id"]]}).status_code == 200
+    blocked = root.post(f"/admin/teams/{team['id']}/approval/revoke", {"reason": "Changed our mind"})
+    assert blocked.status_code == 409 and "panel" in blocked.json()["detail"]
+
+
+def test_an_entry_created_by_an_organiser_is_already_accepted(as_user):
+    root = as_user("root@kiet.edu")
+    as_user("founder@gmail.com").put("/me/profile", startup_profile())
+    created = root.post("/admin/teams", {**team_input(name="Greenloop Labs"), "leader_email": "founder@gmail.com", "member_emails": [], "submit": True})
+    assert created.status_code == 201, created.json()
+    assert created.json()["approval_required"] is True and created.json()["approved_at"] is not None
+    assert [t["name"] for t in root.get("/admin/judging/final").json()["unallotted"]] == ["Greenloop Labs"]
+
+
+def test_filter_for_entries_awaiting_approval(as_user):
+    root = as_user("root@kiet.edu")
+    _, one = submitted_startup(as_user, "a@gmail.com", "Alpha Labs")
+    submitted_startup(as_user, "b@gmail.com", "Beta Labs")
+    root.post(f"/admin/teams/{one['id']}/approve")
+    pending = root.get("/admin/teams", params={"approval": "pending"}).json()["items"]
+    done = root.get("/admin/teams", params={"approval": "approved"}).json()["items"]
+    assert [t["name"] for t in pending] == ["Beta Labs"] and [t["name"] for t in done] == ["Alpha Labs"]

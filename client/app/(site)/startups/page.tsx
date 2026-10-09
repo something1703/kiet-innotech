@@ -12,17 +12,30 @@ export const metadata: Metadata = {
   description: "Register your startup as a single entry for the InnoTech26 Grand Finale at KIET on 30 October 2026.",
 };
 
-const steps = [
+const steps: { title: string; text: ReactNode }[] = [
   { title: "Sign in with Google", text: "Any Google account works, including a @kiet.edu account." },
   { title: "Tell us about your startup", text: "Your startup's name, your name and your mobile number. That is all we ask." },
   { title: "Add your project and submit", text: "Choose a category, describe what you are building and submit before registration closes. The entry is then locked." },
+  {
+    title: "Get accepted",
+    text: (
+      <>
+        An admin accepts your entry as a legal one, and only then do you qualify for the Grand Finale. Contact the coordinator, or write to{" "}
+        <MailLink />, to get it accepted.
+      </>
+    ),
+  },
 ];
 
 const facts: { icon: typeof Rocket; title: string; text: string }[] = [
   { icon: UserRound, title: "One entry, no team", text: "A startup registers as a single entry, so there are no teammates to invite and no team code to share." },
-  { icon: Trophy, title: "Straight to the Grand Finale", text: "Startups skip the department round and present at the Grand Finale on 30 October 2026 at KIET." },
+  {
+    icon: Trophy,
+    title: "Judged directly at the Grand Finale",
+    text: "Startups skip the department round, so there is no evaluation to prepare for beforehand. You are judged at the Grand Finale on 30 October 2026 at KIET.",
+  },
   { icon: CalendarCheck, title: "Any of the eight categories", text: "Category 5, Start Small, Scale Big, Sustain Always, suits many startups. Gen Z to Budding Innovators is only for first-year students." },
-  { icon: Gift, title: "Free to register", text: "There is no fee. Your entry appears on the event pages under your startup's name." },
+  { icon: Gift, title: "Free to register", text: "There is no fee. You do not choose a tent: your tent (area) number is allotted to you before the Grand Finale." },
 ];
 
 export default function StartupsPage() {
@@ -52,7 +65,7 @@ export default function StartupsPage() {
 
       <div className="mx-auto max-w-5xl space-y-16 px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <Block title="How it works">
-          <ol className="grid gap-6 md:grid-cols-3">
+          <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {steps.map((step, index) => (
               <li key={step.title}>
                 <Reveal delay={index * 100} className="h-full">
@@ -88,7 +101,7 @@ export default function StartupsPage() {
         </Block>
 
         <Block title="Important dates">
-          <ImportantDates />
+          <ImportantDates exclude={["Department Level", "Finalists Declared"]} />
         </Block>
 
         <section aria-labelledby="startup-cta" className="relative overflow-hidden rounded-3xl bg-navy-900 px-6 py-10 text-center sm:px-10">

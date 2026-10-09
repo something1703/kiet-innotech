@@ -95,4 +95,6 @@ def team_out(db: Session, team: Team) -> TeamOut:
         result=team.result,
         created_at=team.created_at,
         submitted_at=team.submitted_at,
+        approval_required=team.approval_required,
+        approved_at=team.approved_at,
     )

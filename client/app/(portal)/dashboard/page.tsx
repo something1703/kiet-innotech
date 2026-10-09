@@ -7,10 +7,11 @@ import { api } from "@/lib/api";
 import { dayMonth } from "@/lib/format";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { useTimeline } from "@/lib/schedule-content";
-import { TEAM_MIN_SIZE, participantTypeLabels, yearLabel } from "@/lib/rules";
+import { TEAM_MIN_SIZE, directFinaleKind, participantTypeLabels, yearLabel } from "@/lib/rules";
 import type { Invitation, Team } from "@/lib/types";
 import { Button, Notice, buttonStyles } from "@/components/ui/form";
 import { CreateOrJoin } from "@/components/portal/CreateOrJoin";
+import { FinaleNote } from "@/components/portal/FinaleNote";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { TeamStatusNotice, categoryName, statusLabels } from "@/components/portal/TeamManager";
@@ -21,11 +22,17 @@ export default function DashboardPage() {
   const profile = me.profile!;
 
   const startup = profile.participantType === "startup";
+  const direct = directFinaleKind(profile.participantType, profile.department);
+  const submitted = team !== null && team.status !== "draft";
+  // Startups and COE KIET teams are not finished until an admin has accepted them.
+  const accepted = submitted && (!team.approvalRequired || team.approvedAt !== null);
+  const submissionDetail = (noun: string) =>
+    !submitted ? (noun === "Entry" ? "Submit your entry" : "Leader submits the team") : accepted ? `${noun} locked` : "Waiting for approval";
   const steps = startup
     ? [
         { title: "Profile", done: true, detail: "Completed" },
         { title: "Entry", done: team !== null, detail: team ? team.name : "Add your project" },
-        { title: "Submission", done: team !== null && team.status !== "draft", detail: team && team.status !== "draft" ? "Entry locked" : "Submit your entry" },
+        { title: "Submission", done: accepted, detail: submissionDetail("Entry") },
       ]
     : [
         { title: "Profile", done: true, detail: "Completed" },
@@ -35,7 +42,7 @@ export default function DashboardPage() {
           done: (team?.members.length ?? 0) >= TEAM_MIN_SIZE,
           detail: team ? `${team.members.length} joined, ${TEAM_MIN_SIZE} to 5 needed` : "2 to 5 members",
         },
-        { title: "Submission", done: team !== null && team.status !== "draft", detail: team && team.status !== "draft" ? "Team locked" : "Leader submits the team" },
+        { title: "Submission", done: accepted, detail: submissionDetail("Team") },
       ];
   const completed = steps.filter((s) => s.done).length;
 
@@ -50,6 +57,7 @@ export default function DashboardPage() {
           <TeamStatusNotice team={team} />
         </div>
       )}
+      {direct && <FinaleNote kind={direct} team={team} className="mb-6" />}
 
       <Panel className="mb-6">
         <ol
@@ -88,7 +96,9 @@ export default function DashboardPage() {
         <div className="min-w-0 space-y-6">
           <Panel title="Your route">
             <p className="text-sm leading-relaxed text-muted">
-              {profile.participantType === "kiet"
+              {direct === "coe"
+                ? "COE KIET and technical-club teams skip the department round and go straight to the Grand Finale on 30 October at KIET."
+                : profile.participantType === "kiet"
                 ? `KIET teams are first evaluated at the department round (22 to 24 October). Each department nominates its best team in every category for the Grand Finale on 30 October.`
                 : profile.participantType === "startup"
                   ? "Startups register as a single entry and go straight to the Grand Finale on 30 October at KIET."
@@ -103,7 +113,7 @@ export default function DashboardPage() {
               </p>
             )}
           </Panel>
-          <KeyDates />
+          <KeyDates direct={direct !== null} />
         </div>
       </div>
     </>
@@ -212,12 +222,15 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
   );
 }
 
-function KeyDates() {
+/** Dates that only matter to teams taking the department round. */
+const DEPARTMENT_ROUND_DATES = ["Department Level", "Finalists Declared"];
+
+function KeyDates({ direct = false }: { direct?: boolean }) {
   const timeline = useTimeline();
   return (
     <Panel title="Key dates">
       <ul className="divide-y divide-line">
-        {timeline.map((item) => (
+        {timeline.filter((item) => !(direct && DEPARTMENT_ROUND_DATES.includes(item.title))).map((item) => (
           <li key={item.title} className="flex justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0">
             <span className="text-navy-800">{item.title}</span>
             <span className="shrink-0 font-semibold text-ink">{item.dateLabel}</span>

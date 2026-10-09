@@ -52,6 +52,10 @@ export interface AdminApi {
   reopenTeam(id: string, reason: string): Promise<AdminTeam>;
   /** Super admin: deletes a team and frees its members. The history stays in the audit log. */
   dissolveTeam(id: string, reason: string): Promise<void>;
+  /** Accepts a submitted startup or COE KIET entry as a legal entry for the Grand Finale. */
+  approveTeam(id: string): Promise<AdminTeam>;
+  /** Takes that acceptance back. */
+  revokeApproval(id: string, reason: string): Promise<AdminTeam>;
 
   listStudents(query: StudentQuery): Promise<Page<AdminStudent>>;
   exportStudents(query: StudentQuery): Promise<AdminStudent[]>;

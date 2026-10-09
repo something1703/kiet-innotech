@@ -211,7 +211,8 @@ def create_team(db: Session, user: User, data: TeamInput, settings: Settings) ->
         institution=leader.institution,
         institution_key=leader.institution_key,
         department=leader.department,
-        route="department" if leader.participant_type == "kiet" else "finale",
+        route=rules.route_for(leader.participant_type, leader.department),
+        approval_required=rules.needs_approval(leader.participant_type, leader.department),
         leader_id=user.id,
     )
     db.add(team)

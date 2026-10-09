@@ -423,6 +423,8 @@ export function createSeed(): MockDb {
       institution: plan.institution.name,
       department: plan.department,
       route: plan.type === "kiet" ? "department" : "finale",
+      approvalRequired: false,
+      approvedAt: null,
       leaderId: members[0].userId,
       members,
       invitations: [],

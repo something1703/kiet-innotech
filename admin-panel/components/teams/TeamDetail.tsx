@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Ban, RotateCcw, ShieldX, Trash2, Undo2, UserMinus } from "lucide-react";
+import { ArrowLeft, Ban, BadgeCheck, RotateCcw, ShieldX, Trash2, Undo2, UserMinus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { AdminTeam } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -21,7 +21,7 @@ import { SectionTitle } from "@/components/ui/PageHeader";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { TableFrame, tdClass, Th } from "@/components/ui/Table";
 
-type Action = "withdraw" | "disqualify" | "restore" | "ban" | "reopen" | "dissolve";
+type Action = "withdraw" | "disqualify" | "restore" | "ban" | "reopen" | "dissolve" | "approve" | "unapprove";
 
 const actionCopy: Record<Action, { title: string; confirm: string; tone: "primary" | "danger"; description: (team: AdminTeam) => ReactNode }> = {
   withdraw: {
@@ -74,6 +74,28 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
       <>
         <strong className="text-navy-900">{team.name}</strong> ({team.code}) is disqualified from InnoTech26. You can also ban every member, so they can no
         longer use the portal or join another team.
+      </>
+    ),
+  },
+  approve: {
+    title: "Accept this entry",
+    confirm: "Accept entry",
+    tone: "primary",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) is accepted as a legal entry, so it qualifies for the Grand Finale and can be
+        allotted to a judging panel and a tent.
+      </>
+    ),
+  },
+  unapprove: {
+    title: "Withdraw acceptance",
+    confirm: "Withdraw acceptance",
+    tone: "danger",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) no longer qualifies for the Grand Finale until it is accepted again. This is
+        not possible once it has been allotted to a panel or scored.
       </>
     ),
   },
@@ -173,8 +195,21 @@ function TeamView({ id }: { id: string }) {
   const bannedCount = t.members.filter((m) => m.banned).length;
   const canReopen = isSuper && t.status === "submitted";
   const canDissolve = isSuper;
+  // Startup and COE KIET entries qualify for the Grand Finale only once their admin has accepted them.
+  const isApprover = isSuper || admin.role === "startup_admin" || (admin.role === "admin" && admin.department === clubDepartment);
+  const awaitingApproval = t.approvalRequired && !t.approvedAt;
+  const canApprove = isApprover && awaitingApproval && t.status === "submitted";
+  const canUnapprove = isApprover && t.approvalRequired && !!t.approvedAt && t.status === "submitted";
 
   async function run(kind: Action, reason: string) {
+    if (kind === "approve" || kind === "unapprove") {
+      const updated = kind === "approve" ? await api.approveTeam(t.id) : await api.revokeApproval(t.id, reason);
+      team.setData(updated);
+      history.reload();
+      setAction(null);
+      setDone(kind === "approve" ? `${updated.code} is accepted and now qualifies for the Grand Finale.` : `${updated.code} no longer qualifies until it is accepted again.`);
+      return;
+    }
     if (kind === "dissolve") {
       await api.dissolveTeam(t.id, reason);
       router.replace("/teams");
@@ -218,10 +253,23 @@ function TeamView({ id }: { id: string }) {
               <ResultPill result={t.result} />
               <Pill tone={t.route === "finale" ? "orange" : "cyan"}>{routeLabels[t.route]}</Pill>
               {otherDepartments.length > 0 && <Pill tone="navy">Mixed departments</Pill>}
+              {t.approvalRequired && <Pill tone={t.approvedAt ? "green" : "orange"}>{t.approvedAt ? "Accepted" : "Awaiting approval"}</Pill>}
             </div>
           </div>
-          {(canWithdraw || canDisqualify || canRestore || canBan || canReopen || canDissolve) && (
+          {(canApprove || canUnapprove || canWithdraw || canDisqualify || canRestore || canBan || canReopen || canDissolve) && (
             <div className="flex flex-wrap gap-2">
+              {canApprove && (
+                <Button onClick={() => setAction("approve")}>
+                  <BadgeCheck aria-hidden="true" className="size-4" />
+                  Accept entry
+                </Button>
+              )}
+              {canUnapprove && (
+                <Button variant="secondary" onClick={() => setAction("unapprove")}>
+                  <BadgeCheck aria-hidden="true" className="size-4" />
+                  Withdraw acceptance
+                </Button>
+              )}
               {canWithdraw && (
                 <Button variant="secondary" onClick={() => setAction("withdraw")}>
                   <UserMinus aria-hidden="true" className="size-4" />
@@ -261,6 +309,13 @@ function TeamView({ id }: { id: string }) {
             </div>
           )}
         </header>
+        {awaitingApproval && t.status !== "withdrawn" && t.status !== "disqualified" && (
+          <Notice tone="warning" title="Waiting for approval">
+            {t.status === "submitted"
+              ? "This entry does not qualify for the Grand Finale until it is accepted as a legal entry. The students have been told to contact the coordinator or write to innotech@kiet.edu."
+              : "It has not been submitted yet. It can be accepted once its leader submits it."}
+          </Notice>
+        )}
         {done && <Notice tone="success">{done} The change is recorded in the history below.</Notice>}
       </div>
 
@@ -287,6 +342,7 @@ function TeamView({ id }: { id: string }) {
               )}
             </Fact>
             <Fact label="Route">{routeLabels[t.route]}</Fact>
+            {t.approvalRequired && <Fact label="Approval">{t.approvedAt ? `Accepted on ${formatDate(t.approvedAt)}` : "Waiting for an admin to accept it"}</Fact>}
             <Fact label="Team code">
               <span className="font-mono tracking-wider">{t.joinCode}</span>
             </Fact>
@@ -399,7 +455,7 @@ function TeamView({ id }: { id: string }) {
           description={actionCopy[action].description(t)}
           confirmLabel={actionCopy[action].confirm}
           tone={actionCopy[action].tone}
-          reasonLabel="Reason"
+          reasonLabel={action === "approve" ? undefined : "Reason"}
           typeToConfirm={action === "dissolve" ? t.name : undefined}
           onConfirm={(reason) => run(action, reason)}
           onClose={() => setAction(null)}

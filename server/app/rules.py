@@ -35,10 +35,27 @@ DEPARTMENTS = [
     "EN", "EC", "ELCE", "ME", "VLSI", "AM", "MCA", "KSOM", "KSOP", "COE",
 ]  # fmt: skip
 
-# COE KIET / technical clubs: a KIET "department" of its own (own round, own admin). Its students also give the club's name.
+# COE KIET / technical clubs: a KIET "department" of its own (own admin) whose teams go straight to the Grand Finale,
+# so it has no department round and nominates nobody. Its students also give the club's name.
 CLUB_DEPARTMENT = "COE"
 CLUB_NAME_LENGTH = (2, 80)
 STARTUP_COURSE = "Startup"
+
+# The departments that run a department round and nominate finalists.
+NOMINATING_DEPARTMENTS = [d for d in DEPARTMENTS if d != CLUB_DEPARTMENT]
+
+
+def needs_approval(participant_type: str, department: str | None) -> bool:
+    """
+    Startups and COE KIET teams go straight to the Grand Finale, but only once their admin has accepted the entry
+    as a legal one. Everyone else qualifies as before.
+    """
+    return participant_type == "startup" or (participant_type == "kiet" and department == CLUB_DEPARTMENT)
+
+
+def route_for(participant_type: str, department: str | None) -> str:
+    """KIET teams take the department round, except COE KIET; everyone else goes straight to the Grand Finale."""
+    return "department" if participant_type == "kiet" and department != CLUB_DEPARTMENT else "finale"
 
 
 def normalise_club_name(value: str) -> str:

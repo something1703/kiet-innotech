@@ -373,6 +373,9 @@ export const departments = [
 /** COE KIET / technical clubs: a department of its own. Its students also give their club's name. */
 export const clubDepartment = "COE";
 
+/** The departments that run a department round and nominate finalists: COE KIET teams go straight to the Grand Finale. */
+export const nominatingDepartments = departments.filter((d) => d !== clubDepartment);
+
 /** The departments the prize pool counts. COE is not one of them (its prizes are not part of the published pool). */
 export const prizeDepartments = departments.filter((d) => d !== clubDepartment);
 

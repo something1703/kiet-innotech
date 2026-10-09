@@ -302,6 +302,9 @@ class TeamOut(BaseModel):
     result: str
     created_at: datetime
     submitted_at: datetime | None
+    # Startups and COE KIET teams: True until an admin has accepted the entry for the Grand Finale.
+    approval_required: bool = False
+    approved_at: datetime | None = None
 
 
 # ---------- Admin ----------
@@ -408,6 +411,8 @@ class TeamSummaryOut(BaseModel):
     member_count: int
     project_title: str
     submitted_at: datetime | None
+    approval_required: bool = False
+    approved_at: datetime | None = None
     leader_year: int | None = None
     # Year (or class) of every member, the leader's first.
     member_years: list[int] = []
@@ -527,6 +532,8 @@ class InstitutionStats(BaseModel):
 
 class StatsOut(BaseModel):
     department: str | None
+    # Submitted startup and COE KIET entries waiting for an admin to accept them (0 for everyone else).
+    awaiting_approval: int = 0
     students: int
     students_in_teams: int
     pending_invitations: int

@@ -69,7 +69,9 @@ export type AuditAction =
   | "student.banned"
   | "student.unbanned"
   | "team.reopened"
-  | "team.dissolved";
+  | "team.dissolved"
+  | "team.approved"
+  | "team.approval_revoked";
 
 export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging" | "student";
 
@@ -140,6 +142,8 @@ export type TeamQuery = {
   status?: TeamStatus;
   type?: ParticipantType;
   route?: TeamRoute;
+  /** Startup and COE KIET entries: waiting for an admin to accept them, or already accepted. */
+  approval?: "pending" | "approved";
   /** Teams with at least one member in this year (college) or class (school). */
   year?: number;
   /** Teams whose leader is in this year or class. */
@@ -179,6 +183,8 @@ export type StatusCounts = {
 export type Stats = {
   /** Department the numbers are scoped to; null means institute-wide (super admin). */
   department: string | null;
+  /** Submitted startup and COE KIET entries waiting for an admin to accept them. */
+  awaitingApproval: number;
   students: number;
   studentsInTeams: number;
   pendingInvitations: number;
@@ -265,6 +271,9 @@ export type TeamSummary = {
   leaderName: string;
   memberCount: number;
   projectTitle: string;
+  /** Startups and COE KIET teams: true until an admin has accepted the entry. */
+  approvalRequired: boolean;
+  approvedAt: string | null;
   submittedAt: string | null;
   leaderYear: number | null;
   /** Every member's year (or class), the leader's first. */

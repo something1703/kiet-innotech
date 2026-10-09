@@ -146,6 +146,15 @@ export function OverviewView() {
 
       {data && (
         <>
+          {data.awaitingApproval > 0 && (
+            <Notice tone="warning" title={`${data.awaitingApproval} ${data.awaitingApproval === 1 ? "entry is" : "entries are"} waiting for your approval`}>
+              Startup and COE KIET entries qualify for the Grand Finale only once they are accepted.{" "}
+              <Link href="/teams?approval=pending" className="font-semibold underline">
+                Review them
+              </Link>
+              .
+            </Notice>
+          )}
           <WindowStrip stats={data} />
           <section aria-label="Headline numbers">
             <Headline stats={data} />

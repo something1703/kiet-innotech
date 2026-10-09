@@ -317,6 +317,8 @@ export const liveApi: AdminApi = {
   restoreTeam: (teamId, reason, unbanMembers = false) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/restore`, { reason, unbanMembers }),
   reopenTeam: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/reopen`, { reason }),
   dissolveTeam: (teamId, reason) => request<void>("POST", `/admin/teams/${id(teamId)}/dissolve`, { reason }),
+  approveTeam: (teamId) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/approve`),
+  revokeApproval: (teamId, reason) => request<AdminTeam>("POST", `/admin/teams/${id(teamId)}/approval/revoke`, { reason }),
 
   listStudents: (query: StudentQuery) => request<Page<AdminStudent>>("GET", `/admin/students${queryString(query)}`),
   exportStudents: (query: StudentQuery) =>

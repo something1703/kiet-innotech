@@ -29,7 +29,7 @@ import {
 import { getMockEmail } from "../auth/session";
 import { formatIst } from "../format";
 import { categories, departments } from "../content";
-import { finalistQuota, NOMINATIONS_DEADLINE, normaliseInstitution, REGISTRATION_CLOSES, REGISTRATION_OPENS, TEAM_MIN_SIZE } from "../rules";
+import { directFinaleKind, finalistQuota, NOMINATIONS_DEADLINE, normaliseInstitution, REGISTRATION_CLOSES, REGISTRATION_OPENS, routeFor, TEAM_MIN_SIZE } from "../rules";
 import type { ParticipantType, TeamStatus } from "../types";
 import { ApiError, DEFAULT_PAGE_SIZE, type AdminApi } from "./contract";
 import { createSeed, MOCK_DB_VERSION, type MockDb, type StudentRecord } from "./seed";
@@ -225,6 +225,8 @@ function summary(team: AdminTeam): TeamSummary {
     memberCount: team.members.length,
     projectTitle: team.projectTitle,
     submittedAt: team.submittedAt,
+    approvalRequired: team.approvalRequired,
+    approvedAt: team.approvedAt,
     leaderYear: leaderYear(team),
     memberYears: [...team.members].sort((a, b) => Number(b.role === "leader") - Number(a.role === "leader") || a.year - b.year).map((m) => m.year),
   };
@@ -537,6 +539,7 @@ export const mockApi: AdminApi = {
     ]);
     const stats: Stats = {
       department: admin.role === "admin" ? admin.department : null,
+      awaitingApproval: teams.filter((t) => t.approvalRequired && !t.approvedAt && t.status === "submitted").length,
       students: students.length,
       studentsInTeams: students.filter((s) => s.teamId).length,
       pendingInvitations: teams.reduce((sum, t) => sum + t.invitations.length, 0),
@@ -670,6 +673,35 @@ export const mockApi: AdminApi = {
     team.result = "pending";
     for (const nomination of db.nominations) nomination.teamIds = nomination.teamIds.filter((teamId) => teamId !== team.id);
     log(db, { actorEmail: admin.email, action: "team.reopened", teamId: team.id, teamCode: team.code, department: team.department, detail: `Sent back to draft. Reason: ${text}` });
+    save(db);
+    return clone(team);
+  },
+
+  async approveTeam(id) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    if (admin.role === "admin" && admin.department !== "COE") throw new ApiError(403, "Only a super admin, the startups admin or the COE KIET admin can accept entries.");
+    if (admin.role === "outside_admin") throw new ApiError(403, "Only a super admin, the startups admin or the COE KIET admin can accept entries.");
+    const team = findTeam(db, admin, id);
+    if (!team.approvalRequired) throw new ApiError(409, "This team does not need approval.");
+    if (team.status !== "submitted") throw new ApiError(409, "Only a submitted entry can be accepted.");
+    if (team.approvedAt) throw new ApiError(409, "This entry has already been accepted.");
+    team.approvedAt = new Date().toISOString();
+    log(db, { actorEmail: admin.email, action: "team.approved", teamId: team.id, teamCode: team.code, department: team.department, detail: "Accepted as a legal entry for the Grand Finale" });
+    save(db);
+    return clone(team);
+  },
+
+  async revokeApproval(id, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    const team = findTeam(db, admin, id);
+    const text = requireReason(reason);
+    if (!team.approvalRequired || !team.approvedAt) throw new ApiError(409, "This entry has not been accepted.");
+    team.approvedAt = null;
+    log(db, { actorEmail: admin.email, action: "team.approval_revoked", teamId: team.id, teamCode: team.code, department: team.department, detail: `Acceptance withdrawn. Reason: ${text}` });
     save(db);
     return clone(team);
   },
@@ -969,7 +1001,10 @@ export const mockApi: AdminApi = {
       participantType: leader.participantType,
       institution: leader.institution,
       department: leader.department,
-      route: leader.participantType === "kiet" ? "department" : "finale",
+      route: routeFor(leader.participantType, leader.department),
+      // An entry an organiser creates is accepted at once.
+      approvalRequired: directFinaleKind(leader.participantType, leader.department) !== null,
+      approvedAt: directFinaleKind(leader.participantType, leader.department) !== null ? at : null,
       leaderId: leader.userId,
       members: people.map((p, index) => ({
         userId: p.userId,

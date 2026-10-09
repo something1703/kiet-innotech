@@ -47,12 +47,15 @@ export function TeamStatusNotice({ team }: { team: Team }) {
     );
   }
   if (team.status === "submitted") {
+    const startup = team.participantType === "startup";
     return (
-      <Notice tone="success" title="Team submitted">
-        Submitted on {formatDateTime(team.submittedAt!)}. Members and category are now locked.{" "}
-        {team.route === "department"
-          ? `Your team will be evaluated at the ${team.department} department round on 22 to 24 October.`
-          : "Your team goes straight to the Grand Finale on 30 October 2026."}
+      <Notice tone="success" title={startup ? "Entry submitted" : "Team submitted"}>
+        Submitted on {formatDateTime(team.submittedAt!)}. {startup ? "Your entry is now locked." : "Members and category are now locked."}
+        {/* Startups and COE KIET teams are told about the Grand Finale, and what still has to happen, in the approval notice. */}
+        {!team.approvalRequired &&
+          (team.route === "department"
+            ? ` Your team will be evaluated at the ${team.department} department round on 22 to 24 October.`
+            : " Your team goes straight to the Grand Finale on 30 October 2026.")}
       </Notice>
     );
   }
@@ -597,6 +600,7 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
             <ul className="mt-3 list-disc space-y-1.5 pl-5">
               <li>The entry name, category, domain, project title and abstract can no longer be changed.</li>
               <li>You cannot create another entry.</li>
+              <li>An admin must accept your entry as a legal one before it qualifies for the Grand Finale.</li>
             </ul>
             <p className="mt-4">Check the category and the project details before you continue.</p>
           </>
@@ -610,6 +614,7 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
               </li>
               <li>The team name, category, domain, project title and abstract can no longer be changed.</li>
               <li>If a member withdraws later, the team is not considered further.</li>
+              {team.approvalRequired && <li>An admin must accept your team as a legal entry before it qualifies for the Grand Finale.</li>}
             </ul>
             <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">Members being locked</p>
@@ -641,6 +646,7 @@ function TeamFacts({ team }: { team: Team }) {
   const rows = [
     [startup ? "Entry ID" : "Team ID", team.code],
     ["Status", statusLabels[team.status]],
+    ...(team.approvalRequired ? ([["Approval", team.approvedAt ? "Accepted by an admin" : "Waiting for an admin"]] as [string, string][]) : []),
     [team.participantType === "kiet" ? "Department" : startup ? "Startup" : "Institution", team.department ? departmentLabel(team.department) : team.institution],
     ["Route", team.route === "department" ? "Department round, then Grand Finale" : "Directly to the Grand Finale"],
     ["Created", formatDate(team.createdAt)],

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { draftKeys } from "@/lib/drafts";
 import { longDate } from "@/lib/format";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
+import { routeFor } from "@/lib/rules";
 import type { TeamInput } from "@/lib/types";
 import { Notice, buttonStyles } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
@@ -38,7 +39,7 @@ export default function NewTeamPage() {
   };
 
   const startup = profile.participantType === "startup";
-  const route = profile.participantType === "kiet" ? `the ${profile.department} department round` : "the Grand Finale directly";
+  const route = routeFor(profile.participantType, profile.department) === "department" ? `the ${profile.department} department round` : "the Grand Finale directly";
 
   return (
     <div className="mx-auto max-w-3xl">

@@ -85,9 +85,15 @@ def _require_super(admin: Admin) -> None:
 
 
 def _check_view(admin: Admin, round_: str) -> None:
-    """Super admins see both rounds; department admins their department's rooms; outside and startup admins the finale."""
+    """
+    Super admins see both rounds; department admins their department's rooms; outside admins, startup admins and the
+    COE KIET admin (whose teams skip the department round) the finale.
+    """
     _check_round(round_)
-    if admin.role == "admin" and round_ != "department":
+    if admin.role == "admin" and admin.department == rules.CLUB_DEPARTMENT:
+        if round_ != "final":
+            raise ApiError("COE KIET teams skip the department round and are judged at the Grand Finale.", 403)
+    elif admin.role == "admin" and round_ != "department":
         raise ApiError("Department admins can see the department round only.", 403)
     if admin.role in ("outside_admin", "startup_admin") and round_ != "final":
         raise ApiError("The department round is for KIET teams only.", 403)
@@ -95,7 +101,7 @@ def _check_view(admin: Admin, round_: str) -> None:
 
 def _panel_scope(admin: Admin, round_: str):
     conditions = [Panel.round == round_]
-    if admin.role == "admin":
+    if admin.role == "admin" and round_ == "department":
         conditions.append(Panel.department == admin.department)
     return conditions
 
@@ -108,7 +114,9 @@ def _eligible_condition(round_: str, department: str | None = None):
     if round_ == "department":
         condition = (Team.route == "department") & (Team.status == "submitted")
         return condition & (Team.department == department) if department else condition
-    return (Team.status == "submitted") & or_(Team.route == "finale", (Team.route == "department") & (Team.result == "finalist"))
+    # Startups and COE KIET teams qualify once an admin has accepted the entry as a legal one.
+    accepted = or_(Team.approval_required.is_(False), Team.approved_at.is_not(None))
+    return (Team.status == "submitted") & or_((Team.route == "finale") & accepted, (Team.route == "department") & (Team.result == "finalist"))
 
 
 def _lock_panel(db: Session, panel_id: uuid.UUID) -> Panel:
@@ -123,7 +131,7 @@ def _visible_panel(db: Session, admin: Admin, panel_id: uuid.UUID) -> Panel:
     if panel is None:
         raise ApiError("Room or panel not found.", 404)
     _check_view(admin, panel.round)
-    if admin.role == "admin" and panel.department != admin.department:
+    if admin.role == "admin" and panel.round == "department" and panel.department != admin.department:
         raise ApiError(f"This room judges {panel.department} teams, not {admin.department}.", 403)
     return panel
 
@@ -137,7 +145,7 @@ def _tents(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
     return dict(db.execute(select(FinalTent.team_id, FinalTent.tent).where(FinalTent.team_id.in_(team_ids))).tuples().all())
 
 
-def _panels_out(db: Session, panels: list[Panel]) -> list[PanelOut]:
+def _panels_out(db: Session, panels: list[Panel], viewer: Admin | None = None) -> list[PanelOut]:
     ids = [p.id for p in panels]
     if not ids:
         return []
@@ -168,6 +176,9 @@ def _panels_out(db: Session, panels: list[Panel]) -> list[PanelOut]:
         .tuples()
         .all()
     )
+    if viewer is not None and viewer.role in ("startup_admin", "admin"):
+        # Finale panels hold every kind of team; these admins see only their own.
+        links = [(panel_id, team) for panel_id, team in links if admin_service.can_see_team(viewer, team)]
     teams = [team for _, team in links]
     summaries = {s.id: s for s in admin_service.summaries(db, teams)}
     tents = _tents(db, [t.id for t in teams])
@@ -254,7 +265,7 @@ def overview(db: Session, admin: Admin, settings: Settings, round_: str) -> Judg
     _check_view(admin, round_)
     panels = list(db.scalars(select(Panel).where(*_panel_scope(admin, round_)).order_by(Panel.department.nullsfirst(), Panel.name_key)))
     allotted = select(PanelTeam.team_id).where(PanelTeam.round == round_)
-    eligible = _eligible_condition(round_, admin.department if admin.role == "admin" else None)
+    eligible = _eligible_condition(round_, admin.department if admin.role == "admin" and round_ == "department" else None)
     unallotted = list(
         db.scalars(select(Team).where(eligible, admin_service.team_scope(admin), Team.id.not_in(allotted)).order_by(Team.number))
     )
@@ -266,7 +277,7 @@ def overview(db: Session, admin: Admin, settings: Settings, round_: str) -> Judg
     return JudgingOut(
         round=round_out(db, settings, round_),
         can_manage=admin.role == "super_admin",
-        panels=_panels_out(db, panels),
+        panels=_panels_out(db, panels, admin),
         unallotted=admin_service.summaries(db, unallotted),
         tents=tents,
     )
@@ -617,11 +628,10 @@ def attendance(db: Session, admin: Admin, round_: str, panel_id: uuid.UUID | Non
         panel = _visible_panel(db, admin, panel_id)
         if panel.round != round_:
             raise ApiError("This room belongs to the other round.", 422)
-        teams = list(
-            db.scalars(
-                select(Team).join(PanelTeam, PanelTeam.team_id == Team.id).where(PanelTeam.panel_id == panel.id).order_by(Team.number)
-            )
-        )
+        panel_teams = select(Team).join(PanelTeam, PanelTeam.team_id == Team.id).where(PanelTeam.panel_id == panel.id)
+        if admin.role in ("startup_admin", "admin"):
+            panel_teams = panel_teams.where(admin_service.team_scope(admin))
+        teams = list(db.scalars(panel_teams.order_by(Team.number)))
         jurors = [
             f"{juror.name}{' (chair)' if link.chair else ''}"
             for link, juror in db.execute(

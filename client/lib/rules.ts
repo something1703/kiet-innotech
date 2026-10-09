@@ -54,6 +54,19 @@ export function allowedParticipantTypes(email: string): ParticipantType[] {
 /** The student types (everything except a startup), in the order they are offered. */
 export const studentTypes: ParticipantType[] = ["kiet", "college", "school"];
 
+/** Startups and COE KIET teams skip the department round and are judged directly at the Grand Finale. */
+export type DirectFinaleKind = "startup" | "coe";
+
+export function directFinaleKind(type: ParticipantType, department: string | null): DirectFinaleKind | null {
+  if (type === "startup") return "startup";
+  return type === "kiet" && department === clubDepartment ? "coe" : null;
+}
+
+/** The route a new team takes (server: rules.route_for). */
+export function routeFor(type: ParticipantType, department: string | null): "department" | "finale" {
+  return type === "kiet" && department !== clubDepartment ? "department" : "finale";
+}
+
 export function yearLabel(year: number, type: ParticipantType = "kiet") {
   if (type === "startup") return "Startup";
   if (type === "school") return `Class ${year}`;

@@ -6,8 +6,8 @@ import { Send, Undo2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { FinalistSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, departmentLabel, departments } from "@/lib/content";
-import { formatDateTime, formatIst, typeShortLabels } from "@/lib/format";
+import { categories, clubDepartment, departmentLabel, nominatingDepartments } from "@/lib/content";
+import { formatDateTime, formatIst, typeShortLabels, typeTones } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { teamHref } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
@@ -127,7 +127,7 @@ function Matrix({ summary, onPick }: { summary: FinalistSummary; onPick: (depart
 
 function SuperAdminFinalists() {
   const summary = useQuery("finalist-summary", () => api.finalistSummary());
-  const [department, setDepartment] = useState(departments[0]);
+  const [department, setDepartment] = useState(nominatingDepartments[0]);
   const [boardNonce, setBoardNonce] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -247,7 +247,7 @@ function SuperAdminFinalists() {
           <SectionTitle id="board-title" title={`${department} nominations`} />
           <Field label="Department" htmlFor="board-department" className="sm:w-56">
             <Select id="board-department" value={department} onChange={(e) => switchTo(e.target.value)}>
-              {departments.map((d) => (
+              {nominatingDepartments.map((d) => (
                 <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
@@ -258,9 +258,9 @@ function SuperAdminFinalists() {
 
       {data && (
         <section aria-labelledby="direct-title">
-          <SectionTitle id="direct-title" title="Direct to the Grand Finale" meta="Submitted teams from other colleges and schools" />
+          <SectionTitle id="direct-title" title="Direct to the Grand Finale" meta="Submitted teams from other colleges and schools, startups and COE KIET" />
           {data.directTeams.length === 0 ? (
-            <EmptyState title="No submitted teams from other colleges or schools yet" />
+            <EmptyState title="No submitted teams going directly to the finale yet" />
           ) : (
             <TableFrame label="Teams going directly to the Grand Finale" minWidth="min-w-[720px]">
               <thead>
@@ -281,9 +281,14 @@ function SuperAdminFinalists() {
                     </td>
                     <td className={`${tdClass} font-semibold text-navy-900`}>{team.name}</td>
                     <td className={tdClass}>
-                      <Pill tone="cyan">{typeShortLabels[team.participantType]}</Pill>
+                      <Pill tone={typeTones[team.participantType]}>{typeShortLabels[team.participantType]}</Pill>
+                      {team.approvalRequired && (
+                        <span className="mt-0.5 block">
+                          <Pill tone={team.approvedAt ? "green" : "orange"}>{team.approvedAt ? "Accepted" : "Awaiting approval"}</Pill>
+                        </span>
+                      )}
                     </td>
-                    <td className={tdClass}>{team.institution}</td>
+                    <td className={tdClass}>{team.department === clubDepartment ? `COE KIET` : team.institution}</td>
                     <td className={`${tdClass} text-center font-display font-bold`}>{team.category}</td>
                     <td className={`${tdClass} ${numClass}`}>{team.memberCount}</td>
                   </tr>

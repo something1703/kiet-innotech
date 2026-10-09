@@ -99,6 +99,18 @@ def reopen_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: 
     return service.reopen_team(db, admin, settings, team_id, data.reason)
 
 
+@router.post("/teams/{team_id}/approve")
+def approve_team(team_id: uuid.UUID, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
+    """Super admin, startups admin or COE KIET admin: accepts a submitted startup or COE KIET entry for the Grand Finale."""
+    return service.approve_team(db, admin, team_id)
+
+
+@router.post("/teams/{team_id}/approval/revoke")
+def revoke_approval(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> AdminTeamOut:
+    """Takes the acceptance of a startup or COE KIET entry back (not once judging has begun for it)."""
+    return service.revoke_approval(db, admin, team_id, data.reason)
+
+
 @router.post("/teams/{team_id}/dissolve", status_code=status.HTTP_204_NO_CONTENT)
 def dissolve_team(team_id: uuid.UUID, data: ReasonInput, admin: CurrentAdmin, db: Db) -> Response:
     """Super admin: deletes a team and frees its members."""

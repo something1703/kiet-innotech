@@ -123,6 +123,10 @@ class Team(Base):
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow, onupdate=utcnow)
     submitted_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    # Startups and COE KIET teams count for the Grand Finale only once an admin has accepted the entry.
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    approved_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    approved_by: Mapped[str | None] = mapped_column(String(320))
 
     members: Mapped[list["TeamMember"]] = relationship(back_populates="team", cascade="all, delete-orphan", order_by="TeamMember.joined_at")
     invitations: Mapped[list["Invitation"]] = relationship(back_populates="team", cascade="all, delete-orphan")

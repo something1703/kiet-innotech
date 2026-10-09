@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { directFinaleKind } from "@/lib/rules";
 import { Notice } from "@/components/ui/form";
 import { CreateOrJoin } from "@/components/portal/CreateOrJoin";
+import { FinaleNote } from "@/components/portal/FinaleNote";
 import { PageHeading } from "@/components/portal/PageHeading";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { TeamManager, TeamStatusNotice, categoryName, statusLabels } from "@/components/portal/TeamManager";
@@ -12,6 +14,7 @@ import { TeamManager, TeamStatusNotice, categoryName, statusLabels } from "@/com
 export default function TeamPage() {
   const { me, team, invitations } = usePortal();
   const startup = me.profile?.participantType === "startup";
+  const direct = team ? directFinaleKind(team.participantType, team.department) : null;
 
   if (!team) {
     return (
@@ -48,6 +51,7 @@ export default function TeamPage() {
           <CreatedNotice />
         </Suspense>
         <TeamStatusNotice team={team} />
+        {direct && <FinaleNote kind={direct} team={team} />}
       </div>
 
       <TeamManager team={team} />
