@@ -784,7 +784,7 @@ class JudgingOut(BaseModel):
 
 class TentAssignment(Input):
     team_id: uuid.UUID
-    # e.g. "T-12"; null or empty clears the tent.
+    # e.g. "S-12"; null or empty clears the stall.
     tent: str | None = Field(default=None, max_length=12)
 
 

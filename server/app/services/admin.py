@@ -635,7 +635,7 @@ def _judging_blocker(db: Session, team: Team) -> str | None:
     if db.scalar(select(func.count()).select_from(PanelTeam).where(PanelTeam.team_id == team.id)):
         return "This team is allotted to a judging room or panel. Remove it from there on the Judging page first."
     if db.get(FinalTent, team.id) is not None:
-        return "This team has a Grand Finale tent. Clear the tent on the Judging page first."
+        return "This team has a Grand Finale stall. Clear the stall on the Judging page first."
     return None
 
 
@@ -1315,7 +1315,7 @@ def unpublish_blocker(db: Session) -> str | None:
         return "Final-round scores have been recorded, so the published results can no longer be withdrawn."
     finalist_ids = select(Team.id).where(Team.route == "department", Team.result == "finalist")
     if db.scalar(select(func.count()).select_from(FinalTent).where(FinalTent.team_id.in_(finalist_ids))):
-        return "Tents have been allotted to department finalists. Clear those tents on the Judging page first."
+        return "Stalls have been allotted to department finalists. Clear those stalls on the Judging page first."
     if db.scalar(select(func.count()).select_from(PanelTeam).where(PanelTeam.round == "final", PanelTeam.team_id.in_(finalist_ids))):
         return "Department finalists have been allotted to finale panels. Remove them from the panels on the Judging page first."
     return None

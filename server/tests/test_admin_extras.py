@@ -190,7 +190,7 @@ def test_published_results_stay_once_the_finale_is_prepared(world, settings):  #
     assert publish(root, settings).status_code == 200
     assert root.put("/admin/judging/final/tents", {"tents": [{"team_id": team["id"], "tent": "T-1"}]}).status_code == 200
     summary = root.get("/admin/finalists/summary").json()
-    assert "Tents have been allotted" in summary["unpublish_blocked"]
+    assert "Stalls have been allotted" in summary["unpublish_blocked"]
     assert root.post("/admin/results/unpublish", {"confirm": "UNPUBLISH", "reason": "Published by mistake"}).status_code == 409
 
 

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { draftKeys } from "@/lib/drafts";
 import { longDate } from "@/lib/format";
 import { useRegistrationDates, useRegistrationState } from "@/lib/registration";
-import { routeFor } from "@/lib/rules";
+import { directFinaleKind, routeFor } from "@/lib/rules";
 import type { TeamInput } from "@/lib/types";
 import { Notice, buttonStyles } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
@@ -39,18 +39,24 @@ export default function NewTeamPage() {
   };
 
   const startup = profile.participantType === "startup";
-  const route = routeFor(profile.participantType, profile.department) === "department" ? `the ${profile.department} department round` : "the Grand Finale directly";
+  // Startups and COE KIET teams are told nothing about a route until an admin has accepted them.
+  const route =
+    directFinaleKind(profile.participantType, profile.department) !== null
+      ? ""
+      : routeFor(profile.participantType, profile.department) === "department"
+        ? `the ${profile.department} department round`
+        : "the Grand Finale directly";
 
   return (
     <div className="mx-auto max-w-3xl">
       {startup ? (
         <PageHeading eyebrow="Step 2 of 3" title="Create your startup entry">
-          Add your project details. There is no team to build: {profile.institution} is a single entry, and it goes to the Grand Finale directly.
+          Add your project details. There is no team to build: {profile.institution} is a single entry.
         </PageHeading>
       ) : (
         <PageHeading eyebrow="Step 2 of 4" title="Create your team">
           You will be the team leader. After creating the team you can add 1 to 4 registered students from{" "}
-          {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing an invite link with your team code. Your team goes to {route}.
+          {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing an invite link with your team code.{route && ` Your team goes to ${route}.`}
         </PageHeading>
       )}
 

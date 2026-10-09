@@ -393,7 +393,7 @@ export type Judging = {
   canManage: boolean;
   panels: Panel[];
   unallotted: TeamSummary[];
-  /** Final round only: every Grand Finale team and its tent. */
+  /** Final round only: every Grand Finale team and its stall (the field is still called tent). */
   tents: { team: TeamSummary; tent: string | null }[] | null;
 };
 

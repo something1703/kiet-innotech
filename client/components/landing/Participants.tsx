@@ -86,7 +86,7 @@ export function Participants() {
               </span>
               <div>
                 <h3 className="font-display text-xl font-bold text-white">Building a startup?</h3>
-                <p className="mt-1 text-sm text-slate-300">Register it as a single entry, with no team to build, and go straight to the Grand Finale.</p>
+                <p className="mt-1 text-sm text-slate-300">Register it as a single entry, with no team to build.</p>
               </div>
             </div>
             <Link

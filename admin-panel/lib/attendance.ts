@@ -1,5 +1,5 @@
 /**
- * Printable attendance sheets for a judging room, a finale panel or every finale tent: one row per student,
+ * Printable attendance sheets for a judging room, a finale panel or every finale stall: one row per student,
  * grouped by team, with columns to tick presence and sign. PDF (jsPDF) or Word (.docx). The libraries load
  * only when a sheet is downloaded.
  */
@@ -78,7 +78,7 @@ export async function downloadAttendancePdf(sheet: AttendanceSheet) {
   doc.setFontSize(8.5);
   doc.text(details.join("   ·   "), 12, 27, { maxWidth: 270 });
 
-  const head = [["#", ...(showTent(sheet) ? ["Tent"] : []), "Team", "Student", "Year, course", "Department / institution", "Roll no.", "Present", "Signature"]];
+  const head = [["#", ...(showTent(sheet) ? ["Stall"] : []), "Team", "Student", "Year, course", "Department / institution", "Roll no.", "Present", "Signature"]];
   const body = rows(sheet).map((row) => {
     const teamCells = row.first
       ? [
@@ -131,7 +131,7 @@ export async function downloadAttendanceDocx(sheet: AttendanceSheet) {
       margins: { top: 60, bottom: 60, left: 80, right: 80 },
     });
 
-  const headers = ["#", ...(showTent(sheet) ? ["Tent"] : []), "Team", "Student", "Year, course", "Department / institution", "Roll no.", "Present", "Signature"];
+  const headers = ["#", ...(showTent(sheet) ? ["Stall"] : []), "Team", "Student", "Year, course", "Department / institution", "Roll no.", "Present", "Signature"];
   const widths = showTent(sheet) ? [400, 800, 2800, 2600, 1700, 2200, 1500, 900, 2300] : [400, 3000, 2800, 1800, 2400, 1600, 900, 2300];
   const tableRows = [
     new TableRow({ tableHeader: true, children: headers.map((h, i) => cell(h, { header: true, width: widths[i] })) }),

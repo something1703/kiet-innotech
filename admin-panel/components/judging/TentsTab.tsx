@@ -15,11 +15,11 @@ import { AttendanceButtons } from "./AttendanceButtons";
 
 const clean = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 
-/** Grand Finale tent numbers, one per team. */
+/** Grand Finale stall numbers, one per team. (The code still calls them tents; only the words people read say stall.) */
 export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (data: Judging) => void }) {
   const rows = judging.tents ?? [];
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(rows.map((r) => [r.team.id, r.tent ?? ""])));
-  const [prefix, setPrefix] = useState("T-");
+  const [prefix, setPrefix] = useState("S-");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
   const labels = Object.values(draft).map(clean).filter(Boolean);
   const duplicates = new Set(labels.filter((label, i) => labels.indexOf(label) !== i));
 
-  /** Numbers every team without a tent, in category order, after the highest number already used. */
+  /** Numbers every team without a stall, in category order, after the highest number already used. */
   function autoNumber() {
     const used = new Set(labels);
     let next = 1;
@@ -44,13 +44,13 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
   }
 
   async function save() {
-    if (duplicates.size) return setError(`Tent ${[...duplicates][0]} is given to more than one team.`);
+    if (duplicates.size) return setError(`Stall ${[...duplicates][0]} is given to more than one team.`);
     setPending(true);
     setError(null);
     try {
       const data = await api.setTents(changed.map((r) => ({ teamId: r.team.id, tent: clean(draft[r.team.id] ?? "") || null })));
       onSaved(data);
-      setMessage(`${plural(changed.length, "tent")} saved.`);
+      setMessage(`${plural(changed.length, "stall")} saved.`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -71,9 +71,9 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted">
           {plural(rows.length, "team")} exhibit at the Grand Finale: department finalists and submitted teams from other colleges and schools.{" "}
-          {plural(rows.filter((r) => r.tent).length, "has a tent", "have tents")}.
+          {plural(rows.filter((r) => r.tent).length, "has a stall", "have stalls")}.
         </p>
-        <AttendanceButtons round="final" label="every tent" />
+        <AttendanceButtons round="final" label="every stall" />
       </div>
 
       {judging.canManage && (
@@ -89,17 +89,17 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
           <span className="flex-1" />
           <Button onClick={save} pending={pending} disabled={changed.length === 0}>
             {!pending && <Save aria-hidden="true" className="size-4" />}
-            Save {changed.length ? plural(changed.length, "change") : "tents"}
+            Save {changed.length ? plural(changed.length, "change") : "stalls"}
           </Button>
         </div>
       )}
       {error && <Notice tone="error">{error}</Notice>}
       {message && !error && <Notice tone="success">{message}</Notice>}
 
-      <TableFrame label="Tents" minWidth="min-w-[720px]">
+      <TableFrame label="Stalls" minWidth="min-w-[720px]">
         <thead>
           <tr>
-            <Th className="w-36">Tent</Th>
+            <Th className="w-36">Stall</Th>
             <Th>Team</Th>
             <Th>Category</Th>
             <Th>From</Th>
@@ -114,7 +114,7 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
                 <td className={tdClass}>
                   {judging.canManage ? (
                     <Input
-                      aria-label={`Tent for ${team.name}`}
+                      aria-label={`Stall for ${team.name}`}
                       value={value}
                       maxLength={12}
                       onChange={(e) => setDraft((d) => ({ ...d, [team.id]: e.target.value }))}

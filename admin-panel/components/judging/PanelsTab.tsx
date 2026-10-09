@@ -238,7 +238,7 @@ function PanelCard({
           <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
-                {final && <Th>Tent</Th>}
+                {final && <Th>Stall</Th>}
                 <Th>Team</Th>
                 <Th>Category</Th>
                 <Th>Years</Th>
@@ -337,7 +337,7 @@ function PanelFormDialog({
           <Input id="panel-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={isRoom ? "Room 304" : "Panel A · Categories 1 and 2"} />
         </Field>
         <Field label="Location" htmlFor="panel-location" hint="Optional. Printed on the attendance sheet.">
-          <Input id="panel-location" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={120} placeholder={isRoom ? "CSIT block, 3rd floor" : "Main ground, tents 1 to 12"} />
+          <Input id="panel-location" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={120} placeholder={isRoom ? "CSIT block, 3rd floor" : "Main ground, stalls 1 to 12"} />
         </Field>
         {isRoom && !panel && (
           <Field label="Department" htmlFor="panel-department">

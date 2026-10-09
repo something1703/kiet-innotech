@@ -94,15 +94,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="min-w-0 space-y-6">
+          {/* Startups and COE KIET teams get no route panel; their notice tells them where they stand once an admin has accepted them. */}
+          {direct === null && (
           <Panel title="Your route">
             <p className="text-sm leading-relaxed text-muted">
-              {direct === "coe"
-                ? "COE KIET and technical-club teams skip the department round and go straight to the Grand Finale on 30 October at KIET."
-                : profile.participantType === "kiet"
+              {profile.participantType === "kiet"
                 ? `KIET teams are first evaluated at the department round (22 to 24 October). Each department nominates its best team in every category for the Grand Finale on 30 October.`
-                : profile.participantType === "startup"
-                  ? "Startups register as a single entry and go straight to the Grand Finale on 30 October at KIET."
-                  : profile.participantType === "school"
+                : profile.participantType === "school"
                   ? "School teams can enter any category and go straight to the Grand Finale on 30 October at KIET."
                   : "Teams from other colleges go straight to the Grand Finale on 30 October at KIET."}
             </p>
@@ -113,7 +111,8 @@ export default function DashboardPage() {
               </p>
             )}
           </Panel>
-          <KeyDates direct={direct !== null} />
+          )}
+          <KeyDates direct={direct !== null && team !== null && team.approvalRequired && team.approvedAt !== null} />
         </div>
       </div>
     </>

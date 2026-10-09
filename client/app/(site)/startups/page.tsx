@@ -9,7 +9,7 @@ import { Reveal } from "@/components/ui/Reveal";
 
 export const metadata: Metadata = {
   title: "Startups | InnoTech26",
-  description: "Register your startup as a single entry for the InnoTech26 Grand Finale at KIET on 30 October 2026.",
+  description: "Register your startup as a single entry for InnoTech26 at KIET.",
 };
 
 const steps: { title: string; text: ReactNode }[] = [
@@ -20,8 +20,7 @@ const steps: { title: string; text: ReactNode }[] = [
     title: "Get accepted",
     text: (
       <>
-        An admin accepts your entry as a legal one, and only then do you qualify for the Grand Finale. Contact the coordinator, or write to{" "}
-        <MailLink />, to get it accepted.
+        An admin must accept your entry as a legal one before it counts. Contact the coordinator, or write to <MailLink />, to get it accepted.
       </>
     ),
   },
@@ -31,11 +30,11 @@ const facts: { icon: typeof Rocket; title: string; text: string }[] = [
   { icon: UserRound, title: "One entry, no team", text: "A startup registers as a single entry, so there are no teammates to invite and no team code to share." },
   {
     icon: Trophy,
-    title: "Judged directly at the Grand Finale",
-    text: "Startups skip the department round, so there is no evaluation to prepare for beforehand. You are judged at the Grand Finale on 30 October 2026 at KIET.",
+    title: "Once you are accepted",
+    text: "When an admin accepts your entry, the portal tells you where you stand and what happens next, including your stall number.",
   },
   { icon: CalendarCheck, title: "Any of the eight categories", text: "Category 5, Start Small, Scale Big, Sustain Always, suits many startups. Gen Z to Budding Innovators is only for first-year students." },
-  { icon: Gift, title: "Free to register", text: "There is no fee. You do not choose a tent: your tent (area) number is allotted to you before the Grand Finale." },
+  { icon: Gift, title: "Free to register", text: "There is no fee. Your entry appears on the event pages under your startup's name." },
 ];
 
 export default function StartupsPage() {
@@ -51,8 +50,7 @@ export default function StartupsPage() {
           </p>
           <h1 className="max-w-3xl font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">Bring your startup to InnoTech26</h1>
           <p className="mt-4 max-w-2xl text-base text-slate-300 sm:text-lg">
-            Register your startup as a single entry. There is no team to build: tell us who you are, add your project and take it to the Grand Finale at
-            KIET.
+            Register your startup as a single entry. There is no team to build: tell us who you are and add your project.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <StartupCta className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 px-7 py-3.5 font-semibold text-white shadow-xl shadow-accent-500/30 transition hover:-translate-y-0.5 hover:bg-accent-600" />

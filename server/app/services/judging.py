@@ -578,7 +578,7 @@ def _tent_label(value: str | None) -> str | None:
         return None
     label = "".join(value.split()).upper()
     if not all(c.isalnum() or c in "-/" for c in label):
-        raise ApiError(f'"{value}" is not a tent number. Use letters, digits and dashes, e.g. T-12.', 422)
+        raise ApiError(f'"{value}" is not a stall number. Use letters, digits and dashes, e.g. S-12.', 422)
     return label
 
 
@@ -590,30 +590,30 @@ def set_tents(db: Session, admin: Admin, settings: Settings, data: TentsInput) -
     labels = [t for t in wanted.values() if t]
     if len(set(labels)) != len(labels):
         duplicate = next(t for t in labels if labels.count(t) > 1)
-        raise ApiError(f"Tent {duplicate} is given to more than one team.", 422)
+        raise ApiError(f"Stall {duplicate} is given to more than one team.", 422)
     eligible = set(db.scalars(select(Team.id).where(Team.id.in_(list(wanted)), _eligible_condition("final"))))
     for team_id, tent in wanted.items():
         if tent and team_id not in eligible:
-            raise ApiError("Tents are only for finalists and submitted teams from other colleges and schools.", 422)
+            raise ApiError("Stalls are only for finalists and submitted teams from other colleges and schools.", 422)
     clash = db.execute(
         select(FinalTent.tent, Team.number)
         .join(Team, Team.id == FinalTent.team_id)
         .where(FinalTent.tent.in_(labels), FinalTent.team_id.not_in(list(wanted)))
     ).first()
     if clash:
-        raise ApiError(f"Tent {clash[0]} is already allotted to IT26-{clash[1]:04d}.", 409)
+        raise ApiError(f"Stall {clash[0]} is already allotted to IT26-{clash[1]:04d}.", 409)
 
     db.execute(delete(FinalTent).where(FinalTent.team_id.in_(list(wanted))))
     db.flush()
     for team_id, tent in wanted.items():
         if tent:
             db.add(FinalTent(team_id=team_id, tent=tent, assigned_by=admin.email))
-    audit.record(db, admin.email, "judging.tents_allotted", detail=f"{len(labels)} tents allotted, {len(wanted) - len(labels)} cleared")
+    audit.record(db, admin.email, "judging.tents_allotted", detail=f"{len(labels)} stalls allotted, {len(wanted) - len(labels)} cleared")
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise ApiError("Another organiser changed the tents at the same time. Reload and try again.", 409) from exc
+        raise ApiError("Another organiser changed the stalls at the same time. Reload and try again.", 409) from exc
     return overview(db, admin, settings, "final")
 
 

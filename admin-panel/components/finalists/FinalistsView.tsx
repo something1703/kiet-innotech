@@ -327,7 +327,7 @@ function SuperAdminFinalists() {
       {publishing && data && !summary.loading && (
         <ConfirmDialog
           title="Publish department round results?"
-          description="Students see their result straight away. A super admin can withdraw the results only until the finale is being prepared (tents, finale panels or finale scoring)."
+          description="Students see their result straight away. A super admin can withdraw the results only until the finale is being prepared (stalls, finale panels or finale scoring)."
           confirmLabel="Publish results"
           typeToConfirm="PUBLISH"
           onClose={() => setPublishing(false)}
@@ -368,7 +368,7 @@ export function FinalistsView() {
       ) : admin.role === "admin" && admin.department ? (
         <Board department={admin.department} />
       ) : (
-        <Notice tone="info">Teams from other colleges and schools go straight to the Grand Finale; there are no nominations for them. Their tents are on the Judging page.</Notice>
+        <Notice tone="info">Teams from other colleges and schools go straight to the Grand Finale; there are no nominations for them. Their stalls are on the Judging page.</Notice>
       )}
     </div>
   );

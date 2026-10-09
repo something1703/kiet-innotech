@@ -6,7 +6,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { JudgingRound } from "@/lib/admin-types";
 import { Button } from "@/components/ui/Button";
 
-/** Downloads a room's (or every finale tent's) attendance sheet as a PDF or a Word document. */
+/** Downloads a room's (or every finale stall's) attendance sheet as a PDF or a Word document. */
 export function AttendanceButtons({ round, panelId, label }: { round: JudgingRound; panelId?: string; label: string }) {
   const [pending, setPending] = useState<"pdf" | "docx" | null>(null);
   const [error, setError] = useState<string | null>(null);

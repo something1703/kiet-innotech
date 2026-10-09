@@ -84,7 +84,7 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
     description: (team) => (
       <>
         <strong className="text-navy-900">{team.name}</strong> ({team.code}) is accepted as a legal entry, so it qualifies for the Grand Finale and can be
-        allotted to a judging panel and a tent.
+        allotted to a judging panel and a stall.
       </>
     ),
   },

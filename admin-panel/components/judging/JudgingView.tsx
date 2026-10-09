@@ -33,7 +33,7 @@ const roundRules: Record<JudgingRound, string[]> = {
     "Each department nominates one finalist per category (two in Categories 1 to 4 for CSE, CS, CSE(AI) and CSE(AIML)) by 24 October, 6:00 PM.",
   ],
   final: [
-    "30 October, institute level. Department finalists and teams from other colleges and schools exhibit in numbered tents.",
+    "30 October, institute level. Department finalists and teams from other colleges and schools exhibit in numbered stalls.",
     "The plan is 8 panels of 2 external judges (16 judges), covering Categories 1 to 8 and the school entries.",
     "Same rubrics and tie-breakers as the department round. Schools also compete for the Best School Project award.",
     "Prizes: ₹8,000 / ₹5,000 for project categories, ₹4,000 / ₹3,000 for posters, ₹5,000 / ₹3,000 for the best school project.",
@@ -51,7 +51,7 @@ export function JudgingView() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "rooms", label: round === "department" ? "Rooms" : "Panels" },
     ...(isSuper ? [{ key: "judges" as Tab, label: "Judges" }] : []),
-    ...(round === "final" ? [{ key: "tents" as Tab, label: "Tents" }] : []),
+    ...(round === "final" ? [{ key: "tents" as Tab, label: "Stalls" }] : []),
     ...(!isTypeAdmin(admin) ? [{ key: "rankings" as Tab, label: "Rankings" }] : []),
   ];
   const tab = pickParam(params, "tab", tabs.map((t) => t.key)) ?? "rooms";
@@ -64,7 +64,7 @@ export function JudgingView() {
         title="Judging"
         description={
           isSuper
-            ? "Appoint judges, set up rooms and finale panels, allot teams and tents, and open scoring when the round starts."
+            ? "Appoint judges, set up rooms and finale panels, allot teams and stalls, and open scoring when the round starts."
             : "Your rooms, their judges and teams, and attendance sheets. Organisers manage the allotments."
         }
         actions={

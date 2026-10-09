@@ -119,7 +119,7 @@ function PanelSection({ panel, onScore }: { panel: JudgePanel; onScore: (team: J
                 )}
                 <span className="min-w-0">
                   <span className="flex flex-wrap items-baseline gap-x-2">
-                    {team.tent && <span className="font-mono text-xs font-bold text-accent-600">Tent {team.tent}</span>}
+                    {team.tent && <span className="font-mono text-xs font-bold text-accent-600">Stall {team.tent}</span>}
                     <span className="font-semibold text-navy-900">{team.name}</span>
                     <span className="font-mono text-xs text-muted">{team.code}</span>
                   </span>

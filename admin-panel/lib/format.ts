@@ -118,7 +118,7 @@ export const auditLabels: Record<AuditAction, string> = {
   "judging.panel_deleted": "Room / panel deleted",
   "judging.teams_allotted": "Teams allotted",
   "judging.judges_assigned": "Judges assigned",
-  "judging.tents_allotted": "Tents allotted",
+  "judging.tents_allotted": "Stalls allotted",
   "judging.scored": "Team scored",
   "student.created": "Student registered",
   "student.banned": "Student banned",
