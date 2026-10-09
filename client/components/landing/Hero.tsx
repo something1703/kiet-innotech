@@ -5,6 +5,7 @@ import { event } from "@/lib/content";
 import { Countdown } from "./Countdown";
 import { HeroVideo } from "./HeroVideo";
 import { RegisterCta, RegistrationRange } from "./RegisterCta";
+import { SponsoredBy } from "./SponsoredBy";
 
 const facts = [
   { icon: CalendarDays, label: event.finaleLabel },
@@ -83,6 +84,8 @@ export function Hero() {
             <Milestone label="Grand Finale" value="30 Oct 2026" highlight />
           </div>
         </div>
+
+        <SponsoredBy className="lg:col-span-2" />
       </div>
     </section>
   );
