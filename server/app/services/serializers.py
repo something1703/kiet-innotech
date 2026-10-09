@@ -23,6 +23,7 @@ def profile_out(profile: Profile, email: str) -> ProfileOut:
         year=profile.year,
         roll_number=profile.roll_number,
         created_at=profile.created_at,
+        club=profile.club,
     )
 
 
@@ -61,6 +62,7 @@ def members_out(db: Session, team_id: uuid.UUID) -> list[MemberOut]:
             year=profile.year,
             role=member.role,
             joined_at=member.joined_at,
+            club=profile.club,
         )
         for member, profile, email in rows
     ]

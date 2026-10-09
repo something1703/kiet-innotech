@@ -169,7 +169,7 @@ def test_manage_admins(world):
 def test_stats_are_scoped(world):
     root = world["root"].get("/admin/stats").json()
     assert root["teams"]["submitted"] == 6 and root["department"] is None
-    assert {t["type"]: t["teams"] for t in root["by_type"]} == {"kiet": 4, "college": 1, "school": 1}
+    assert {t["type"]: t["teams"] for t in root["by_type"]} == {"kiet": 4, "college": 1, "school": 1, "startup": 0}
     cse = world["cse"].get("/admin/stats").json()
     assert cse["department"] == "CSE" and cse["teams"]["total"] == 3
     assert cse["by_type"] is None and cse["by_department"] is None

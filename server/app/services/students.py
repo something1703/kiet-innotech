@@ -95,6 +95,13 @@ def _member_count(db: Session, team_id: uuid.UUID) -> int:
     return db.scalar(select(func.count()).where(TeamMember.team_id == team_id)) or 0
 
 
+STARTUP_SOLO = "A startup registers as a single entry, so it has no teammates."
+
+
+def _max_size(team: Team) -> int:
+    return rules.team_size_limits(team.participant_type)[1]
+
+
 def _same_institution(team: Team, profile: Profile) -> bool:
     if team.participant_type != profile.participant_type:
         return False
@@ -167,6 +174,7 @@ def save_profile(db: Session, user: User, data: ProfileInput, settings: Settings
     profile.course = data.course
     profile.year = data.year
     profile.roll_number = data.roll_number
+    profile.club = data.club
     _commit(
         db,
         dict([("uq_profiles_kiet_roll_number", ("This roll number is already registered. If it is yours, write to innotech@kiet.edu.", 409))]),
@@ -251,8 +259,9 @@ def delete_team(db: Session, user: User, team_id: uuid.UUID, settings: Settings)
 
 def submission_problem(db: Session, team: Team) -> str | None:
     size = _member_count(db, team.id)
-    if not rules.TEAM_MIN_SIZE <= size <= rules.TEAM_MAX_SIZE:
-        return f"a team needs {rules.TEAM_MIN_SIZE} to {rules.TEAM_MAX_SIZE} members"
+    low, high = rules.team_size_limits(team.participant_type)
+    if not low <= size <= high:
+        return "a startup entry has exactly one member" if high == 1 else f"a team needs {low} to {high} members"
     if _pending_count(db, team.id) > 0:
         return "cancel or wait for pending invitations first"
     if error := rules.category_error(team.category, team.participant_type, _member_years(db, team.id)):
@@ -317,6 +326,8 @@ def invite(db: Session, user: User, team_id: uuid.UUID, email: str, settings: Se
     email = email.strip().lower()
     if email == user.email:
         raise ApiError("You are already in this team.", 409)
+    if team.participant_type == "startup":
+        raise ApiError(STARTUP_SOLO, 422)
 
     if _member_count(db, team.id) + _pending_count(db, team.id) >= rules.TEAM_MAX_SIZE:
         raise ApiError(f"A team can have at most {rules.TEAM_MAX_SIZE} members, including pending invitations.", 422)
@@ -408,7 +419,7 @@ def respond(db: Session, user: User, invitation_id: uuid.UUID, accept: bool, set
         raise ApiError("You are already part of a team.", 409)
     if team.status != "draft":
         raise ApiError("This team is no longer accepting members.", 409)
-    if _member_count(db, team.id) >= rules.TEAM_MAX_SIZE:
+    if _member_count(db, team.id) >= _max_size(team):
         raise ApiError("This team is already full.", 409)
     if not _same_institution(team, profile):
         raise ApiError("You are not from the same college or school as this team.", 422)
@@ -457,8 +468,8 @@ def join_with_code(db: Session, user: User, code: str, settings: Settings) -> Te
     )
     # Pending invitations hold places in the team, except the one this student is using now.
     taken = _member_count(db, team.id) + _pending_count(db, team.id) - (1 if own_invitation else 0)
-    if taken >= rules.TEAM_MAX_SIZE:
-        raise ApiError("This team is already full.", 409)
+    if taken >= _max_size(team):
+        raise ApiError("This startup entry cannot take members." if team.participant_type == "startup" else "This team is already full.", 409)
     if not _same_institution(team, profile):
         raise ApiError("This team is from another college or school. All members must be from the same college or school.", 422)
     if error := rules.category_error(team.category, team.participant_type, [*_member_years(db, team.id), profile.year]):

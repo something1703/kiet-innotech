@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-ParticipantType = Literal["kiet", "college", "school"]
+ParticipantType = Literal["kiet", "college", "school", "startup"]
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -21,13 +21,29 @@ KIET_CITY = "Ghaziabad"
 TEAM_MIN_SIZE = 2
 TEAM_MAX_SIZE = 5
 
+
+def team_size_limits(participant_type: str) -> tuple[int, int]:
+    """A startup registers as a single entry; every other team has 2 to 5 members."""
+    return (1, 1) if participant_type == "startup" else (TEAM_MIN_SIZE, TEAM_MAX_SIZE)
+
+
 # Departments allowed two finalist teams in Categories 1 to 4. CSE(CS) is deliberately not included.
 DOUBLE_QUOTA_DEPARTMENTS = {"CSE", "CS", "CSE(AI)", "CSE(AIML)"}
 
 DEPARTMENTS = [
     "CSE", "CS", "IT", "CSIT", "CSE(AI)", "CSE(AIML)", "CSE(DS)", "CSE(CS)",
-    "EN", "EC", "ELCE", "ME", "VLSI", "AM", "MCA", "KSOM", "KSOP",
+    "EN", "EC", "ELCE", "ME", "VLSI", "AM", "MCA", "KSOM", "KSOP", "COE",
 ]  # fmt: skip
+
+# COE KIET / technical clubs: a KIET "department" of its own (own round, own admin). Its students also give the club's name.
+CLUB_DEPARTMENT = "COE"
+CLUB_NAME_LENGTH = (2, 80)
+STARTUP_COURSE = "Startup"
+
+
+def normalise_club_name(value: str) -> str:
+    return " ".join(value.split())
+
 
 def normalise_roll_number(value: str) -> str:
     """Single spaces and upper case, so the same roll number typed twice is still caught as a duplicate."""
@@ -88,8 +104,8 @@ def is_kiet_email(email: str) -> bool:
 
 
 def allowed_participant_types(email: str) -> list[ParticipantType]:
-    """A @kiet.edu account registers as KIET; any other account as another college or a school."""
-    return ["kiet"] if is_kiet_email(email) else ["college", "school"]
+    """A @kiet.edu account registers as KIET; any other account as another college or a school. Anyone can be a startup."""
+    return ["kiet", "startup"] if is_kiet_email(email) else ["college", "school", "startup"]
 
 
 # Common short forms students type, so "ABES Engg. College" and "ABES Engineering College" compare equal.
@@ -127,6 +143,8 @@ def institution_key(participant_type: str, institution: str, city: str) -> str:
     key = normalise_institution(institution)
     if participant_type == "school":
         key = f"{key} | {normalise_institution(city)}"
+    elif participant_type == "startup":
+        key = f"startup | {key}"
     return key[:200]
 
 

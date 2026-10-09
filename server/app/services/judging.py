@@ -85,11 +85,11 @@ def _require_super(admin: Admin) -> None:
 
 
 def _check_view(admin: Admin, round_: str) -> None:
-    """Super admins see both rounds; department admins their department's rooms; outside admins the finale."""
+    """Super admins see both rounds; department admins their department's rooms; outside and startup admins the finale."""
     _check_round(round_)
     if admin.role == "admin" and round_ != "department":
         raise ApiError("Department admins can see the department round only.", 403)
-    if admin.role == "outside_admin" and round_ != "final":
+    if admin.role in ("outside_admin", "startup_admin") and round_ != "final":
         raise ApiError("The department round is for KIET teams only.", 403)
 
 
@@ -695,7 +695,7 @@ def _natural(label: str) -> tuple:
 def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> RankingsOut:
     """Average of the panel judges' totals; ties broken by innovation, then Query Addressing, then the chair."""
     _check_round(round_)
-    if admin.role == "outside_admin":
+    if admin.role in ("outside_admin", "startup_admin"):
         raise ApiError("Rankings are for super admins and department admins.", 403)
     _check_view(admin, round_)
     if admin.role == "admin":

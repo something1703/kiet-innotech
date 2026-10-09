@@ -61,7 +61,7 @@ class User(Base):
 class Profile(Base):
     __tablename__ = "profiles"
     __table_args__ = (
-        CheckConstraint("participant_type IN ('kiet', 'college', 'school')", name="participant_type"),
+        CheckConstraint("participant_type IN ('kiet', 'college', 'school', 'startup')", name="participant_type"),
         # A KIET roll number belongs to one student; duplicates mean a typo or a second account.
         Index(
             "uq_profiles_kiet_roll_number",
@@ -83,6 +83,8 @@ class Profile(Base):
     course: Mapped[str] = mapped_column(String(40))
     year: Mapped[int] = mapped_column(Integer)
     roll_number: Mapped[str] = mapped_column(String(40), default="")
+    # COE KIET / technical-club students: the name of their club. Empty for everyone else.
+    club: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow, onupdate=utcnow)
 
@@ -173,13 +175,13 @@ class Invitation(Base):
 
 class Admin(Base):
     """
-    Organisers. Super admins see everything; admins are scoped to one KIET department; outside admins see only
-    teams and students from other colleges and schools.
+    Organisers. Super admins see everything; admins are scoped to one KIET department (COE KIET is one of them);
+    outside admins see only teams and students from other colleges and schools; startup admins only startups.
     """
 
     __tablename__ = "admins"
     __table_args__ = (
-        CheckConstraint("role IN ('super_admin', 'admin', 'outside_admin')", name="role"),
+        CheckConstraint("role IN ('super_admin', 'admin', 'outside_admin', 'startup_admin')", name="role"),
         CheckConstraint("role <> 'admin' OR department IS NOT NULL", name="department"),
     )
 

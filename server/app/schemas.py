@@ -36,6 +36,8 @@ class ProfileInput(Input):
     course: str = Field(default="", max_length=40)
     year: int
     roll_number: str = Field(default="", max_length=40)
+    # COE KIET / technical clubs: the club's name.
+    club: str = Field(default="", max_length=80)
 
     @field_validator("full_name")
     @classmethod
@@ -53,6 +55,16 @@ class ProfileInput(Input):
 
     @model_validator(mode="after")
     def check_by_type(self) -> "ProfileInput":
+        if self.participant_type == "startup":
+            # Just the startup's name, the founder's name and phone; none of the college or school details apply.
+            self.institution = rules.normalise_club_name(self.institution)
+            if len(self.institution) < 2:
+                raise ValueError("Enter the name of your startup.")
+            if not rules.normalise_institution(self.institution):
+                raise ValueError("Enter the name of your startup in English letters.")
+            self.city, self.department, self.club, self.roll_number = "", None, "", ""
+            self.course, self.year = rules.STARTUP_COURSE, 0
+            return self
         if self.participant_type == "kiet":
             if self.department not in rules.DEPARTMENTS:
                 raise ValueError("Choose your department.")
@@ -65,6 +77,13 @@ class ProfileInput(Input):
             if not self.roll_number:
                 raise ValueError("Enter your university roll number.")
             self.institution, self.city = rules.KIET_INSTITUTION, rules.KIET_CITY
+            self.club = rules.normalise_club_name(self.club)
+            if self.department == rules.CLUB_DEPARTMENT:
+                low, high = rules.CLUB_NAME_LENGTH
+                if not low <= len(self.club) <= high:
+                    raise ValueError("Enter the name of your technical club.")
+            else:
+                self.club = ""
             return self
 
         label = "school" if self.participant_type == "school" else "college"
@@ -75,7 +94,7 @@ class ProfileInput(Input):
             raise ValueError(f"Enter the name of your {label} in English letters.")
         if len(self.city) < 2:
             raise ValueError("Enter the city.")
-        self.department = None
+        self.department, self.club = None, ""
         if self.participant_type == "college":
             if self.course not in rules.COLLEGE_COURSES:
                 raise ValueError("Choose your course.")
@@ -103,6 +122,7 @@ class ProfileOut(BaseModel):
     year: int
     roll_number: str
     created_at: datetime
+    club: str = ""
 
 
 class RegistrationOut(BaseModel):
@@ -245,6 +265,8 @@ class MemberOut(BaseModel):
     year: int
     role: str
     joined_at: datetime
+    # COE KIET / technical-club members: the club's name.
+    club: str = ""
 
 
 class InvitationOut(BaseModel):
@@ -289,7 +311,7 @@ class ReasonInput(Input):
     reason: str = Field(min_length=5, max_length=500)
 
 
-AdminRole = Literal["super_admin", "admin", "outside_admin"]
+AdminRole = Literal["super_admin", "admin", "outside_admin", "startup_admin"]
 
 
 class AdminInput(Input):
@@ -350,7 +372,7 @@ class NominationsInput(Input):
 class AdminOut(BaseModel):
     email: str
     name: str
-    # super_admin | admin | outside_admin, or "judge" for a juror who is not an organiser.
+    # super_admin | admin | outside_admin | startup_admin, or "judge" for a juror who is not an organiser.
     role: str
     department: str | None
     added_at: datetime | None = None

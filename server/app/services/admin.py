@@ -1,7 +1,7 @@
 """
-Admin panel logic. Scoping is applied inside every query: a department admin only ever reads or changes
-KIET teams and students of their own department; an outside admin only teams and students from other colleges
-and schools; a super admin sees everything.
+Admin panel logic. Scoping is applied inside every query: a department admin (COE KIET is one of the departments)
+only ever reads or changes KIET teams and students of their own department; an outside admin only teams and
+students from other colleges and schools; a startup admin only startups; a super admin sees everything.
 """
 
 import uuid
@@ -82,9 +82,25 @@ def _is_outside(admin: Admin) -> bool:
 
 
 OUTSIDE = ("college", "school")
+STARTUPS = ("startup",)
+
+
+def type_scope(admin: Admin) -> tuple[str, ...] | None:
+    """The participant types an outside or startup admin is limited to; None for super and department admins."""
+    if admin.role == "outside_admin":
+        return OUTSIDE
+    if admin.role == "startup_admin":
+        return STARTUPS
+    return None
+
+
+def is_type_admin(admin: Admin) -> bool:
+    return type_scope(admin) is not None
 
 
 def scope_label(admin: Admin) -> str:
+    if admin.role == "startup_admin":
+        return "startups"
     return "other colleges and schools" if _is_outside(admin) else str(admin.department)
 
 
@@ -107,32 +123,32 @@ def check_department(admin: Admin, department: str | None) -> None:
 def team_scope(admin: Admin) -> ColumnElement[bool]:
     if _is_super(admin):
         return Team.id.is_not(None)
-    if _is_outside(admin):
-        return Team.participant_type.in_(OUTSIDE)
+    if types := type_scope(admin):
+        return Team.participant_type.in_(types)
     return and_(Team.participant_type == "kiet", Team.department == admin.department)
 
 
 def student_scope(admin: Admin) -> ColumnElement[bool]:
     if _is_super(admin):
         return Profile.user_id.is_not(None)
-    if _is_outside(admin):
-        return Profile.participant_type.in_(OUTSIDE)
+    if types := type_scope(admin):
+        return Profile.participant_type.in_(types)
     return and_(Profile.participant_type == "kiet", Profile.department == admin.department)
 
 
 def can_see_team(admin: Admin, team: Team) -> bool:
     if _is_super(admin):
         return True
-    if _is_outside(admin):
-        return team.participant_type in OUTSIDE
+    if types := type_scope(admin):
+        return team.participant_type in types
     return team.participant_type == "kiet" and team.department == admin.department
 
 
 def can_see_profile(admin: Admin, profile: Profile) -> bool:
     if _is_super(admin):
         return True
-    if _is_outside(admin):
-        return profile.participant_type in OUTSIDE
+    if types := type_scope(admin):
+        return profile.participant_type in types
     return profile.participant_type == "kiet" and profile.department == admin.department
 
 
@@ -145,7 +161,7 @@ def _visible_team(db: Session, admin: Admin, team_id: uuid.UUID, lock: bool = Fa
         raise ApiError("Team not found.", 404)
     if not can_see_team(admin, team):
         raise ApiError(
-            "This team is from KIET, not another college or school." if _is_outside(admin) else f"This team is not in {admin.department}.",
+            f"This team is not one of the {scope_label(admin)}." if is_type_admin(admin) else f"This team is not in {admin.department}.",
             403,
         )
     return team
@@ -235,6 +251,7 @@ def admin_teams(db: Session, teams: list[Team]) -> list[AdminTeamOut]:
                 year=profile.year,
                 role=member.role,
                 joined_at=member.joined_at,
+                club=profile.club,
                 phone=profile.phone,
                 roll_number=profile.roll_number,
                 institution=profile.institution,
@@ -406,7 +423,7 @@ def change_status(
         # Members of a withdrawn team may have left to join other teams.
         leader_still_in = db.scalar(select(TeamMember.user_id).where(TeamMember.team_id == team.id, TeamMember.user_id == team.leader_id))
         member_count = _member_counts(db, [team.id]).get(team.id, 0)
-        if leader_still_in is None or (team.submitted_at and member_count < rules.TEAM_MIN_SIZE):
+        if leader_still_in is None or (team.submitted_at and member_count < rules.team_size_limits(team.participant_type)[0]):
             raise ApiError("Members have left this team since it was withdrawn, so it cannot be restored.", 409)
         team.status = "submitted" if team.submitted_at else "draft"
         team.status_reason = None
@@ -464,8 +481,6 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
         raise ApiError("A student is listed more than once.", 422)
     if len(emails) > rules.TEAM_MAX_SIZE:
         raise ApiError(f"A team can have at most {rules.TEAM_MAX_SIZE} members.", 422)
-    if data.submit and len(emails) < rules.TEAM_MIN_SIZE:
-        raise ApiError(f"A team needs {rules.TEAM_MIN_SIZE} to {rules.TEAM_MAX_SIZE} members to be submitted.", 422)
 
     # Lock the students' profiles (in a fixed order) so none of them joins another team meanwhile.
     rows = db.execute(
@@ -485,11 +500,18 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     leader_user, leader = found[data.leader_email]
     if not can_see_profile(admin, leader):
         raise ApiError(
-            "You can only create teams led by students from other colleges and schools."
-            if _is_outside(admin)
+            f"You can only create teams led by {scope_label(admin)} students."
+            if is_type_admin(admin) and admin.role == "outside_admin"
+            else "You can only create startup entries."
+            if admin.role == "startup_admin"
             else f"You can only create teams led by {admin.department} students.",
             403,
         )
+    low, high = rules.team_size_limits(leader.participant_type)
+    if len(emails) > high:
+        raise ApiError("A startup registers as a single entry, so it has no teammates." if high == 1 else f"A team can have at most {high} members.", 422)
+    if data.submit and len(emails) < low:
+        raise ApiError(f"A team needs {low} to {high} members to be submitted.", 422)
     for email in data.member_emails:
         _, profile = found[email]
         same = profile.participant_type == leader.participant_type and (
@@ -712,8 +734,10 @@ def create_student(db: Session, admin: Admin, data: AdminStudentInput) -> AdminS
             else "KIET students are registered with their official @kiet.edu email.",
             422,
         )
-    if _is_outside(admin) and data.participant_type == "kiet":
+    if admin.role == "outside_admin" and data.participant_type not in OUTSIDE:
         raise ApiError("You can only register students from other colleges and schools.", 403)
+    if admin.role == "startup_admin" and data.participant_type != "startup":
+        raise ApiError("You can only register startups.", 403)
     if admin.role == "admin" and (data.participant_type != "kiet" or data.department != admin.department):
         raise ApiError(f"You can only register {admin.department} students.", 403)
 
@@ -739,6 +763,7 @@ def create_student(db: Session, admin: Admin, data: AdminStudentInput) -> AdminS
             course=data.course,
             year=data.year,
             roll_number=data.roll_number,
+            club=data.club,
         )
     )
     audit.record(
@@ -939,6 +964,7 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
     published = _results_published(db)
     is_super = _is_super(admin)
     sees_outside = is_super or _is_outside(admin)
+    sees_types = is_super or is_type_admin(admin)
     active = [t for t in teams if t.status in ACTIVE]
     # Years in active teams: who leads them, and which years they include.
     team_years = _member_years(db, [t.id for t in active])
@@ -959,9 +985,9 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
                 teams=sum(1 for t in teams if t.participant_type == kind),
                 submitted=sum(1 for t in teams if t.participant_type == kind and t.status == "submitted"),
             )
-            for kind in (("kiet", "college", "school") if is_super else OUTSIDE)
+            for kind in (("kiet", "college", "school", "startup") if is_super else type_scope(admin) or ())
         ]
-        if sees_outside
+        if sees_types
         else None,
         by_category=[
             CategoryStats(category=number, **_counts([t.status for t in teams if t.category == number])) for number in rules.CATEGORIES
@@ -1007,7 +1033,7 @@ def _top_institutions(students: list, teams: list, limit: int = 10) -> list[Inst
     """Other colleges and schools with the most students. Spellings vary, so they are grouped by the matching key."""
     groups: dict[tuple[str, str], list] = defaultdict(list)
     for student in students:
-        if student.participant_type != "kiet" and student.institution_key:
+        if student.participant_type in OUTSIDE and student.institution_key:
             groups[(student.participant_type, student.institution_key)].append(student)
     team_counts = Counter((t.participant_type, t.institution_key) for t in teams if t.status in ACTIVE)
     rows = [
@@ -1324,8 +1350,8 @@ def remove_admin(db: Session, admin: Admin, email: str, settings: Settings) -> N
 def _audit_scope(admin: Admin) -> ColumnElement[bool]:
     if _is_super(admin):
         return AuditEntry.id.is_not(None)
-    if _is_outside(admin):
-        return AuditEntry.participant_type.in_(OUTSIDE)
+    if types := type_scope(admin):
+        return AuditEntry.participant_type.in_(types)
     return AuditEntry.department == admin.department
 
 
