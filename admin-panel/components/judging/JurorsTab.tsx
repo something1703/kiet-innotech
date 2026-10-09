@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Juror } from "@/lib/admin-types";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { roundLabels } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { Button } from "@/components/ui/Button";
@@ -177,7 +177,7 @@ function AddJurorForm({ onAdded }: { onAdded: (juror: Juror) => void }) {
             <Select id="juror-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
               <option value="">Choose a department</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>

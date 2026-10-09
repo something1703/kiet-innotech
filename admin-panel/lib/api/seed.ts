@@ -279,6 +279,7 @@ export function createSeed(): MockDb {
       fullName,
       phone: `${pick(["6", "7", "8", "9"])}${String(int(0, 999_999_999)).padStart(9, "0")}`,
       participantType: type,
+      club: "",
       institution: institution.name,
       city: institution.city,
       department: type === "kiet" ? department : null,

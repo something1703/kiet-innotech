@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { Judging, JudgingRound } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { formatDateTime, roundLabels } from "@/lib/format";
+import { isTypeAdmin, scopeName } from "@/lib/scope";
 import { useQuery } from "@/lib/use-query";
 import { pickParam, useUrlParams } from "@/lib/use-url-params";
 import { Button } from "@/components/ui/Button";
@@ -41,14 +42,14 @@ const roundRules: Record<JudgingRound, string[]> = {
 export function JudgingView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
-  const rounds: JudgingRound[] = admin.role === "admin" ? ["department"] : admin.role === "outside_admin" ? ["final"] : ["department", "final"];
+  const rounds: JudgingRound[] = admin.role === "admin" ? ["department"] : isTypeAdmin(admin) ? ["final"] : ["department", "final"];
   const { params, update } = useUrlParams();
   const round = pickParam(params, "round", rounds) ?? rounds[0];
   const tabs: { key: Tab; label: string }[] = [
     { key: "rooms", label: round === "department" ? "Rooms" : "Panels" },
     ...(isSuper ? [{ key: "judges" as Tab, label: "Judges" }] : []),
     ...(round === "final" ? [{ key: "tents" as Tab, label: "Tents" }] : []),
-    ...(admin.role !== "outside_admin" ? [{ key: "rankings" as Tab, label: "Rankings" }] : []),
+    ...(!isTypeAdmin(admin) ? [{ key: "rankings" as Tab, label: "Rankings" }] : []),
   ];
   const tab = pickParam(params, "tab", tabs.map((t) => t.key)) ?? "rooms";
   const judging = useQuery(`judging-${round}`, () => api.judging(round));
@@ -56,7 +57,7 @@ export function JudgingView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "Super admin" : admin.role === "outside_admin" ? "Other colleges and schools · read only" : `${admin.department} department · read only`}
+        eyebrow={isSuper ? "Super admin" : `${scopeName(admin)} · read only`}
         title="Judging"
         description={
           isSuper

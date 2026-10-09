@@ -7,6 +7,7 @@ import {
   KIET_INSTITUTION,
   REGISTRATION_CLOSES,
   REGISTRATION_OPENS,
+  STARTUP_COURSE,
   TEAM_MAX_SIZE,
   categoryEligibility,
   JOIN_CODE_ALPHABET,
@@ -20,7 +21,9 @@ import {
   registrationWindow,
   sameInstitution,
   submissionChecks,
+  teamSizeLimits,
 } from "../rules";
+import { clubDepartment } from "../content";
 import { longDate } from "../format";
 import type { Invitation, Profile, ProfileInput, Team, TeamInput, TeamMember } from "../types";
 import { ApiError, type StudentApi } from "./types";
@@ -52,6 +55,7 @@ function kiet(email: string, fullName: string, department: string, year: number,
     course: "B.Tech",
     year,
     rollNumber,
+    club: "",
     createdAt: seededAt,
   };
 }
@@ -258,15 +262,18 @@ export const mockApi: StudentApi = {
     const first = Object.values(errors)[0];
     if (first) throw new ApiError(first, 422);
 
+    const startup = input.participantType === "startup";
     const normalised: ProfileInput = {
       ...input,
       fullName: input.fullName.trim(),
       phone: normalisePhone(input.phone),
-      institution: input.participantType === "kiet" ? KIET_INSTITUTION : input.institution.trim(),
-      city: input.participantType === "kiet" ? "Ghaziabad" : input.city.trim(),
+      institution: input.participantType === "kiet" ? KIET_INSTITUTION : input.institution.trim().replace(/\s+/g, " "),
+      city: input.participantType === "kiet" ? "Ghaziabad" : startup ? "" : input.city.trim(),
       department: input.participantType === "kiet" ? input.department : null,
-      course: input.participantType === "school" ? "School" : input.course,
-      rollNumber: input.rollNumber.trim(),
+      course: startup ? STARTUP_COURSE : input.participantType === "school" ? "School" : input.course,
+      year: startup ? 0 : input.year,
+      rollNumber: startup ? "" : input.rollNumber.trim(),
+      club: input.participantType === "kiet" && input.department === clubDepartment ? input.club.trim().replace(/\s+/g, " ") : "",
     };
 
     if (existing && teamOf(db, existing.userId)) {
@@ -434,6 +441,7 @@ export const mockApi: StudentApi = {
     const ownInvitation = db.invitations.find((i) => i.teamId === team.id && i.email === profile.email && i.status === "pending");
     const pending = db.invitations.filter((i) => i.teamId === team.id && i.status === "pending").length;
     // Pending invitations hold places in the team, except the one this student is using now.
+    if (team.participantType === "startup") throw new ApiError("This startup entry cannot take members.", 409);
     if (team.memberships.length + pending - (ownInvitation ? 1 : 0) >= TEAM_MAX_SIZE) throw new ApiError("This team is already full.", 409);
     if (!sameInstitution(leaderProfile(db, team), profile)) {
       throw new ApiError("This team is from another college or school. All members must be from the same college or school.", 422);
@@ -530,7 +538,7 @@ export const mockApi: StudentApi = {
     if (teamOf(db, profile.userId)) throw new ApiError("You are already part of a team.", 409);
     const team = db.teams.find((t) => t.id === invitation.teamId);
     if (!team || team.status !== "draft") throw new ApiError("This team is no longer accepting members.", 409);
-    if (team.memberships.length >= TEAM_MAX_SIZE) throw new ApiError("This team is already full.", 409);
+    if (team.memberships.length >= teamSizeLimits(team.participantType)[1]) throw new ApiError("This team is already full.", 409);
     if (!sameInstitution(leaderProfile(db, team), profile)) throw new ApiError("You are not from the same college or school as this team.", 422);
     const years = [...toTeam(db, team).members.map((m) => m.year), profile.year];
     const eligibility = categoryEligibility(team.category, team.participantType, years);

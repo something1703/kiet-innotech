@@ -14,7 +14,7 @@ export function teamsCsv(teams: AdminTeam[]) {
     "Team code", "Team name", "Category", "Category title", "Domain", "Project title",
     "Participant type", "Institution", "Team department", "Route", "Status", "Result",
     "Team created (IST)", "Submitted at (IST)", "Member count", "Member role", "Member name", "Member email",
-    "Member phone", "Roll number", "Member department", "Course", "Year / class", "Joined at (IST)",
+    "Member phone", "Roll number", "Member department", "Technical club", "Course", "Year / class", "Joined at (IST)",
   ];
   const rows = teams.flatMap((team) => {
     const teamCells = [
@@ -23,11 +23,11 @@ export function teamsCsv(teams: AdminTeam[]) {
       statusLabels[team.status], resultLabels[team.result], formatCsvDateTime(team.createdAt), formatCsvDateTime(team.submittedAt),
       team.members.length,
     ];
-    if (team.members.length === 0) return [[...teamCells, "", "", "", "", "", "", "", "", ""]];
+    if (team.members.length === 0) return [[...teamCells, "", "", "", "", "", "", "", "", "", ""]];
     return team.members.map((m) => [
       ...teamCells,
       m.role === "leader" ? "Leader" : "Member", m.fullName, m.email, asText(m.phone),
-      asText(m.rollNumber), m.department ?? "", m.course, yearLabel(m.year, team.participantType), formatCsvDateTime(m.joinedAt),
+      asText(m.rollNumber), m.department ?? "", m.club ?? "", m.course, yearLabel(m.year, team.participantType), formatCsvDateTime(m.joinedAt),
     ]);
   });
   return toCsv(header, rows);
@@ -35,12 +35,12 @@ export function teamsCsv(teams: AdminTeam[]) {
 
 export function studentsCsv(students: AdminStudent[]) {
   const header = [
-    "Name", "Email", "Phone", "Participant type", "Institution", "City", "Department", "Course",
+    "Name", "Email", "Phone", "Participant type", "Institution", "City", "Department", "Technical club", "Course",
     "Year / class", "Roll number", "Team code", "Team name", "Team role", "Team status", "Registered at (IST)", "Access",
   ];
   const rows = students.map((s) => [
     s.fullName, s.email, asText(s.phone), typeShortLabels[s.participantType], s.institution, s.city, s.department ?? "",
-    s.course, yearLabel(s.year, s.participantType), asText(s.rollNumber), s.team?.code ?? "", s.team?.name ?? "",
+    s.club ?? "", s.course, yearLabel(s.year, s.participantType), asText(s.rollNumber), s.team?.code ?? "", s.team?.name ?? "",
     s.team ? (s.team.role === "leader" ? "Leader" : "Member") : "", s.team ? statusLabels[s.team.status] : "",
     formatCsvDateTime(s.createdAt), s.bannedAt ? "Banned" : "Active",
   ]);
@@ -114,6 +114,7 @@ export async function downloadTeamsExcel(teams: AdminTeam[]) {
       { header: "Roll number", width: 17, value: (r) => r.member.rollNumber, text: true },
       { header: "Institution", width: 32, value: (r) => r.team.institution },
       { header: "Department", width: 12, value: (r) => r.member.department ?? "" },
+      { header: "Technical club", width: 20, value: (r) => r.member.club ?? "" },
       { header: "Course", width: 14, value: (r) => r.member.course },
       { header: "Year / class", width: 12, value: (r) => yearLabel(r.member.year, r.team.participantType) },
       { header: "Joined (IST)", width: 20, value: (r) => formatCsvDateTime(r.member.joinedAt) },
@@ -135,6 +136,7 @@ export async function downloadStudentsExcel(students: AdminStudent[]) {
         { header: "Institution", width: 32, value: (s) => s.institution },
         { header: "City", width: 14, value: (s) => s.city },
         { header: "Department", width: 12, value: (s) => s.department ?? "" },
+        { header: "Technical club", width: 20, value: (s) => s.club ?? "" },
         { header: "Course", width: 14, value: (s) => s.course },
         { header: "Year / class", width: 12, value: (s) => yearLabel(s.year, s.participantType) },
         { header: "Roll number", width: 17, value: (s) => s.rollNumber, text: true },
@@ -155,7 +157,7 @@ export async function downloadStudentsExcel(students: AdminStudent[]) {
 export async function downloadOverviewExcel(stats: Stats) {
   type Pair = [string, number | string];
   const summary: Pair[] = [
-    ["Scope", stats.department ? `${stats.department} department` : "All departments, colleges and schools"],
+    ["Scope", stats.department ? `${stats.department} department` : "All departments, colleges, schools and startups"],
     ["Students registered", stats.students],
     ["Students in a team", stats.studentsInTeams],
     ["Teams", stats.teams.total],

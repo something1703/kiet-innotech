@@ -122,7 +122,8 @@ function requireSuper(admin: AdminUser, what: string) {
 /** Same scoping as the backend: department admins see one KIET department, outside admins other colleges and schools. */
 function inScope(admin: AdminUser, record: { participantType: ParticipantType; department: string | null }) {
   if (admin.role === "super_admin") return true;
-  if (admin.role === "outside_admin") return record.participantType !== "kiet";
+  if (admin.role === "outside_admin") return record.participantType === "college" || record.participantType === "school";
+  if (admin.role === "startup_admin") return record.participantType === "startup";
   return record.participantType === "kiet" && record.department === admin.department;
 }
 
@@ -131,7 +132,7 @@ const canSeeStudent = (admin: AdminUser, student: StudentRecord) => inScope(admi
 
 function checkDepartmentFilter(admin: AdminUser, department: string | undefined) {
   if (admin.role !== "super_admin" && department && department !== admin.department) {
-    throw new ApiError(403, admin.role === "outside_admin" ? "You can only view other colleges and schools." : `You can only view ${admin.department} data.`);
+    throw new ApiError(403, admin.role === "outside_admin" ? "You can only view other colleges and schools." : admin.role === "startup_admin" ? "You can only view startups." : `You can only view ${admin.department} data.`);
   }
 }
 
@@ -139,7 +140,7 @@ function findTeam(db: MockDb, admin: AdminUser, id: string) {
   const team = db.teams.find((t) => t.id === id);
   if (!team) throw new ApiError(404, "No team with this ID exists.");
   if (!canSeeTeam(admin, team)) {
-    throw new ApiError(403, admin.role === "outside_admin" ? "This is a KIET team." : `This team belongs to another department. You can only view ${admin.department} teams.`);
+    throw new ApiError(403, admin.role === "outside_admin" ? "This is a KIET team." : admin.role === "startup_admin" ? "This team is not a startup." : `This team belongs to another department. You can only view ${admin.department} teams.`);
   }
   return team;
 }
@@ -505,9 +506,9 @@ const NOT_IN_DEMO = "Judging works with the real backend only; the demo data has
 
 function auditVisible(db: MockDb, admin: AdminUser, entry: AuditEntry) {
   if (admin.role === "super_admin") return true;
-  if (admin.role === "outside_admin") {
+  if (admin.role === "outside_admin" || admin.role === "startup_admin") {
     const team = entry.teamId ? db.teams.find((t) => t.id === entry.teamId) : undefined;
-    return !!team && team.participantType !== "kiet";
+    return !!team && inScope(admin, team);
   }
   return entry.department === admin.department;
 }
@@ -528,7 +529,7 @@ export const mockApi: AdminApi = {
     const students = db.students.filter((s) => canSeeStudent(admin, s));
     const isSuper = admin.role === "super_admin";
     const seesOutside = isSuper || admin.role === "outside_admin";
-    const types: ParticipantType[] = isSuper ? ["kiet", "college", "school"] : ["college", "school"];
+    const types: ParticipantType[] = isSuper ? ["kiet", "college", "school", "startup"] : ["college", "school"];
     const active = teams.filter((t) => t.status === "draft" || t.status === "submitted");
     const yearKeys = new Set([
       ...students.map((s) => `${s.participantType}|${s.year}`),
@@ -854,7 +855,7 @@ export const mockApi: AdminApi = {
     const name = input.name.trim();
     if (!EMAIL_PATTERN.test(email)) throw new ApiError(422, "Enter a valid email address.");
     if (name.length < 2) throw new ApiError(422, "Enter the admin's name.");
-    if (!["admin", "super_admin", "outside_admin"].includes(input.role)) throw new ApiError(422, "Choose a role.");
+    if (!["admin", "super_admin", "outside_admin", "startup_admin"].includes(input.role)) throw new ApiError(422, "Choose a role.");
     if (input.role === "admin" && (!input.department || !departments.includes(input.department))) {
       throw new ApiError(422, "Choose the department this admin manages.");
     }
@@ -1028,6 +1029,7 @@ export const mockApi: AdminApi = {
       fullName: input.fullName,
       phone: input.phone,
       participantType: input.participantType,
+      club: input.club,
       institution: input.participantType === "kiet" ? "KIET Deemed to be University" : input.institution,
       city: input.participantType === "kiet" ? "Ghaziabad" : input.city,
       department: input.department,

@@ -1,5 +1,5 @@
 import { Medal, Trophy } from "lucide-react";
-import { departmentPrizes, departments, institutePrizes, prizeHeadline, prizePools } from "@/lib/content";
+import { departmentPrizes, institutePrizes, prizeDepartments, prizeHeadline, prizePools } from "@/lib/content";
 import { formatINR } from "@/lib/format";
 import { Reveal } from "@/components/ui/Reveal";
 import { Section, SectionHeading } from "@/components/ui/Section";
@@ -47,7 +47,7 @@ export function Prizes() {
               Department level
             </h3>
             <p className="mt-1 text-sm text-muted">
-              1st position in every category, awarded in each of the {departments.length} departments.
+              1st position in every category, awarded in each of the {prizeDepartments.length} departments.
             </p>
             <p className="mt-3 font-display text-2xl font-bold text-accent-600">
               ₹{formatINR(prizePools.department)} <span className="text-sm font-semibold text-muted">prize pool</span>

@@ -30,8 +30,8 @@ export default function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeading eyebrow="Step 1 of 4" title={`Welcome, ${accountName(me.name, me.email).split(" ")[0] || "student"}`}>
-        Tell us about yourself. Your team leader will use your email to add you to their team, and these details go on your certificate.
+      <PageHeading eyebrow="Step 1" title={`Welcome, ${accountName(me.name, me.email).split(" ")[0] || "student"}`}>
+        Choose how you are registering, then tell us about yourself. These details go on your certificate and help the organisers reach you.
       </PageHeading>
 
       {registration === "upcoming" && (

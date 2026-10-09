@@ -20,21 +20,28 @@ export default function DashboardPage() {
   const { me, team, invitations } = usePortal();
   const profile = me.profile!;
 
-  const steps = [
-    { title: "Profile", done: true, detail: "Completed" },
-    { title: "Team", done: team !== null, detail: team ? team.name : "Create or join a team" },
-    {
-      title: "Members",
-      done: (team?.members.length ?? 0) >= TEAM_MIN_SIZE,
-      detail: team ? `${team.members.length} joined, ${TEAM_MIN_SIZE} to 5 needed` : "2 to 5 members",
-    },
-    { title: "Submission", done: team !== null && team.status !== "draft", detail: team && team.status !== "draft" ? "Team locked" : "Leader submits the team" },
-  ];
+  const startup = profile.participantType === "startup";
+  const steps = startup
+    ? [
+        { title: "Profile", done: true, detail: "Completed" },
+        { title: "Entry", done: team !== null, detail: team ? team.name : "Add your project" },
+        { title: "Submission", done: team !== null && team.status !== "draft", detail: team && team.status !== "draft" ? "Entry locked" : "Submit your entry" },
+      ]
+    : [
+        { title: "Profile", done: true, detail: "Completed" },
+        { title: "Team", done: team !== null, detail: team ? team.name : "Create or join a team" },
+        {
+          title: "Members",
+          done: (team?.members.length ?? 0) >= TEAM_MIN_SIZE,
+          detail: team ? `${team.members.length} joined, ${TEAM_MIN_SIZE} to 5 needed` : "2 to 5 members",
+        },
+        { title: "Submission", done: team !== null && team.status !== "draft", detail: team && team.status !== "draft" ? "Team locked" : "Leader submits the team" },
+      ];
   const completed = steps.filter((s) => s.done).length;
 
   return (
     <>
-      <PageHeading eyebrow={`${participantTypeLabels[profile.participantType]}${profile.department ? ` / ${profile.department}` : ""}`} title={`Hello, ${profile.fullName.split(" ")[0]}`}>
+      <PageHeading eyebrow={`${participantTypeLabels[profile.participantType]}${profile.department ? ` / ${profile.department}` : ""}${profile.club ? ` / ${profile.club}` : ""}`} title={`Hello, ${profile.fullName.split(" ")[0]}`}>
         {completed === steps.length ? "Your registration is complete." : `Your registration is ${completed} of ${steps.length} steps done.`}
       </PageHeading>
 
@@ -45,7 +52,11 @@ export default function DashboardPage() {
       )}
 
       <Panel className="mb-6">
-        <ol className="grid grid-cols-[minmax(0,1fr)] gap-6 sm:grid-cols-[repeat(2,minmax(0,1fr))] lg:grid-cols-[repeat(4,minmax(0,1fr))] lg:gap-0 lg:divide-x lg:divide-line">
+        <ol
+          className={`grid grid-cols-[minmax(0,1fr)] gap-6 sm:grid-cols-[repeat(2,minmax(0,1fr))] lg:gap-0 lg:divide-x lg:divide-line ${
+            steps.length === 3 ? "lg:grid-cols-[repeat(3,minmax(0,1fr))]" : "lg:grid-cols-[repeat(4,minmax(0,1fr))]"
+          }`}
+        >
           {steps.map((step, index) => (
             <li key={step.title} className="flex min-w-0 gap-4 lg:px-6 lg:first:pl-0 lg:last:pr-0">
               <span
@@ -79,14 +90,18 @@ export default function DashboardPage() {
             <p className="text-sm leading-relaxed text-muted">
               {profile.participantType === "kiet"
                 ? `KIET teams are first evaluated at the department round (22 to 24 October). Each department nominates its best team in every category for the Grand Finale on 30 October.`
-                : profile.participantType === "school"
+                : profile.participantType === "startup"
+                  ? "Startups register as a single entry and go straight to the Grand Finale on 30 October at KIET."
+                  : profile.participantType === "school"
                   ? "School teams can enter any category and go straight to the Grand Finale on 30 October at KIET."
                   : "Teams from other colleges go straight to the Grand Finale on 30 October at KIET."}
             </p>
-            <p className="mt-4 text-sm text-muted">
-              {profile.participantType === "school" ? "Class" : "Year"}:{" "}
-              <span className="font-semibold text-ink">{yearLabel(profile.year, profile.participantType)}</span>
-            </p>
+            {!startup && (
+              <p className="mt-4 text-sm text-muted">
+                {profile.participantType === "school" ? "Class" : "Year"}:{" "}
+                <span className="font-semibold text-ink">{yearLabel(profile.year, profile.participantType)}</span>
+              </p>
+            )}
           </Panel>
           <KeyDates />
         </div>
@@ -146,9 +161,12 @@ function Invitations({ invitations }: { invitations: Invitation[] }) {
 
 function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
   const { closes } = useRegistrationDates();
+  const startup = team.participantType === "startup";
   const next =
     team.status !== "draft"
       ? "Nothing more to do. Watch this page for results."
+      : startup
+        ? `Review your entry and submit it before ${dayMonth(closes)}.`
       : isLeader
         ? team.members.length < TEAM_MIN_SIZE
           ? "Invite at least one more member."
@@ -157,16 +175,23 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
             : `Review your team and submit it before ${dayMonth(closes)}.`
         : "Your leader will submit the team once everyone has joined.";
 
-  const rows = [
-    ["Team", `${team.name} (${team.code})`],
-    ["Category", categoryName(team.category)],
-    ["Status", statusLabels[team.status]],
-    ["Members", team.members.map((m) => m.fullName).join(", ")],
-    ["Your role", isLeader ? "Team leader" : "Member"],
-  ];
+  const rows = startup
+    ? [
+        ["Startup", team.institution],
+        ["Entry", `${team.name} (${team.code})`],
+        ["Category", categoryName(team.category)],
+        ["Status", statusLabels[team.status]],
+      ]
+    : [
+        ["Team", `${team.name} (${team.code})`],
+        ["Category", categoryName(team.category)],
+        ["Status", statusLabels[team.status]],
+        ["Members", team.members.map((m) => m.fullName).join(", ")],
+        ["Your role", isLeader ? "Team leader" : "Member"],
+      ];
 
   return (
-    <Panel title="Your team">
+    <Panel title={startup ? "Your startup entry" : "Your team"}>
       <dl className="divide-y divide-line">
         {rows.map(([label, value]) => (
           <div key={label} className="grid gap-1 py-3 first:pt-0 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4">
@@ -180,7 +205,7 @@ function TeamSummary({ team, isLeader }: { team: Team; isLeader: boolean }) {
         {next}
       </p>
       <Link href="/team" className={`${buttonStyles("dark")} mt-6`}>
-        {isLeader && team.status === "draft" ? "Manage team" : "View team"}
+        {isLeader && team.status === "draft" ? (startup ? "Manage entry" : "Manage team") : startup ? "View entry" : "View team"}
         <ArrowRight size={16} aria-hidden="true" />
       </Link>
     </Panel>

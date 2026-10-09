@@ -10,14 +10,17 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { TeamManager, TeamStatusNotice, categoryName, statusLabels } from "@/components/portal/TeamManager";
 
 export default function TeamPage() {
-  const { team, invitations } = usePortal();
+  const { me, team, invitations } = usePortal();
+  const startup = me.profile?.participantType === "startup";
 
   if (!team) {
     return (
       <div className="mx-auto max-w-4xl">
-        <PageHeading eyebrow="Your team" title="You are not in a team yet">
-          Start a team as its leader, or join your leader&apos;s team with its team code.
-          {invitations.length > 0 && (
+        <PageHeading eyebrow={startup ? "Your entry" : "Your team"} title={startup ? "You have not created your entry yet" : "You are not in a team yet"}>
+          {startup
+            ? "Add your project details and submit your startup entry before registration closes."
+            : "Start a team as its leader, or join your leader's team with its team code."}
+          {!startup && invitations.length > 0 && (
             <>
               {" "}
               You also have {invitations.length === 1 ? "an invitation" : `${invitations.length} invitations`} waiting on your{" "}
@@ -37,7 +40,7 @@ export default function TeamPage() {
     <>
       <PageHeading eyebrow={`${team.code} / ${statusLabels[team.status]}`} title={team.name}>
         {categoryName(team.category)}
-        {team.department ? ` / ${team.department} department` : ` / ${team.institution}`}
+        {team.participantType === "startup" ? " / Startup" : team.department ? ` / ${team.department} department` : ` / ${team.institution}`}
       </PageHeading>
 
       <div className="mb-6 space-y-4 empty:hidden">
@@ -61,6 +64,14 @@ function CreatedNotice() {
     return (
       <Notice tone="success" title={`You joined ${team.name}`}>
         Your team leader submits the team once everyone has joined.
+      </Notice>
+    );
+  }
+  if (team.participantType === "startup") {
+    if (params.get("created") !== "1") return null;
+    return (
+      <Notice tone="success" title="Entry created">
+        Review the details below, then submit your entry before registration closes. Nothing else is needed: a startup has no teammates.
       </Notice>
     );
   }

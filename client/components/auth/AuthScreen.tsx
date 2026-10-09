@@ -172,6 +172,13 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
               <span className="font-semibold text-ink">@kiet.edu</span> account. Students from other colleges and schools can use any Google account.
             </p>
 
+            {isRegister && (
+              <p className="rounded-2xl bg-accent-50 p-4 text-sm leading-relaxed text-navy-800">
+                <span className="font-semibold text-ink">Registering a startup?</span> Sign in with any Google account and slide to{" "}
+                <span className="font-semibold text-ink">Startup</span> on the next step.
+              </p>
+            )}
+
             <p className="text-sm text-muted">
               {isRegister ? "Already registered? " : "New to InnoTech26? "}
               <Link href={isRegister ? "/login" : "/register"} className="font-semibold text-accent-600 hover:underline">

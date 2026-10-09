@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, Copy, Mail, MessageCircle, Pencil, RefreshCw, Send, Share2, X } from "lucide-react";
 import { api } from "@/lib/api";
-import { categories } from "@/lib/content";
+import { categories, departmentLabel } from "@/lib/content";
 import { draftKeys, hasDraft } from "@/lib/drafts";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { clearPendingJoinCode, inviteMessage, joinLink, pendingJoinCode } from "@/lib/invite";
@@ -65,6 +65,7 @@ export function TeamManager({ team }: { team: Team }) {
   const { me, refresh } = usePortal();
   const registration = useRegistrationState();
   const isLeader = team.leaderId === me.profile!.userId;
+  const startup = team.participantType === "startup";
   const editable = team.status === "draft" && registration === "open";
   const canEdit = isLeader && editable;
   // Joining needs a draft team with a free place while registration is open.
@@ -91,23 +92,27 @@ export function TeamManager({ team }: { team: Team }) {
     <OtherTeamInvite team={team} />
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
       <div className="min-w-0 space-y-6">
-        <Panel
-          title="Members"
-          description={`${team.members.length} of ${TEAM_MAX_SIZE}. All members are from ${team.participantType === "kiet" ? "KIET" : team.institution}.`}
-        >
-          <MembersTable team={team} canEdit={canEdit} leaderId={team.leaderId} />
-          {team.invitations.length > 0 && <PendingInvitations team={team} canEdit={canEdit} />}
-          {team.status === "draft" && !isLeader && (
-            <p className="mt-6 text-sm text-muted">Only the team leader can remove members. Anyone in the team can share the invite.</p>
-          )}
-        </Panel>
+        {startup ? (
+          <StartupPanel team={team} />
+        ) : (
+          <Panel
+            title="Members"
+            description={`${team.members.length} of ${TEAM_MAX_SIZE}. All members are from ${team.participantType === "kiet" ? "KIET" : team.institution}.`}
+          >
+            <MembersTable team={team} canEdit={canEdit} leaderId={team.leaderId} />
+            {team.invitations.length > 0 && <PendingInvitations team={team} canEdit={canEdit} />}
+            {team.status === "draft" && !isLeader && (
+              <p className="mt-6 text-sm text-muted">Only the team leader can remove members. Anyone in the team can share the invite.</p>
+            )}
+          </Panel>
+        )}
 
         {/* Right below the members, so on phones it is near the top of the page. */}
         {canAddTeammates && <AddTeammates team={team} isLeader={isLeader} canEdit={canEdit} />}
 
         <Panel
           title="Project"
-          description={canEdit && !editing ? "You can change these details until the team is submitted." : undefined}
+          description={canEdit && !editing ? `You can change these details until the ${startup ? "entry" : "team"} is submitted.` : undefined}
         >
           {editing ? (
             <TeamForm
@@ -185,6 +190,28 @@ function OtherTeamInvite({ team }: { team: Team }) {
         Dismiss
       </button>
     </Notice>
+  );
+}
+
+/** A startup is one entry with one person: who it is and how to reach them, in place of a members table. */
+function StartupPanel({ team }: { team: Team }) {
+  const person = team.members[0];
+  const rows: [string, string][] = [
+    ["Startup", team.institution],
+    ["Contact person", person?.fullName ?? ""],
+    ["Email", person?.email ?? ""],
+  ];
+  return (
+    <Panel title="Your startup" description="A startup is a single entry, so there are no teammates to add.">
+      <dl className="divide-y divide-line">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid gap-1 py-3.5 first:pt-0 last:pb-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
+            <dt className="text-sm text-muted">{label}</dt>
+            <dd className="font-semibold text-ink [overflow-wrap:anywhere]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Panel>
   );
 }
 
@@ -508,6 +535,8 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
   const [confirming, setConfirming] = useState(false);
   const checks = submissionChecks(team, registration);
   const ready = checks.every((check) => check.ok);
+  const startup = team.participantType === "startup";
+  const noun = startup ? "entry" : "team";
 
   const submit = async () => {
     if (await run(() => api.submitTeam(team.id))) {
@@ -517,7 +546,7 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
   };
 
   return (
-    <Panel title="Submit your team" description="Once submitted, the team and all its members are locked for good.">
+    <Panel title={`Submit your ${noun}`} description={startup ? "Once submitted, your entry is locked for good." : "Once submitted, the team and all its members are locked for good."}>
       <ul className="space-y-3">
         {checks.map((check) => (
           <li key={check.label} className="flex gap-3 text-sm">
@@ -544,7 +573,7 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
             setConfirming(true);
           }}
         >
-          Submit and lock team
+          Submit and lock {noun}
         </Button>
       ) : (
         <p className="mt-6 text-sm text-muted">The team leader submits the team when everyone has joined.</p>
@@ -553,35 +582,48 @@ function SubmitPanel({ team, isLeader, editable, registration }: { team: Team; i
       <ConfirmDialog
         open={confirming}
         title={`Lock and submit ${team.name}?`}
-        confirmLabel="Lock team and submit"
+        confirmLabel={startup ? "Lock entry and submit" : "Lock team and submit"}
         confirmVariant="destructive"
         pending={pending}
         error={error}
         typeToConfirm={team.name}
-        typeToConfirmLabel="team name"
+        typeToConfirmLabel={startup ? "entry name" : "team name"}
         onConfirm={submit}
         onClose={() => setConfirming(false)}
       >
-        <p className="font-semibold text-ink">This locks the whole team, and it cannot be undone from here.</p>
-        <ul className="mt-3 list-disc space-y-1.5 pl-5">
-          <li>
-            <strong className="text-ink">All {team.members.length} members are locked in:</strong> nobody can leave, and nobody can be added or removed.
-            They cannot join or create another team.
-          </li>
-          <li>The team name, category, domain, project title and abstract can no longer be changed.</li>
-          <li>If a member withdraws later, the team is not considered further.</li>
-        </ul>
-        <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Members being locked</p>
-          <ul className="mt-1.5 space-y-0.5 text-ink">
-            {team.members.map((member) => (
-              <li key={member.userId}>
-                {member.fullName} {member.role === "leader" && <span className="text-xs text-muted">(leader)</span>}
+        {startup ? (
+          <>
+            <p className="font-semibold text-ink">This locks your entry, and it cannot be undone from here.</p>
+            <ul className="mt-3 list-disc space-y-1.5 pl-5">
+              <li>The entry name, category, domain, project title and abstract can no longer be changed.</li>
+              <li>You cannot create another entry.</li>
+            </ul>
+            <p className="mt-4">Check the category and the project details before you continue.</p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-ink">This locks the whole team, and it cannot be undone from here.</p>
+            <ul className="mt-3 list-disc space-y-1.5 pl-5">
+              <li>
+                <strong className="text-ink">All {team.members.length} members are locked in:</strong> nobody can leave, and nobody can be added or removed.
+                They cannot join or create another team.
               </li>
-            ))}
-          </ul>
-        </div>
-        <p className="mt-4">Check every name, the category and the project details before you continue.</p>
+              <li>The team name, category, domain, project title and abstract can no longer be changed.</li>
+              <li>If a member withdraws later, the team is not considered further.</li>
+            </ul>
+            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">Members being locked</p>
+              <ul className="mt-1.5 space-y-0.5 text-ink">
+                {team.members.map((member) => (
+                  <li key={member.userId}>
+                    {member.fullName} {member.role === "leader" && <span className="text-xs text-muted">(leader)</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="mt-4">Check every name, the category and the project details before you continue.</p>
+          </>
+        )}
       </ConfirmDialog>
     </Panel>
   );
@@ -595,15 +637,16 @@ export const statusLabels: Record<Team["status"], string> = {
 };
 
 function TeamFacts({ team }: { team: Team }) {
+  const startup = team.participantType === "startup";
   const rows = [
-    ["Team ID", team.code],
+    [startup ? "Entry ID" : "Team ID", team.code],
     ["Status", statusLabels[team.status]],
-    [team.participantType === "kiet" ? "Department" : "Institution", team.department ?? team.institution],
+    [team.participantType === "kiet" ? "Department" : startup ? "Startup" : "Institution", team.department ? departmentLabel(team.department) : team.institution],
     ["Route", team.route === "department" ? "Department round, then Grand Finale" : "Directly to the Grand Finale"],
     ["Created", formatDate(team.createdAt)],
   ];
   return (
-    <Panel title="Team details">
+    <Panel title={startup ? "Entry details" : "Team details"}>
       <dl className="space-y-3 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="flex justify-between gap-4">
@@ -631,10 +674,12 @@ function DangerZone({ team, deletes, onDone }: { team: Team; deletes: boolean; o
   };
 
   return (
-    <Panel title={deletes ? "Delete team" : "Leave team"}>
+    <Panel title={deletes ? (team.participantType === "startup" ? "Delete entry" : "Delete team") : "Leave team"}>
       <p className="text-sm text-muted">
         {deletes
-          ? "Deleting the team removes all members and cancels pending invitations. Everyone can then join or create another team."
+          ? team.participantType === "startup"
+            ? "Deleting the entry removes it. You can then create a new one before registration closes."
+            : "Deleting the team removes all members and cancels pending invitations. Everyone can then join or create another team."
           : withdrawn
             ? "This team has been withdrawn. Leave it if you want to join or create another team before registration closes."
             : "You can leave before the team is submitted, then join or create another team."}
@@ -648,13 +693,13 @@ function DangerZone({ team, deletes, onDone }: { team: Team; deletes: boolean; o
           setConfirming(true);
         }}
       >
-        {deletes ? "Delete team" : "Leave team"}
+        {deletes ? (team.participantType === "startup" ? "Delete entry" : "Delete team") : "Leave team"}
       </Button>
 
       <ConfirmDialog
         open={confirming}
         title={deletes ? `Delete ${team.name}?` : `Leave ${team.name}?`}
-        confirmLabel={deletes ? "Delete team" : "Leave team"}
+        confirmLabel={deletes ? (team.participantType === "startup" ? "Delete entry" : "Delete team") : "Leave team"}
         confirmVariant="danger"
         pending={pending}
         error={error}

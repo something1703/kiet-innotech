@@ -964,7 +964,6 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
     published = _results_published(db)
     is_super = _is_super(admin)
     sees_outside = is_super or _is_outside(admin)
-    sees_types = is_super or is_type_admin(admin)
     active = [t for t in teams if t.status in ACTIVE]
     # Years in active teams: who leads them, and which years they include.
     team_years = _member_years(db, [t.id for t in active])
@@ -985,9 +984,9 @@ def stats(db: Session, admin: Admin, settings: Settings) -> StatsOut:
                 teams=sum(1 for t in teams if t.participant_type == kind),
                 submitted=sum(1 for t in teams if t.participant_type == kind and t.status == "submitted"),
             )
-            for kind in (("kiet", "college", "school", "startup") if is_super else type_scope(admin) or ())
+            for kind in (("kiet", "college", "school", "startup") if is_super else OUTSIDE)
         ]
-        if sees_types
+        if sees_outside
         else None,
         by_category=[
             CategoryStats(category=number, **_counts([t.status for t in teams if t.category == number])) for number in rules.CATEGORIES

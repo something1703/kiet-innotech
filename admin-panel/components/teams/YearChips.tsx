@@ -6,6 +6,8 @@ const short = (year: number, type: ParticipantType) => (type === "school" ? `Cl 
 /** Each member's year (or class), the leader's first and outlined: e.g. [Y3] Y2 Y2 Y1. */
 export function YearChips({ years, type }: { years: number[]; type: ParticipantType }) {
   if (years.length === 0) return <span className="text-muted">—</span>;
+  // A startup has no year of study.
+  if (type === "startup") return <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-inset ring-violet-200">Startup</span>;
   const [leader, ...rest] = years;
   const label = `Leader ${yearLabel(leader, type)}${rest.length ? `; members ${rest.map((y) => yearLabel(y, type)).join(", ")}` : ""}`;
   return (

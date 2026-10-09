@@ -10,6 +10,7 @@ import { timeline } from "@/lib/content";
 import { downloadOverviewExcel } from "@/lib/export";
 import { categoryTitle, formatDate, formatDateTime, formatIst, formatNumber, typeShortLabels } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
+import { scopeName } from "@/lib/scope";
 import { useQuery } from "@/lib/use-query";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -98,6 +99,7 @@ export function OverviewView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const outside = admin.role === "outside_admin";
+  const startupAdmin = admin.role === "startup_admin";
   const stats = useQuery("stats", () => api.stats());
   const data = stats.data;
   const [reporting, setReporting] = useState(false);
@@ -119,11 +121,13 @@ export function OverviewView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All departments, colleges and schools" : outside ? "Other colleges and schools" : `${admin.department} department`}
+        eyebrow={scopeName(admin)}
         title="Overview"
         description={
           isSuper
             ? "Registrations across InnoTech26. Department admins see the same page for their own department."
+            : startupAdmin
+              ? "Startups that have registered, who go straight to the Grand Finale."
             : outside
               ? "Registrations from other colleges and schools, who go straight to the Grand Finale."
               : `Registrations of ${admin.department} students and teams led by ${admin.department} students.`
@@ -146,7 +150,7 @@ export function OverviewView() {
           <section aria-label="Headline numbers">
             <Headline stats={data} />
           </section>
-          <Charts stats={data} />
+          <Charts stats={data} startupAdmin={startupAdmin} />
 
         </>
       )}
@@ -176,7 +180,7 @@ const statusTable = (rows: (StatusCounts & { label: string })[]) => (
 );
 
 /** The dashboard: every chart has a table view, and bars, slices and rows link to the matching filtered list. */
-function Charts({ stats }: { stats: Stats }) {
+function Charts({ stats, startupAdmin }: { stats: Stats; startupAdmin: boolean }) {
   const [trendMode, setTrendMode] = useState<"cumulative" | "daily">("cumulative");
   const [yearMode, setYearMode] = useState<YearMode>("students");
   const running = { students: 0, teams: 0, submitted: 0 };
@@ -281,6 +285,7 @@ function Charts({ stats }: { stats: Stats }) {
         </ChartCard>
       )}
 
+      {!startupAdmin && (
       <div className={`grid gap-4 ${stats.byType ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         {stats.byType && (
           <ChartCard
@@ -347,6 +352,7 @@ function Charts({ stats }: { stats: Stats }) {
           />
         </ChartCard>
       </div>
+      )}
 
       <div className={`grid gap-4 ${stats.topInstitutions ? "xl:grid-cols-2" : ""}`}>
         <ChartCard

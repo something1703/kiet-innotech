@@ -3,7 +3,7 @@
  * These mirror the JSON the FastAPI backend returns (snake_case is converted in lib/api/live.ts).
  */
 
-export type ParticipantType = "kiet" | "college" | "school";
+export type ParticipantType = "kiet" | "college" | "school" | "startup";
 
 export type Profile = {
   userId: string;
@@ -11,7 +11,7 @@ export type Profile = {
   fullName: string;
   phone: string;
   participantType: ParticipantType;
-  /** College or school name. Always "KIET Deemed to be University" for KIET students. */
+  /** College or school name ("KIET Deemed to be University" for KIET students, the startup's name for a startup). */
   institution: string;
   city: string;
   /** KIET department, e.g. "CSE(AIML)". Null for other colleges and schools. */
@@ -22,6 +22,8 @@ export type Profile = {
   year: number;
   /** University roll number for KIET, enrolment number for other colleges, optional for schools. */
   rollNumber: string;
+  /** COE KIET / technical-club students: the club's name. Empty for everyone else. */
+  club: string;
   createdAt: string;
 };
 
@@ -43,6 +45,7 @@ export type TeamMember = {
   year: number;
   role: "leader" | "member";
   joinedAt: string;
+  club?: string;
 };
 
 export type InvitationStatus = "pending" | "accepted" | "declined" | "cancelled";

@@ -51,7 +51,7 @@ export function TeamForm({ initial = empty, participantType, memberYears, submit
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const found: Partial<Record<keyof TeamInput, string>> = {};
-    const nameError = lengthError("Team name", values.name, limits.teamName);
+    const nameError = lengthError(startup ? "Entry name" : "Team name", values.name, limits.teamName);
     if (nameError) found.name = nameError;
     if (!values.category) found.category = "Choose a category.";
     if (!values.domain) found.domain = "Choose the domain closest to your project.";
@@ -71,18 +71,24 @@ export function TeamForm({ initial = empty, participantType, memberYears, submit
   };
 
   const abstractLength = values.abstract.trim().length;
+  const startup = participantType === "startup";
 
   return (
     <form onSubmit={submit} noValidate className="space-y-8">
       {restored && <Notice tone="info">We kept the changes you had not saved yet. Check them and save.</Notice>}
 
-      <Field id="name" label="Team name" error={errors.name} hint={`${limits.teamName.min} to ${limits.teamName.max} characters. Must be unique.`}>
+      <Field
+        id="name"
+        label={startup ? "Entry name" : "Team name"}
+        error={errors.name}
+        hint={`${limits.teamName.min} to ${limits.teamName.max} characters. Must be unique.${startup ? " Usually your startup's name." : ""}`}
+      >
         <Input id="name" value={values.name} invalid={!!errors.name} maxLength={limits.teamName.max} onChange={(e) => set("name", e.target.value)} autoComplete="off" />
       </Field>
 
       <fieldset aria-describedby={errors.category ? "category-error" : undefined}>
         <legend className="mb-1 text-sm font-semibold text-navy-800">Category</legend>
-        <p className="mb-3 text-sm text-muted">A team competes in exactly one category.</p>
+        <p className="mb-3 text-sm text-muted">{startup ? "Your entry competes in exactly one category." : "A team competes in exactly one category."}</p>
         <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
           {categories.map((category) => {
             const eligibility = categoryEligibility(category.number, participantType, memberYears);

@@ -37,14 +37,21 @@ export default function NewTeamPage() {
     return true;
   };
 
+  const startup = profile.participantType === "startup";
   const route = profile.participantType === "kiet" ? `the ${profile.department} department round` : "the Grand Finale directly";
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeading eyebrow="Step 2 of 4" title="Create your team">
-        You will be the team leader. After creating the team you can add 1 to 4 registered students from{" "}
-        {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing an invite link with your team code. Your team goes to {route}.
-      </PageHeading>
+      {startup ? (
+        <PageHeading eyebrow="Step 2 of 3" title="Create your startup entry">
+          Add your project details. There is no team to build: {profile.institution} is a single entry, and it goes to the Grand Finale directly.
+        </PageHeading>
+      ) : (
+        <PageHeading eyebrow="Step 2 of 4" title="Create your team">
+          You will be the team leader. After creating the team you can add 1 to 4 registered students from{" "}
+          {profile.participantType === "kiet" ? "KIET, from any department" : profile.institution}, by sharing an invite link with your team code. Your team goes to {route}.
+        </PageHeading>
+      )}
 
       {invitations.length > 0 && (
         <Notice tone="info" title={`You have ${invitations.length === 1 ? "an invitation" : `${invitations.length} invitations`} to join a team`} className="mb-6">
@@ -70,7 +77,8 @@ export default function NewTeamPage() {
           <TeamForm
             participantType={profile.participantType}
             memberYears={[profile.year]}
-            submitLabel="Create team"
+            initial={startup ? { name: profile.institution.slice(0, 40).trim(), category: 0, domain: "", projectTitle: "", abstract: "" } : undefined}
+            submitLabel={startup ? "Create entry" : "Create team"}
             onSubmit={create}
             draftKey={draftKeys.newTeam(me.email)}
             pending={pending}

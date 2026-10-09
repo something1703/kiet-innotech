@@ -18,6 +18,22 @@ import { useAction } from "./useAction";
 export function CreateOrJoin({ hasInvitations = false }: { hasInvitations?: boolean }) {
   const registration = useRegistrationState();
   const { opens, closes } = useRegistrationDates();
+  const { me } = usePortal();
+
+  if (me.profile?.participantType === "startup") {
+    return (
+      <Panel title="Create your startup entry" description="Your startup is a single entry: add your project and submit it. There is no team to build.">
+        {registration !== "open" ? (
+          <Notice tone="info">{registration === "closed" ? "Registration has closed." : `Entries can be created from ${longDate(opens)} to ${longDate(closes)}.`}</Notice>
+        ) : (
+          <Link href="/team/new" className={buttonStyles("primary")}>
+            <Plus size={18} aria-hidden="true" />
+            Create your entry
+          </Link>
+        )}
+      </Panel>
+    );
+  }
 
   return (
     <Panel

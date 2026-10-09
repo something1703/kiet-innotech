@@ -5,8 +5,11 @@
  */
 import type { ParticipantType, Profile, Team, TeamMember, TeamResult, TeamRoute, TeamStatus } from "./types";
 
-/** Organiser roles. A department admin sees one KIET department; an outside admin other colleges and schools. */
-export type AdminRole = "super_admin" | "admin" | "outside_admin";
+/**
+ * Organiser roles. A department admin sees one KIET department (COE KIET is one of them); an outside admin other
+ * colleges and schools; a startup admin only startups.
+ */
+export type AdminRole = "super_admin" | "admin" | "outside_admin" | "startup_admin";
 
 export type AdminUser = {
   email: string;
@@ -472,6 +475,8 @@ export type AdminStudentInput = {
   fullName: string;
   phone: string;
   participantType: ParticipantType;
+  /** COE KIET / technical clubs: the club's name. */
+  club: string;
   institution: string;
   city: string;
   department: string | null;

@@ -7,7 +7,8 @@ import { ArrowLeft, Ban, RotateCcw, ShieldX, Trash2, Undo2, UserMinus } from "lu
 import { api, ApiError } from "@/lib/api";
 import type { AdminTeam } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categoryTitle, formatDate, formatDateTime, otherMemberDepartments, participantTypeLabels, routeLabels, statusLabels, typeShortLabels } from "@/lib/format";
+import { clubDepartment } from "@/lib/content";
+import { categoryTitle, formatDate, formatDateTime, otherMemberDepartments, participantTypeLabels, routeLabels, statusLabels, typeShortLabels, typeTones } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
 import { isTeamId } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
@@ -272,7 +273,7 @@ function TeamView({ id }: { id: string }) {
             </Fact>
             <Fact label="Domain">{t.domain}</Fact>
             <Fact label="Participant type">{participantTypeLabels[t.participantType]}</Fact>
-            <Fact label="Institution">{t.institution}</Fact>
+            <Fact label={t.participantType === "startup" ? "Startup" : "Institution"}>{t.institution}</Fact>
             <Fact label="Department">
               {t.department ? (
                 <>
@@ -304,7 +305,11 @@ function TeamView({ id }: { id: string }) {
       </div>
 
       <section aria-labelledby="team-members">
-        <SectionTitle id="team-members" title={`Members (${t.members.length})`} meta="Team size must be 2 to 5 at submission" />
+        <SectionTitle
+          id="team-members"
+          title={t.participantType === "startup" ? "Contact person" : `Members (${t.members.length})`}
+          meta={t.participantType === "startup" ? "A startup is a single entry" : "Team size must be 2 to 5 at submission"}
+        />
         <TableFrame label="Team members" minWidth="min-w-[860px]">
           <thead>
             <tr>
@@ -312,9 +317,9 @@ function TeamView({ id }: { id: string }) {
               <Th>Email</Th>
               <Th>Phone</Th>
               <Th>Roll no.</Th>
-              <Th>{t.participantType === "kiet" ? "Department" : "Institution"}</Th>
-              <Th>Course</Th>
-              <Th>Year</Th>
+              <Th>{t.participantType === "kiet" ? "Department" : t.participantType === "startup" ? "Startup" : "Institution"}</Th>
+              {t.participantType !== "startup" && <Th>Course</Th>}
+              {t.participantType !== "startup" && <Th>Year</Th>}
               <Th>Joined</Th>
             </tr>
           </thead>
@@ -342,15 +347,16 @@ function TeamView({ id }: { id: string }) {
                 <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{m.rollNumber || "—"}</td>
                 <td className={tdClass}>
                   {m.department ?? <span className="block max-w-56">{m.institution}</span>}
+                  {m.department === clubDepartment && m.club && <span className="block text-xs text-muted">{m.club}</span>}
                   {t.department && m.department && m.department !== t.department && <span className="block text-xs text-muted">Other branch</span>}
                   {t.participantType !== "kiet" && (
                     <span className="mt-0.5 block">
-                      <Pill tone="cyan">{typeShortLabels[t.participantType]}</Pill>
+                      <Pill tone={typeTones[t.participantType]}>{typeShortLabels[t.participantType]}</Pill>
                     </span>
                   )}
                 </td>
-                <td className={`${tdClass} whitespace-nowrap`}>{m.course}</td>
-                <td className={`${tdClass} whitespace-nowrap`}>{yearLabel(m.year, t.participantType)}</td>
+                {t.participantType !== "startup" && <td className={`${tdClass} whitespace-nowrap`}>{m.course}</td>}
+                {t.participantType !== "startup" && <td className={`${tdClass} whitespace-nowrap`}>{yearLabel(m.year, t.participantType)}</td>}
                 <td className={`${tdClass} whitespace-nowrap text-muted`}>{formatDate(m.joinedAt)}</td>
               </tr>
             ))}

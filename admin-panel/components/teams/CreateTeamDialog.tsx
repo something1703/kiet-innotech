@@ -4,9 +4,9 @@ import { useEffect, useId, useState } from "react";
 import { Crown, Search, UserPlus, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminStudent, AdminTeam } from "@/lib/admin-types";
-import { categories, domains } from "@/lib/content";
+import { categories, departmentLabel, domains } from "@/lib/content";
 import { typeShortLabels } from "@/lib/format";
-import { categoryEligibility, limits, normaliseInstitution, TEAM_MAX_SIZE, TEAM_MIN_SIZE, yearLabel } from "@/lib/rules";
+import { categoryEligibility, limits, normaliseInstitution, TEAM_MAX_SIZE, TEAM_MIN_SIZE, teamSizeLimits, yearLabel } from "@/lib/rules";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
@@ -99,13 +99,15 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
   const [pending, setPending] = useState(false);
 
   const leader = people[0];
+  // A startup is a single entry; every other team has 2 to 5 members.
+  const [minSize, maxSize] = leader ? teamSizeLimits(leader.participantType) : [TEAM_MIN_SIZE, TEAM_MAX_SIZE];
   const eligibility = leader ? categoryEligibility(category, leader.participantType, people.map((p) => p.year)) : null;
   const mismatch = leader
     ? people.slice(1).find((p) => p.participantType !== leader.participantType || (leader.participantType !== "kiet" && normaliseInstitution(p.institution) !== normaliseInstitution(leader.institution)))
     : undefined;
 
   function add(student: AdminStudent) {
-    if (people.length >= TEAM_MAX_SIZE) return;
+    if (people.length >= maxSize) return;
     setPeople((list) => [...list, student]);
   }
 
@@ -115,7 +117,8 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
     if (projectTitle.trim().length < limits.projectTitle.min) next.projectTitle = `At least ${limits.projectTitle.min} characters.`;
     if (abstract.trim().length < limits.abstract.min) next.abstract = `At least ${limits.abstract.min} characters (${abstract.trim().length} so far).`;
     if (!leader) next.members = "Add the team leader.";
-    else if (submit && people.length < TEAM_MIN_SIZE) next.members = `A submitted team needs ${TEAM_MIN_SIZE} to ${TEAM_MAX_SIZE} members.`;
+    else if (leader.participantType === "startup" && people.length > 1) next.members = "A startup is a single entry, so it has no teammates.";
+    else if (submit && people.length < minSize) next.members = `A submitted team needs ${minSize} to ${maxSize} members.`;
     else if (mismatch) next.members = `${mismatch.fullName} is not from the same college or school as the leader.`;
     if (eligibility && !eligibility.allowed) next.category = eligibility.reason;
     setErrors(next);
@@ -161,7 +164,7 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
       <div className="space-y-5">
         <section aria-labelledby="create-members" className="space-y-3">
           <h3 id="create-members" className="text-sm font-semibold text-navy-900">
-            Members <span className="font-normal text-muted">({people.length}/{TEAM_MAX_SIZE}; the first is the leader)</span>
+            Members <span className="font-normal text-muted">({people.length}/{Math.max(maxSize, people.length)}; the first is the leader)</span>
           </h3>
           {people.length > 0 && (
             <ol className="divide-y divide-line rounded-xl ring-1 ring-line">
@@ -173,7 +176,7 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
                       <span className="truncate">{p.fullName}</span>
                     </span>
                     <span className="block truncate text-xs text-muted">
-                      {p.email} · {p.participantType === "kiet" ? p.department : `${typeShortLabels[p.participantType]}, ${p.institution}`} · {yearLabel(p.year, p.participantType)}
+                      {p.email} · {p.participantType === "kiet" ? p.department : `${typeShortLabels[p.participantType]}${p.participantType === "startup" ? "" : `, ${p.institution}`}`} · {yearLabel(p.year, p.participantType)}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
@@ -195,7 +198,7 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
               ))}
             </ol>
           )}
-          {people.length < TEAM_MAX_SIZE && <StudentFinder exclude={people.map((p) => p.email.toLowerCase())} onPick={add} />}
+          {people.length < maxSize && <StudentFinder exclude={people.map((p) => p.email.toLowerCase())} onPick={add} />}
           {errors.members && <p className="text-xs font-medium text-red-700">{errors.members}</p>}
         </section>
 
@@ -213,7 +216,7 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
           <Field label="Domain" htmlFor="create-domain" className="sm:col-span-2">
             <Select id="create-domain" value={domain} onChange={(e) => setDomain(e.target.value)}>
               {domains.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>
@@ -230,7 +233,7 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
             <Checkbox label="Submit it now" checked={submit} onChange={setSubmit} />
             <span>
               <span className="font-semibold text-navy-900">Submit it now</span>
-              <span className="block text-xs text-muted">Locks the team for judging. Needs {TEAM_MIN_SIZE} to {TEAM_MAX_SIZE} members. Leave unticked to create a draft.</span>
+              <span className="block text-xs text-muted">Locks the team for judging. Needs {minSize === maxSize ? `exactly ${minSize}` : `${minSize} to ${maxSize}`} {maxSize === 1 ? "member" : "members"}. Leave unticked to create a draft.</span>
             </span>
           </label>
         </div>

@@ -5,7 +5,7 @@ import { ShieldAlert, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import { CONFIGURED_BY_SERVER, type AdminRole, type AdminUser } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { formatDate, roleLabels } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -82,6 +82,7 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
           <Select id="role-input" value={role} onChange={(e) => setRole(e.target.value as AdminRole)}>
             <option value="admin">{roleLabels.admin}</option>
             <option value="outside_admin">{roleLabels.outside_admin} (other colleges and schools)</option>
+            <option value="startup_admin">{roleLabels.startup_admin} (startups only)</option>
             <option value="super_admin">{roleLabels.super_admin}</option>
           </Select>
         </Field>
@@ -89,7 +90,15 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
           label="Department"
           htmlFor="department-input"
           error={errors.department}
-          hint={role === "super_admin" ? "Super admins see every department." : role === "outside_admin" ? "Sees only teams and students from other colleges and schools." : "Required for department admins."}
+          hint={
+            role === "super_admin"
+              ? "Super admins see every department."
+              : role === "outside_admin"
+                ? "Sees only teams and students from other colleges and schools."
+                : role === "startup_admin"
+                  ? "Sees only startups."
+                  : "Required for department admins. Choose COE KIET / Technical Club KIET for the technical clubs' admin."
+          }
         >
           <Select
             id="department-input"
@@ -100,9 +109,9 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
             aria-invalid={errors.department ? true : undefined}
             aria-describedby={describe("department", true)}
           >
-            <option value="">{role === "super_admin" ? "All departments" : role === "outside_admin" ? "No department" : "Choose a department"}</option>
+            <option value="">{role === "super_admin" ? "All departments" : role === "outside_admin" || role === "startup_admin" ? "No department" : "Choose a department"}</option>
             {departments.map((d) => (
-              <option key={d} value={d}>{d}</option>
+              <option key={d} value={d}>{departmentLabel(d)}</option>
             ))}
           </Select>
         </Field>
@@ -189,9 +198,9 @@ export function AdminsView() {
                     </td>
                     <td className={`${tdClass} break-all`}>{admin.email}</td>
                     <td className={tdClass}>
-                      <Pill tone={admin.role === "super_admin" ? "navy" : admin.role === "outside_admin" ? "orange" : "cyan"}>{roleLabels[admin.role]}</Pill>
+                      <Pill tone={admin.role === "super_admin" ? "navy" : admin.role === "outside_admin" ? "orange" : admin.role === "startup_admin" ? "violet" : "cyan"}>{roleLabels[admin.role]}</Pill>
                     </td>
-                    <td className={tdClass}>{admin.department ?? <span className="text-muted">{admin.role === "outside_admin" ? "Other colleges & schools" : "All"}</span>}</td>
+                    <td className={tdClass}>{admin.department ? departmentLabel(admin.department) : <span className="text-muted">{admin.role === "outside_admin" ? "Other colleges & schools" : admin.role === "startup_admin" ? "Startups" : "All"}</span>}</td>
                     <td className={`${tdClass} whitespace-nowrap text-muted`}>{configured ? "Server configuration" : formatDate(admin.addedAt)}</td>
                     <td className={`${tdClass} text-right`}>
                       {self ? (
@@ -218,7 +227,7 @@ export function AdminsView() {
           onAdded={(admin) => {
             setMessage(
               `${admin.name} (${admin.email}) can now sign in as ${
-                admin.role === "super_admin" ? "a super admin" : admin.role === "outside_admin" ? "the admin for other colleges and schools" : `the ${admin.department} admin`
+                admin.role === "super_admin" ? "a super admin" : admin.role === "outside_admin" ? "the admin for other colleges and schools" : admin.role === "startup_admin" ? "the startups admin" : `the ${admin.department} admin`
               }.`,
             );
             admins.reload();

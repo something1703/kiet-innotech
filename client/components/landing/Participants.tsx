@@ -1,4 +1,5 @@
-import { ChevronRight, GraduationCap, School, University } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ChevronRight, GraduationCap, Rocket, School, University } from "lucide-react";
 import { participantTracks } from "@/lib/content";
 import { Reveal } from "@/components/ui/Reveal";
 import { Slider } from "@/components/ui/Slider";
@@ -76,6 +77,27 @@ export function Participants() {
             };
           })}
         />
+
+        <Reveal delay={200} className="mt-10">
+          <div className="flex flex-col gap-5 rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:p-7">
+            <div className="flex items-start gap-4">
+              <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-500 text-white shadow-lg shadow-accent-500/30">
+                <Rocket size={22} aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="font-display text-xl font-bold text-white">Building a startup?</h3>
+                <p className="mt-1 text-sm text-slate-300">Register it as a single entry, with no team to build, and go straight to the Grand Finale.</p>
+              </div>
+            </div>
+            <Link
+              href="/startups"
+              className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-navy-900 transition hover:bg-brand-50"
+            >
+              See how startups register
+              <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />
+            </Link>
+          </div>
+        </Reveal>
       </div>
     </Section>
   );

@@ -7,9 +7,9 @@ import { Download, Plus, X } from "lucide-react";
 import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminTeam, TeamQuery, TeamSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, departments } from "@/lib/content";
+import { categories, clubDepartment, departmentLabel, departments } from "@/lib/content";
 import { downloadTeams, downloadTeamsExcel } from "@/lib/export";
-import { formatDate, otherMemberDepartments, plural, routeLabels, statusLabels, typeShortLabels } from "@/lib/format";
+import { formatDate, otherMemberDepartments, plural, routeLabels, statusLabels, typeShortLabels, typeTones } from "@/lib/format";
 import type { ParticipantType, TeamRoute, TeamStatus } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
@@ -26,13 +26,14 @@ import { lastPage, PageSizeSelect, Pagination } from "@/components/ui/Pagination
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { yearLabel } from "@/lib/rules";
+import { scopeName } from "@/lib/scope";
 import { CreateTeamDialog } from "./CreateTeamDialog";
 import { YearChips } from "./YearChips";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { numClass, SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
 
 const statuses: TeamStatus[] = ["draft", "submitted", "withdrawn", "disqualified"];
-const types: ParticipantType[] = ["kiet", "college", "school"];
+const types: ParticipantType[] = ["kiet", "college", "school", "startup"];
 const routes: TeamRoute[] = ["department", "finale"];
 const sorts: TeamSort[] = ["code", "name", "category", "department", "status", "members", "submitted_at", "leader_year"];
 const memberYears = (team: AdminTeam) =>
@@ -43,8 +44,10 @@ export function TeamsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const outside = admin.role === "outside_admin";
-  // Super admins filter by every type; outside admins between colleges and schools.
-  const typeChoices = isSuper ? types : outside ? types.filter((t) => t !== "kiet") : [];
+  // A startup has no year of study, so a startup admin sees no year filters or columns.
+  const startupOnly = admin.role === "startup_admin";
+  // Super admins filter by every type; outside admins between colleges and schools; startup admins see one type only.
+  const typeChoices = isSuper ? types : outside ? types.filter((t) => t === "college" || t === "school") : [];
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const { params, update, reset } = useUrlParams();
@@ -113,14 +116,16 @@ export function TeamsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All participants" : outside ? "Other colleges and schools" : `${admin.department} department`}
+        eyebrow={isSuper ? "All participants" : scopeName(admin)}
         title="Teams"
         description={
           isSuper
-            ? "Every team from KIET departments, other colleges and schools."
+            ? "Every team from KIET departments, other colleges, schools and startups."
             : outside
               ? "Teams from other colleges and schools. They go straight to the Grand Finale."
-              : `Teams whose leader is a ${admin.department} student. Members may come from other branches.`
+              : admin.role === "startup_admin"
+                ? "Startup entries, one per startup. They go straight to the Grand Finale."
+                : `Teams whose leader is a ${admin.department} student. Members may come from other branches.`
         }
         actions={
           <>
@@ -151,7 +156,7 @@ export function TeamsView() {
               <Select id="filter-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
                 <option value="">All departments</option>
                 {departments.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>{departmentLabel(d)}</option>
                 ))}
               </Select>
             </Field>
@@ -172,22 +177,26 @@ export function TeamsView() {
               ))}
             </Select>
           </Field>
-          <Field label="Has a member in" htmlFor="filter-year">
-            <Select id="filter-year" value={query.year ?? ""} onChange={(e) => update({ year: e.target.value })}>
-              <option value="">Any year</option>
-              {yearChoices.map((y) => (
-                <option key={y.value} value={y.value}>{y.label}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Leader's year" htmlFor="filter-leader-year">
-            <Select id="filter-leader-year" value={query.leaderYear ?? ""} onChange={(e) => update({ leader_year: e.target.value })}>
-              <option value="">Any year</option>
-              {yearChoices.map((y) => (
-                <option key={y.value} value={y.value}>{y.label}</option>
-              ))}
-            </Select>
-          </Field>
+          {!startupOnly && (
+            <>
+              <Field label="Has a member in" htmlFor="filter-year">
+                <Select id="filter-year" value={query.year ?? ""} onChange={(e) => update({ year: e.target.value })}>
+                  <option value="">Any year</option>
+                  {yearChoices.map((y) => (
+                    <option key={y.value} value={y.value}>{y.label}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Leader's year" htmlFor="filter-leader-year">
+                <Select id="filter-leader-year" value={query.leaderYear ?? ""} onChange={(e) => update({ leader_year: e.target.value })}>
+                  <option value="">Any year</option>
+                  {yearChoices.map((y) => (
+                    <option key={y.value} value={y.value}>{y.label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </>
+          )}
           {typeChoices.length > 0 && (
             <Field label="Participant type" htmlFor="filter-type">
               <Select id="filter-type" value={query.type ?? ""} onChange={(e) => update({ type: e.target.value })}>
@@ -285,9 +294,9 @@ export function TeamsView() {
                   <SortableTh label="Code" sortKey="code" {...sortProps} />
                   <SortableTh label="Team" sortKey="name" {...sortProps} />
                   <SortableTh label="Cat." sortKey="category" {...sortProps} />
-                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : "Department"} sortKey="department" {...sortProps} />
+                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : startupOnly ? "Startup" : "Department"} sortKey="department" {...sortProps} />
                   <SortableTh label="Members" sortKey="members" {...sortProps} className={numClass} />
-                  <SortableTh label="Years" sortKey="leader_year" {...sortProps} />
+                  {!startupOnly && <SortableTh label="Years" sortKey="leader_year" {...sortProps} />}
                   <SortableTh label="Status" sortKey="status" {...sortProps} />
                   <SortableTh label="Submitted" sortKey="submitted_at" {...sortProps} />
                   <Th>Result</Th>
@@ -319,6 +328,7 @@ export function TeamsView() {
                         {team.department ? (
                           <>
                             <span className="font-medium">{team.department}</span>
+                            {team.department === clubDepartment && leader?.club && <span className="block text-xs text-muted">{leader.club}</span>}
                             {otherMemberDepartments(team).length > 0 && (
                               <span className="block text-xs text-muted">+ {otherMemberDepartments(team).join(", ")}</span>
                             )}
@@ -328,7 +338,7 @@ export function TeamsView() {
                         )}
                         {typeChoices.length > 0 && (
                           <span className="mt-0.5 flex gap-1">
-                            <Pill tone={team.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[team.participantType]}</Pill>
+                            <Pill tone={typeTones[team.participantType]}>{typeShortLabels[team.participantType]}</Pill>
                             {team.route === "finale" && <Pill tone="orange">Direct to finale</Pill>}
                           </span>
                         )}
@@ -337,9 +347,11 @@ export function TeamsView() {
                         {team.members.length}
                         {team.invitations.length > 0 && <span className="block text-xs text-muted">+{team.invitations.length} invited</span>}
                       </td>
-                      <td className={tdClass}>
-                        <YearChips years={memberYears(team)} type={team.participantType} />
-                      </td>
+                      {!startupOnly && (
+                        <td className={tdClass}>
+                          <YearChips years={memberYears(team)} type={team.participantType} />
+                        </td>
+                      )}
                       <td className={tdClass}>
                         <StatusPill status={team.status} />
                       </td>

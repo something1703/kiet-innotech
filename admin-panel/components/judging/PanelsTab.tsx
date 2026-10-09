@@ -6,7 +6,7 @@ import { Crown, MapPin, Pencil, Plus, Trash2, UserCog, Users } from "lucide-reac
 import { api, errorMessage } from "@/lib/api";
 import type { Judging, Juror, Panel, TeamSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, departments } from "@/lib/content";
+import { categories, departmentLabel, departments } from "@/lib/content";
 import { categoryTitle, plural } from "@/lib/format";
 import { teamHref } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
@@ -47,7 +47,7 @@ export function PanelsTab({ judging, reload }: { judging: Judging; reload: () =>
             <Select id="rooms-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
               <option value="">All departments</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>
@@ -344,7 +344,7 @@ function PanelFormDialog({
             <Select id="panel-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
               <option value="">Choose a department</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>

@@ -17,8 +17,8 @@ export const statusSeries: Series<TeamStatus>[] = [
   { key: "disqualified", label: "Disqualified", color: "#d03b3b" },
 ];
 
-/** Participant type is identity: categorical slots 1 to 3. */
-export const typeColors: Record<ParticipantType, string> = { kiet: "#2a78d6", college: "#eb6834", school: "#1baf7a" };
+/** Participant type is identity: categorical slots 1 to 3, and purple (slot 7) for startups: at least 13 apart from the others when colour-blind. */
+export const typeColors: Record<ParticipantType, string> = { kiet: "#2a78d6", college: "#eb6834", school: "#1baf7a", startup: "#4a3aa7" };
 
 /** Categorical slots in their validated order, for charts whose series are just different things. */
 export const categorical = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];

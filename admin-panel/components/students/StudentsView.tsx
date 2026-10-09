@@ -6,10 +6,11 @@ import { Download, ShieldCheck, ShieldX, UserPlus, X } from "lucide-react";
 import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminStudent, StudentQuery, StudentSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { departments } from "@/lib/content";
+import { clubDepartment, departmentLabel, departments } from "@/lib/content";
 import { downloadStudents, downloadStudentsExcel } from "@/lib/export";
-import { formatDate, plural, typeShortLabels } from "@/lib/format";
+import { formatDate, plural, typeShortLabels, typeTones } from "@/lib/format";
 import { collegeYears, schoolClasses, yearLabel } from "@/lib/rules";
+import { isTypeAdmin, scopeName } from "@/lib/scope";
 import type { ParticipantType } from "@/lib/types";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
@@ -30,7 +31,7 @@ import { Pill, StatusPill } from "@/components/ui/Pill";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { SortableTh, TableFrame, tdClass, Th } from "@/components/ui/Table";
 
-const types: ParticipantType[] = ["kiet", "college", "school"];
+const types: ParticipantType[] = ["kiet", "college", "school", "startup"];
 const sorts: StudentSort[] = ["name", "email", "department", "year", "institution", "created_at"];
 const studentKey = (student: AdminStudent) => student.userId;
 
@@ -38,7 +39,10 @@ export function StudentsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const outside = admin.role === "outside_admin";
-  const typeChoices = isSuper ? types : outside ? types.filter((t) => t !== "kiet") : [];
+  const typeChoices = isSuper ? types : outside ? types.filter((t) => t === "college" || t === "school") : [];
+  const typeLimited = isTypeAdmin(admin);
+  // A startup has no year of study or roll number, so a startup admin sees neither.
+  const startupOnly = admin.role === "startup_admin";
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
@@ -105,14 +109,16 @@ export function StudentsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All participants" : outside ? "Other colleges and schools" : `${admin.department} department`}
+        eyebrow={isSuper ? "All participants" : scopeName(admin)}
         title="Students"
         description={
           isSuper
             ? "Everyone who has registered, whether or not they have joined a team."
             : outside
               ? "Students from other colleges and schools, whether or not they have joined a team."
-            : `KIET students registered in ${admin.department}, including those in teams led by other departments.`
+              : admin.role === "startup_admin"
+                ? "Startups that have registered, with the person to contact for each."
+                : `KIET students registered in ${admin.department}, including those in teams led by other departments.`
         }
         actions={
           <>
@@ -154,18 +160,20 @@ export function StudentsView() {
               <Select id="filter-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
                 <option value="">All departments</option>
                 {departments.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>{departmentLabel(d)}</option>
                 ))}
               </Select>
             </Field>
           )}
-          <Field label="Year / class" htmlFor="filter-year">
-            <Select id="filter-year" value={query.year ?? ""} onChange={(e) => update({ year: e.target.value })}>
-              <option value="">Any year</option>
-              {showYears && collegeYears.map((y) => <option key={y} value={y}>{yearLabel(y)}</option>)}
-              {showClasses && schoolClasses.map((y) => <option key={y} value={y}>{yearLabel(y, "school")}</option>)}
-            </Select>
-          </Field>
+          {!startupOnly && (
+            <Field label="Year / class" htmlFor="filter-year">
+              <Select id="filter-year" value={query.year ?? ""} onChange={(e) => update({ year: e.target.value })}>
+                <option value="">Any year</option>
+                {showYears && collegeYears.map((y) => <option key={y} value={y}>{yearLabel(y)}</option>)}
+                {showClasses && schoolClasses.map((y) => <option key={y} value={y}>{yearLabel(y, "school")}</option>)}
+              </Select>
+            </Field>
+          )}
           <Field label="Team" htmlFor="filter-team">
             <Select id="filter-team" value={query.inTeam ?? ""} onChange={(e) => update({ team: e.target.value })}>
               <option value="">In a team or not</option>
@@ -259,9 +267,9 @@ export function StudentsView() {
                   <SortableTh label="Name" sortKey="name" {...sortProps} />
                   <SortableTh label="Email" sortKey="email" {...sortProps} />
                   <Th>Phone</Th>
-                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : "Department"} sortKey="department" {...sortProps} />
-                  <SortableTh label="Year" sortKey="year" {...sortProps} />
-                  <Th>Roll no.</Th>
+                  <SortableTh label={isSuper ? "Department / institution" : outside ? "Institution" : admin.role === "startup_admin" ? "Startup" : "Department"} sortKey="department" {...sortProps} />
+                  {!startupOnly && <SortableTh label="Year" sortKey="year" {...sortProps} />}
+                  {!startupOnly && <Th>Roll no.</Th>}
                   <Th>Team</Th>
                   <SortableTh label="Registered" sortKey="created_at" {...sortProps} />
                   {isSuper && (
@@ -273,7 +281,7 @@ export function StudentsView() {
               </thead>
               <tbody>
                 {data.items.map((s) => {
-                  const teamVisible = s.team && (isSuper || outside || s.team.department === admin.department);
+                  const teamVisible = s.team && (isSuper || typeLimited || s.team.department === admin.department);
                   return (
                     <tr key={s.userId} className={selection.has(s) ? "bg-brand-50/70" : "hover:bg-surface/70"}>
                       <td className={tdClass}>
@@ -291,17 +299,20 @@ export function StudentsView() {
                       <td className={`${tdClass} whitespace-nowrap tabular-nums`}>{s.phone}</td>
                       <td className={tdClass}>
                         {s.department ?? <span className="block max-w-56">{s.institution}</span>}
+                        {s.department === clubDepartment && s.club && <span className="block text-xs text-muted">{s.club}</span>}
                         {typeChoices.length > 0 && (
                           <span className="mt-0.5 block">
-                            <Pill tone={s.participantType === "kiet" ? "navy" : "cyan"}>{typeShortLabels[s.participantType]}</Pill>
+                            <Pill tone={typeTones[s.participantType]}>{typeShortLabels[s.participantType]}</Pill>
                           </span>
                         )}
                       </td>
-                      <td className={`${tdClass} whitespace-nowrap`}>
-                        {yearLabel(s.year, s.participantType)}
-                        <span className="block text-xs text-muted">{s.course}</span>
-                      </td>
-                      <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{s.rollNumber || "—"}</td>
+                      {!startupOnly && (
+                        <td className={`${tdClass} whitespace-nowrap`}>
+                          {yearLabel(s.year, s.participantType)}
+                          {s.participantType !== "startup" && <span className="block text-xs text-muted">{s.course}</span>}
+                        </td>
+                      )}
+                      {!startupOnly && <td className={`${tdClass} whitespace-nowrap font-mono text-xs`}>{s.rollNumber || "—"}</td>}
                       <td className={`${tdClass} whitespace-nowrap`}>
                         {s.team ? (
                           <>

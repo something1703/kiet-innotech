@@ -115,6 +115,11 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
                 </a>
               </li>
             ))}
+            <li>
+              <Link href="/startups" className="relative rounded-full px-3 py-2 text-sm font-semibold text-navy-800 transition-colors hover:text-accent-500">
+                Startups
+              </Link>
+            </li>
           </ul>
         </nav>
 
@@ -184,6 +189,15 @@ export function SiteHeader({ linkBase = "" }: { linkBase?: string }) {
                 </a>
               </li>
             ))}
+            <li>
+              <Link
+                href="/startups"
+                onClick={closeMenu}
+                className="block rounded-xl px-4 py-3 text-base font-semibold text-navy-800 transition hover:bg-surface hover:text-accent-500"
+              >
+                Startups
+              </Link>
+            </li>
           </ul>
           {session ? (
             <div className="mt-4 border-t border-line pt-4">

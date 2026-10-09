@@ -72,13 +72,18 @@ export const roleLabels: Record<AdminRole | "judge", string> = {
   super_admin: "Super admin",
   admin: "Department admin",
   outside_admin: "Outside teams admin",
+  startup_admin: "Startup admin",
   judge: "Judge",
 };
+
+/** The pill colour of a participant type, matching its chart colour. */
+export const typeTones: Record<ParticipantType, "navy" | "cyan" | "orange" | "violet"> = { kiet: "navy", college: "cyan", school: "cyan", startup: "violet" };
 
 export const typeShortLabels: Record<ParticipantType, string> = {
   kiet: "KIET",
   college: "Other college",
   school: "School",
+  startup: "Startup",
 };
 
 export const auditLabels: Record<AuditAction, string> = {

@@ -2,7 +2,7 @@
  * InnoTech26 registration rules, kept in one place so the pages and the mock API agree.
  * The FastAPI backend must enforce the same rules; the frontend only uses them to guide students.
  */
-import { categories, departments } from "./content";
+import { categories, clubDepartment, departments } from "./content";
 import type { ParticipantType, Profile, ProfileInput, RegistrationState, RegistrationWindow, Team } from "./types";
 
 export type { RegistrationState };
@@ -12,6 +12,14 @@ export const KIET_INSTITUTION = "KIET Deemed to be University";
 
 export const TEAM_MIN_SIZE = 2;
 export const TEAM_MAX_SIZE = 5;
+
+/** A startup registers as a single entry; every other team has 2 to 5 members (server: rules.team_size_limits). */
+export function teamSizeLimits(type: ParticipantType): [number, number] {
+  return type === "startup" ? [1, 1] : [TEAM_MIN_SIZE, TEAM_MAX_SIZE];
+}
+
+export const STARTUP_COURSE = "Startup";
+export const CLUB_NAME_LENGTH = { min: 2, max: 80 };
 
 // Overridable at build time (deploy.sh passes REGISTRATION_OPENS/CLOSES) so the public pages agree with the server's window.
 export const REGISTRATION_OPENS = process.env.NEXT_PUBLIC_REGISTRATION_OPENS || "2026-10-03T00:00:00+05:30";
@@ -26,6 +34,7 @@ export const participantTypeLabels: Record<ParticipantType, string> = {
   kiet: "KIET student",
   college: "Other college student",
   school: "School student",
+  startup: "Startup",
 };
 
 export const kietCourses = ["B.Tech", "M.Tech", "MCA", "MBA", "B.Pharm", "M.Pharm", "Diploma", "Other"];
@@ -37,12 +46,16 @@ export function isKietEmail(email: string) {
   return email.trim().toLowerCase().endsWith(`@${KIET_EMAIL_DOMAIN}`);
 }
 
-/** A @kiet.edu account can only register as KIET; any other account can only be another college or a school. */
+/** A @kiet.edu account registers as KIET and any other account as another college or a school; anyone can be a startup. */
 export function allowedParticipantTypes(email: string): ParticipantType[] {
-  return isKietEmail(email) ? ["kiet"] : ["college", "school"];
+  return isKietEmail(email) ? ["kiet", "startup"] : ["college", "school", "startup"];
 }
 
+/** The student types (everything except a startup), in the order they are offered. */
+export const studentTypes: ParticipantType[] = ["kiet", "college", "school"];
+
 export function yearLabel(year: number, type: ParticipantType = "kiet") {
+  if (type === "startup") return "Startup";
   if (type === "school") return `Class ${year}`;
   const suffix = year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th";
   return `${year}${suffix} year`;
@@ -134,13 +147,15 @@ export function categoryEligibility(categoryNumber: number, type: ParticipantTyp
 
 // ---------- Team checks ----------
 
-export function openSlots(team: Pick<Team, "members" | "invitations">) {
-  return TEAM_MAX_SIZE - team.members.length - team.invitations.length;
+export function openSlots(team: Pick<Team, "members" | "invitations"> & { participantType?: ParticipantType }) {
+  const max = team.participantType ? teamSizeLimits(team.participantType)[1] : TEAM_MAX_SIZE;
+  return max - team.members.length - team.invitations.length;
 }
 
 /** Returns why `invitee` cannot be invited to `team`, or null if they can. */
 export function inviteError(team: Team, invitee: Profile | null, inviteeHasTeam: boolean): string | null {
   if (team.status !== "draft") return "This team has been submitted and can no longer be changed.";
+  if (team.participantType === "startup") return "A startup registers as a single entry, so it has no teammates.";
   if (openSlots(team) <= 0) return `A team can have at most ${TEAM_MAX_SIZE} members, including pending invitations.`;
   if (!invitee) return "No registered student uses this email. Ask them to sign in and complete their profile first.";
   if (team.members.some((m) => m.userId === invitee.userId)) return "This student is already in your team.";
@@ -161,6 +176,14 @@ export type Check = { label: string; ok: boolean };
 export function submissionChecks(team: Team, registration: RegistrationState | null): Check[] {
   const size = team.members.length;
   const eligibility = categoryEligibility(team.category, team.participantType, team.members.map((m) => m.year));
+  if (team.participantType === "startup") {
+    // One entry, no teammates and no invitations: only the category, the project and the window matter.
+    return [
+      { label: "The chosen category suits your entry", ok: eligibility.allowed },
+      { label: "Project title and abstract are filled in", ok: team.projectTitle.trim().length > 0 && team.abstract.trim().length > 0 },
+      { label: "Registration is open", ok: registration === "open" },
+    ];
+  }
   return [
     { label: `${TEAM_MIN_SIZE} to ${TEAM_MAX_SIZE} members have joined`, ok: size >= TEAM_MIN_SIZE && size <= TEAM_MAX_SIZE },
     { label: "No invitations are still pending", ok: team.invitations.length === 0 },
@@ -225,8 +248,18 @@ export function profileErrors(input: ProfileInput, email: string): Partial<Recor
       : "KIET students must sign in with their official @kiet.edu email.";
   }
 
+  if (input.participantType === "startup") {
+    const name = input.institution.trim().replace(/\s+/g, " ");
+    if (name.length < 2) errors.institution = "Enter the name of your startup.";
+    else if (name.length > profileMaxLength.institution) errors.institution = `The name must be at most ${profileMaxLength.institution} characters.`;
+    return errors;
+  }
   if (input.participantType === "kiet") {
     if (!input.department || !departments.includes(input.department)) errors.department = "Choose your department.";
+    if (input.department === clubDepartment) {
+      const club = (input.club ?? "").trim().replace(/\s+/g, " ");
+      if (club.length < CLUB_NAME_LENGTH.min || club.length > CLUB_NAME_LENGTH.max) errors.club = "Enter the name of your technical club.";
+    }
     if (!kietCourses.includes(input.course)) errors.course = "Choose your course.";
     if (!collegeYears.includes(input.year)) errors.year = "Choose your year of study.";
     // Any format (MCA and MBA numbers differ from B.Tech ones); still required.

@@ -6,11 +6,12 @@ import { ArrowRight, X } from "lucide-react";
 import { api, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminTeam, TeamQuery } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, departments } from "@/lib/content";
+import { categories, departmentLabel, departments } from "@/lib/content";
 import { categoryTitle, dayHeading, formatTime, istDayKey, plural, typeShortLabels } from "@/lib/format";
 import { teamHref } from "@/lib/routes";
 import { yearLabel } from "@/lib/rules";
 import type { ParticipantType } from "@/lib/types";
+import { scopeName } from "@/lib/scope";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +29,7 @@ export function SubmissionsView() {
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const outside = admin.role === "outside_admin";
-  const types: ParticipantType[] = isSuper ? ["kiet", "college", "school"] : outside ? ["college", "school"] : [];
+  const types: ParticipantType[] = isSuper ? ["kiet", "college", "school", "startup"] : outside ? ["college", "school"] : [];
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
 
@@ -59,7 +60,7 @@ export function SubmissionsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "All participants" : outside ? "Other colleges and schools" : `${admin.department} department`}
+        eyebrow={isSuper ? "All participants" : scopeName(admin)}
         title="Submissions"
         description="Every submitted team, newest first. Submitted teams are locked and take part in judging."
         actions={
@@ -97,7 +98,7 @@ export function SubmissionsView() {
               <Select id="sub-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
                 <option value="">All departments</option>
                 {departments.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>{departmentLabel(d)}</option>
                 ))}
               </Select>
             </Field>

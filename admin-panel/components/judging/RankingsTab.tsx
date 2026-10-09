@@ -6,7 +6,7 @@ import { Medal } from "lucide-react";
 import { api } from "@/lib/api";
 import type { JudgingRound } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { teamHref } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -36,7 +36,7 @@ export function RankingsTab({ round }: { round: JudgingRound }) {
             <Select id="rank-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
               <option value="">All</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>

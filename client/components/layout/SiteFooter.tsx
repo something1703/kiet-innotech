@@ -69,6 +69,9 @@ export function SiteFooter({ linkBase = "" }: { linkBase?: string }) {
               </li>
             ))}
             <li>
+              <a href="/startups" className="transition-colors hover:text-brand-400">Startups</a>
+            </li>
+            <li>
               <a href="/register" className="transition-colors hover:text-brand-400">Register</a>
             </li>
             <li>

@@ -6,7 +6,7 @@ import { Send, Undo2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { FinalistSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { categories, departments } from "@/lib/content";
+import { categories, departmentLabel, departments } from "@/lib/content";
 import { formatDateTime, formatIst, typeShortLabels } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { teamHref } from "@/lib/routes";
@@ -248,7 +248,7 @@ function SuperAdminFinalists() {
           <Field label="Department" htmlFor="board-department" className="sm:w-56">
             <Select id="board-department" value={department} onChange={(e) => switchTo(e.target.value)}>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>{departmentLabel(d)}</option>
               ))}
             </Select>
           </Field>

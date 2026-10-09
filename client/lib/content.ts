@@ -396,16 +396,23 @@ export const departments = [
   "MCA",
   "KSOM",
   "KSOP",
+  "COE",
 ];
 
+/** COE KIET / technical clubs: a department of its own. Its students also give their club's name. */
+export const clubDepartment = "COE";
+
+/** The departments the prize pool counts. COE is not one of them (its prizes are not part of the published pool). */
+export const prizeDepartments = departments.filter((d) => d !== clubDepartment);
+
 /** What a department is called in dropdowns. The stored value stays the code, e.g. KSOM. */
-const departmentLabels: Record<string, string> = { KSOM: "MBA (KSOM)" };
+const departmentLabels: Record<string, string> = { KSOM: "MBA (KSOM)", COE: "COE KIET / Technical Club KIET" };
 export const departmentLabel = (department: string) => departmentLabels[department] ?? department;
 
 /** Cash totals per level, from the prize tables above; the department pool counts every department. */
 export const prizePools = {
   institute: institutePrizes.reduce((sum, p) => sum + p.awards * (p.first + p.second), 0),
-  department: departments.length * departmentPrizes.reduce((sum, p) => sum + p.awards * p.first, 0),
+  department: prizeDepartments.length * departmentPrizes.reduce((sum, p) => sum + p.awards * p.first, 0),
 };
 
 type Criterion = { title: string; parts?: string[] };

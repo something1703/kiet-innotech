@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { GraduationCap, School, University } from "lucide-react";
-import { departmentLabel, departments } from "@/lib/content";
+import { clubDepartment, departmentLabel, departments } from "@/lib/content";
 import { clearDraft, hasDraft, readDraft, writeDraft } from "@/lib/drafts";
 import { accountName } from "@/lib/format";
+import { clearStartupIntent, hasStartupIntent } from "@/lib/startup";
 import {
   KIET_INSTITUTION,
   allowedParticipantTypes,
@@ -19,13 +20,17 @@ import {
 } from "@/lib/rules";
 import type { ParticipantType, Profile, ProfileInput } from "@/lib/types";
 import { Button, Field, Input, Notice, Select } from "@/components/ui/form";
+import { AudienceSwitch, type Audience } from "./AudienceSwitch";
+import { ClubDialog } from "./ClubDialog";
 
 const typeIcons = { kiet: University, college: GraduationCap, school: School };
-const typeNotes: Record<ParticipantType, string> = {
+const typeNotes: Partial<Record<ParticipantType, string>> = {
   kiet: "Department round, then the Grand Finale",
   college: "Straight to the Grand Finale, any category",
   school: "Straight to the Grand Finale, any category",
 };
+
+
 
 type ProfileFormProps = {
   email: string;
@@ -45,10 +50,11 @@ type ProfileFormProps = {
 
 function initialValues(email: string, defaultName: string, profile: Profile | null): ProfileInput {
   if (profile) {
-    const { fullName, phone, participantType, institution, city, department, course, year, rollNumber } = profile;
-    return { fullName, phone, participantType, institution, city, department, course, year, rollNumber };
+    const { fullName, phone, participantType, institution, city, department, course, year, rollNumber, club } = profile;
+    return { fullName, phone, participantType, institution, city, department, course, year, rollNumber, club: club ?? "" };
   }
-  const participantType = allowedParticipantTypes(email)[0];
+  // Set by the Startups page, so the form opens on the Startup side for someone who came to register one.
+  const participantType = hasStartupIntent() ? "startup" : allowedParticipantTypes(email)[0];
   return {
     fullName: accountName(defaultName, email),
     phone: "",
@@ -59,6 +65,7 @@ function initialValues(email: string, defaultName: string, profile: Profile | nu
     course: "",
     year: 0,
     rollNumber: "",
+    club: "",
   };
 }
 
@@ -74,6 +81,9 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
   const [errors, setErrors] = useState<Partial<Record<keyof ProfileInput, string>>>({});
   const [confirmed, setConfirmed] = useState(profile !== null);
   const [confirmError, setConfirmError] = useState(false);
+  const [clubOpen, setClubOpen] = useState(false);
+  // What was filled in on the Student side, so sliding to Startup and back loses nothing.
+  const studentSnapshot = useRef<ProfileInput | null>(null);
 
   // Keep unsaved changes, so an expired session does not lose them.
   useEffect(() => {
@@ -89,9 +99,35 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
   };
 
   const chooseType = (next: ParticipantType) => {
-    setValues((v) => ({ ...v, participantType: next, course: "", year: 0, institution: next === "kiet" ? KIET_INSTITUTION : "", department: null }));
+    setValues((v) => ({ ...v, participantType: next, course: "", year: 0, institution: next === "kiet" ? KIET_INSTITUTION : "", department: null, club: "" }));
     setErrors({});
     setDirty(true);
+  };
+
+  const audience: Audience = type === "startup" ? "startup" : "student";
+  const chooseAudience = (next: Audience) => {
+    if (next === audience) return;
+    if (next === "startup") {
+      studentSnapshot.current = values;
+      setValues((v) => ({ ...v, participantType: "startup", institution: "", city: "", department: null, course: "", year: 0, rollNumber: "", club: "" }));
+    } else {
+      const studentType = types.find((t) => t !== "startup") ?? "college";
+      const saved = studentSnapshot.current;
+      setValues((v) =>
+        saved && saved.participantType !== "startup"
+          ? { ...saved, fullName: v.fullName, phone: v.phone }
+          : { ...v, participantType: studentType, institution: studentType === "kiet" ? KIET_INSTITUTION : "", city: "", department: null, course: "", year: 0, rollNumber: "", club: "" },
+      );
+    }
+    setErrors({});
+    setDirty(true);
+  };
+
+  // Picking COE KIET / Technical Club KIET asks for the club's name straight away.
+  const chooseDepartment = (department: string) => {
+    set("department", department || null);
+    if (department === clubDepartment) setClubOpen(true);
+    else set("club", "");
   };
 
   const cancel = () => {
@@ -110,6 +146,7 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
     }
     if (await onSubmit(values)) {
       clearDraft(draftKey);
+      clearStartupIntent();
       setDirty(false);
     }
   };
@@ -120,6 +157,19 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
     <form onSubmit={submit} noValidate className="space-y-8">
       {restored && <Notice tone="info">We kept the changes you had not saved yet. Check them and save.</Notice>}
 
+      <fieldset>
+        <legend className="mb-3 text-sm font-semibold text-navy-800">Register as</legend>
+        <AudienceSwitch value={audience} onChange={chooseAudience} disabled={lockInstitution} />
+        <p className="mt-3 text-sm text-muted">
+          {lockInstitution
+            ? "Locked while you are in a team."
+            : audience === "startup"
+              ? "One entry for your startup. No team to build: add your project after this and submit it."
+              : "Students of KIET, other colleges and schools register here and form a team of 2 to 5."}
+        </p>
+      </fieldset>
+
+      {audience === "student" && (
       <fieldset>
         <legend className="mb-3 text-sm font-semibold text-navy-800">I am a</legend>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -159,9 +209,15 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
         </p>
         {errors.participantType && <p className="mt-2 text-sm font-medium text-red-700">{errors.participantType}</p>}
       </fieldset>
+      )}
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <Field id="fullName" label="Full name" error={errors.fullName} hint="As it should appear on your certificate.">
+        {type === "startup" && (
+          <Field id="institution" label="Startup name" error={errors.institution} className="sm:col-span-2" hint={lockInstitution ? "Locked while you are in a team." : "How your startup should appear on the event pages and certificates."}>
+            <Input id="institution" value={values.institution} invalid={!!errors.institution} maxLength={profileMaxLength.institution} disabled={lockInstitution} onChange={(e) => set("institution", e.target.value)} autoComplete="organization" />
+          </Field>
+        )}
+        <Field id="fullName" label={type === "startup" ? "Your name" : "Full name"} error={errors.fullName} hint={type === "startup" ? "The person we contact about this entry." : "As it should appear on your certificate."}>
           <Input id="fullName" value={values.fullName} invalid={!!errors.fullName} maxLength={profileMaxLength.fullName} onChange={(e) => set("fullName", e.target.value)} autoComplete="name" />
         </Field>
         <Field id="email" label="Email" hint="From your Google account.">
@@ -171,10 +227,10 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
           <Input id="phone" type="tel" inputMode="numeric" value={values.phone} invalid={!!errors.phone} maxLength={profileMaxLength.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel-national" placeholder="98XXXXXXXX" />
         </Field>
 
-        {type === "kiet" ? (
+        {type === "startup" ? null : type === "kiet" ? (
           <>
             <Field id="department" label="Department" error={errors.department} hint={lockInstitution ? "Locked while you are in a team." : undefined}>
-              <Select id="department" value={values.department ?? ""} invalid={!!errors.department} disabled={lockInstitution} onChange={(e) => set("department", e.target.value || null)}>
+              <Select id="department" value={values.department ?? ""} invalid={!!errors.department} disabled={lockInstitution} onChange={(e) => chooseDepartment(e.target.value)}>
                 <option value="">Choose department</option>
                 {departments.map((d) => (
                   <option key={d} value={d}>
@@ -183,6 +239,11 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
                 ))}
               </Select>
             </Field>
+            {values.department === clubDepartment && (
+              <Field id="club" label="Technical club" error={errors.club} hint="The club you are part of in COE KIET.">
+                <Input id="club" value={values.club} invalid={!!errors.club} maxLength={80} autoComplete="off" onChange={(e) => set("club", e.target.value)} placeholder="e.g. Robotics Club" />
+              </Field>
+            )}
             <Field id="course" label="Course" error={errors.course}>
               <Select id="course" value={values.course} invalid={!!errors.course} onChange={(e) => set("course", e.target.value)}>
                 <option value="">Choose course</option>
@@ -255,6 +316,16 @@ export function ProfileForm({ email, defaultName, profile, lockInstitution = fal
       )}
 
       {error && <Notice tone="error">{error}</Notice>}
+
+      <ClubDialog
+        open={clubOpen}
+        initial={values.club}
+        onClose={() => setClubOpen(false)}
+        onSave={(club) => {
+          set("club", club);
+          setClubOpen(false);
+        }}
+      />
 
       <div className="flex flex-wrap gap-3">
         <Button type="submit" pending={pending}>

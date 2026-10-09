@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { resultLabels, statusLabels } from "@/lib/format";
 import type { TeamResult, TeamStatus } from "@/lib/types";
 
-export type PillTone = "slate" | "green" | "red" | "orange" | "cyan" | "navy";
+export type PillTone = "slate" | "green" | "red" | "orange" | "cyan" | "navy" | "violet";
 
 const tones: Record<PillTone, string> = {
   slate: "bg-slate-100 text-slate-700 ring-slate-200",
@@ -11,6 +11,7 @@ const tones: Record<PillTone, string> = {
   orange: "bg-accent-50 text-accent-600 ring-accent-100",
   cyan: "bg-brand-50 text-brand-700 ring-brand-100",
   navy: "bg-navy-900 text-white ring-navy-900",
+  violet: "bg-violet-50 text-violet-700 ring-violet-200",
 };
 
 export function Pill({ tone = "slate", children }: { tone?: PillTone; children: ReactNode }) {

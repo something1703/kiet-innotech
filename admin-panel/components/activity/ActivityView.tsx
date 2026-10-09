@@ -5,8 +5,9 @@ import { X } from "lucide-react";
 import { api, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { ActivityKind, ActivityQuery, AuditEntry } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { departments } from "@/lib/content";
+import { departmentLabel, departments } from "@/lib/content";
 import { dayHeading, istDayKey, plural } from "@/lib/format";
+import { scopeName } from "@/lib/scope";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pageSizeParam, pickParam, useUrlParams } from "@/lib/use-url-params";
 import { AuditList } from "@/components/audit/AuditList";
@@ -58,7 +59,7 @@ export function ActivityView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={isSuper ? "Institute-wide" : admin.role === "outside_admin" ? "Other colleges and schools" : `${admin.department} department`}
+        eyebrow={isSuper ? "Institute-wide" : scopeName(admin)}
         title="Activity"
         description="The audit log: every change by students, organisers and judges, with who made it and when (IST)."
       />
@@ -79,7 +80,7 @@ export function ActivityView() {
               <Select id="activity-department" value={query.department ?? ""} onChange={(e) => update({ department: e.target.value })}>
                 <option value="">All departments and institute-wide</option>
                 {departments.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>{departmentLabel(d)}</option>
                 ))}
               </Select>
             </Field>

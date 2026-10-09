@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { api } from "@/lib/api";
+import { departmentLabel } from "@/lib/content";
 import { draftKeys, hasDraft } from "@/lib/drafts";
 import { participantTypeLabels, yearLabel } from "@/lib/rules";
 import type { Profile } from "@/lib/types";
@@ -47,7 +48,7 @@ export default function ProfilePage() {
         }
       >
         {participantTypeLabels[profile.participantType]}
-        {profile.department ? `, ${profile.department}` : ""}. Registered with {profile.email}.
+        {profile.department ? `, ${departmentLabel(profile.department)}` : ""}. Registered with {profile.email}.
       </PageHeading>
 
       {saved && (
@@ -61,7 +62,9 @@ export default function ProfilePage() {
           <>
             {team && (
               <Notice tone="info" className="mb-8">
-                You are in team {team.name}, so your college or school, department and year can no longer be changed.
+                {profile.participantType === "startup"
+                  ? `You have created the entry ${team.name}, so your startup name can no longer be changed.`
+                  : `You are in team ${team.name}, so your college or school, department and year can no longer be changed.`}
               </Notice>
             )}
             <ProfileForm
@@ -87,13 +90,21 @@ export default function ProfilePage() {
 
 function ProfileDetails({ profile }: { profile: Profile }) {
   const school = profile.participantType === "school";
-  const rows: [string, string][] = [
+  const startupRows: [string, string][] = [
+    ["Startup name", profile.institution],
+    ["Contact person", profile.fullName],
+    ["Email", profile.email],
+    ["Mobile number", profile.phone],
+    ["Registered as", participantTypeLabels.startup],
+  ];
+  const rows: [string, string][] = profile.participantType === "startup" ? startupRows : [
     ["Full name", profile.fullName],
     ["Email", profile.email],
     ["Mobile number", profile.phone],
     ["Participant type", participantTypeLabels[profile.participantType]],
     [school ? "School" : "College", profile.institution],
-    ...(profile.department ? ([["Department", profile.department]] as [string, string][]) : []),
+    ...(profile.department ? ([["Department", departmentLabel(profile.department)]] as [string, string][]) : []),
+    ...(profile.club ? ([["Technical club", profile.club]] as [string, string][]) : []),
     ["City", profile.city],
     ...(!school ? ([["Course", profile.course]] as [string, string][]) : []),
     [school ? "Class" : "Year", yearLabel(profile.year, profile.participantType)],

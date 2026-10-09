@@ -108,6 +108,16 @@ def test_coe_students_give_their_club(as_user):
     assert api.get("/me").json()["profile"]["club"] == "Robotics Club"
 
 
+def test_coe_is_for_kiet_accounts_only_and_startups_for_any_account(as_user):
+    # COE KIET is a KIET department, so it needs a @kiet.edu account; a startup can use any account.
+    for email in ("someone@gmail.com", "x@kiet.edu.in", "x@notkiet.edu"):
+        response = as_user(email).put("/me/profile", club_profile())
+        assert response.status_code == 422 and "official @kiet.edu email" in response.json()["detail"], (email, response.json())
+    assert as_user("coe@kiet.edu").put("/me/profile", club_profile()).status_code == 200
+    for email in ("founder@gmail.com", "founder@outlook.com", "founder@kiet.edu"):
+        assert as_user(email).put("/me/profile", startup_profile(name=f"Startup {email[:6]}")).status_code == 200
+
+
 def test_coe_without_a_club_is_refused_and_other_departments_drop_it(as_user):
     for club in ("", " ", "A"):
         response = as_user("coe@kiet.edu").put("/me/profile", club_profile(club=club))
@@ -223,3 +233,17 @@ def test_organiser_creates_and_submits_a_startup_entry(as_user):
     response = root.post("/admin/teams", {**team_input(name="Greenloop Labs"), "leader_email": "founder@gmail.com", "member_emails": [], "submit": True})
     assert response.status_code == 201, response.json()
     assert (response.json()["status"], response.json()["participant_type"]) == ("submitted", "startup")
+
+
+def test_submitted_startups_join_the_grand_finale_judging_pool(as_user):
+    root = as_user("root@kiet.edu")
+    founder = as_user("founder@gmail.com")
+    founder.put("/me/profile", startup_profile())
+    team = founder.post("/teams", team_input(name="Greenloop Labs")).json()
+    # A draft is not judged yet.
+    assert root.get("/admin/judging/final").json()["unallotted"] == []
+    assert founder.post(f"/teams/{team['id']}/submit").status_code == 200
+    make_admin(root, "startups@gmail.com", "startup_admin")
+    for who in (root, as_user("startups@gmail.com")):
+        pool = who.get("/admin/judging/final").json()["unallotted"]
+        assert [t["name"] for t in pool] == ["Greenloop Labs"]
