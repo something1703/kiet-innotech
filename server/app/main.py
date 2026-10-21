@@ -9,7 +9,7 @@ from sqlalchemy import text
 from .config import get_settings
 from .db import get_engine
 from .errors import register_error_handlers
-from .routers import admin, auth, dev, judge, public, students
+from .routers import admin, auth, dev, judge, public, sandbox, students
 
 
 def create_app() -> FastAPI:
@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(students.router)
     app.include_router(admin.router)
     app.include_router(judge.router)
+    app.include_router(sandbox.router)
     if settings.environment == "development" and settings.dev_sign_in:
         app.include_router(dev.router)
     return app

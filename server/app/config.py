@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Development only: POST /dev/token signs anyone in without Google.
     dev_sign_in: bool = False
 
+    # A practice copy of the event for demonstrations, never for the real one: organisers and judges sign in with an access
+    # code instead of Google, and the sandbox can reset its own made-up data. See app/services/sandbox.py.
+    sandbox_mode: bool = False
+    sandbox_access_code: str = ""
+
     # These accounts are always super admins, so the first admin can sign in and add the others.
     super_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
@@ -93,6 +98,13 @@ class Settings(BaseSettings):
             # A forgotten EMAIL_BACKEND would silently turn every email into a log line.
             if "email_backend" not in self.model_fields_set:
                 raise ValueError('EMAIL_BACKEND must be set explicitly in production ("ses", or "log" until SES is ready).')
+        if self.sandbox_mode:
+            if len(self.sandbox_access_code) < 12:
+                raise ValueError("SANDBOX_ACCESS_CODE must be at least 12 characters when SANDBOX_MODE is on.")
+            if not self.super_admin_emails:
+                raise ValueError("SANDBOX_MODE needs SUPER_ADMIN_EMAILS: the people who can sign in to the sandbox.")
+            if self.email_backend != "log":
+                raise ValueError('The sandbox has made-up students, so EMAIL_BACKEND must be "log".')
         if self.email_backend == "ses" and not self.ses_region:
             raise ValueError("SES_REGION is required when EMAIL_BACKEND=ses.")
         if not self.session_secret and self.environment != "production":

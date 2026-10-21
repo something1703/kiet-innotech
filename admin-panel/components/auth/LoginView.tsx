@@ -7,9 +7,11 @@ import { demoAdmins } from "@/lib/api/demo-admins";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { GOOGLE_CLIENT_ID } from "@/lib/auth/google";
-import { API_MODE, DEV_SIGN_IN } from "@/lib/auth/session";
-import { googleSignIn, safeNext } from "@/lib/auth/sign-in";
+import { API_MODE, DEV_SIGN_IN, SANDBOX } from "@/lib/auth/session";
+import { googleSignIn, safeNext, sandboxSignIn } from "@/lib/auth/sign-in";
 import { event, timeline } from "@/lib/content";
+import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { Brand, KietLogo } from "@/components/layout/Brand";
 import { NotAuthorised } from "@/components/layout/NotAuthorised";
@@ -31,6 +33,8 @@ export function LoginView() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState(false);
+  const [sandboxEmail, setSandboxEmail] = useState("");
+  const [sandboxCode, setSandboxCode] = useState("");
 
   useEffect(() => {
     if (state.status === "signed_in") router.replace(next);
@@ -64,8 +68,22 @@ export function LoginView() {
     }
   }
 
+  /** Sandbox: the access code, with the email of an organiser or judge there. */
+  async function sandbox() {
+    setError(null);
+    setPending("sandbox");
+    try {
+      await sandboxSignIn(sandboxEmail.trim(), sandboxCode.trim());
+      setPending(null);
+      refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+      setPending(null);
+    }
+  }
+
   const finale = timeline[timeline.length - 1];
-  const busy = state.status === "loading" || state.status === "signed_in" || pending === "google";
+  const busy = state.status === "loading" || state.status === "signed_in" || pending === "google" || pending === "sandbox";
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -96,9 +114,11 @@ export function LoginView() {
       <section className="flex items-center justify-center bg-white px-4 py-10 sm:px-10">
         <div className="w-full max-w-md">
           <KietLogo className="h-10 w-auto" />
-          <h2 className="mt-8 font-display text-2xl font-bold text-navy-900">Sign in to the admin panel</h2>
+          <h2 className="mt-8 font-display text-2xl font-bold text-navy-900">{SANDBOX ? "Sign in to the practice sandbox" : "Sign in to the admin panel"}</h2>
           <p className="mt-2 text-sm text-muted">
-            Use the Google account your coordinator registered as an admin. Student accounts cannot sign in here.
+            {SANDBOX
+              ? "This is a practice copy of the panel with made-up teams. Nothing here is real, and nothing you do changes the real event."
+              : "Use the Google account your coordinator registered as an admin. Student accounts cannot sign in here."}
           </p>
 
           {state.status === "loading" && pending === null ? (
@@ -111,7 +131,39 @@ export function LoginView() {
                 <Notice tone="info">Your session has ended. Sign in again to continue.</Notice>
               )}
 
-              {API_MODE === "live" && !DEV_SIGN_IN ? (
+              {SANDBOX ? (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void sandbox();
+                  }}
+                  className="space-y-4"
+                >
+                  <Field label="Your KIET email" htmlFor="sandbox-email">
+                    <Input
+                      id="sandbox-email"
+                      type="email"
+                      autoComplete="username"
+                      required
+                      value={sandboxEmail}
+                      onChange={(e) => setSandboxEmail(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Access code" htmlFor="sandbox-code" hint="Given to you by the organisers for this demonstration.">
+                    <Input
+                      id="sandbox-code"
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={sandboxCode}
+                      onChange={(e) => setSandboxCode(e.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit" pending={pending === "sandbox"} disabled={busy}>
+                    Enter the sandbox
+                  </Button>
+                </form>
+              ) : API_MODE === "live" && !DEV_SIGN_IN ? (
                 GOOGLE_CLIENT_ID ? (
                   <div className="space-y-3">
                     <GoogleButton onCredential={google} busy={busy} />

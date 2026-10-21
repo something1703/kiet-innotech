@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, CalendarClock, ClipboardCheck, GraduationCap, Inbox, LayoutDashboard, LogOut, Menu, QrCode, Scale, ShieldCheck, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
+import { Activity, CalendarClock, ClipboardCheck, GraduationCap, Inbox, LayoutDashboard, LogOut, Menu, QrCode, RotateCcw, Scale, ShieldCheck, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
 import { clubDepartment } from "@/lib/content";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { API_MODE } from "@/lib/auth/session";
-import { Button } from "@/components/ui/Button";
+import { API_MODE, SANDBOX } from "@/lib/auth/session";
+import { resetSandbox } from "@/lib/sandbox";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { Brand, KietLogo } from "./Brand";
 import { attendanceEnabled } from "@/lib/features";
@@ -146,6 +148,46 @@ function Account({ admin, onSignOut }: { admin: AdminUser; onSignOut: () => void
   );
 }
 
+/** Sandbox only: says the data is practice data, takes a judge to their page and lets a super admin start over. */
+function SandboxBanner({ admin }: { admin: AdminUser }) {
+  const [resetting, setResetting] = useState(false);
+  return (
+    <div role="note" className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-navy-900">
+      <p className="min-w-0 flex-1">
+        <strong>Practice sandbox.</strong> The teams, judges and marks here are made up, and nothing you do changes the real event.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {admin.judge && (
+          <ButtonLink href="/judge" size="sm" variant="secondary">
+            <ClipboardCheck aria-hidden="true" className="size-3.5" />
+            Open my judging
+          </ButtonLink>
+        )}
+        {admin.role === "super_admin" && (
+          <Button size="sm" variant="secondary" onClick={() => setResetting(true)}>
+            <RotateCcw aria-hidden="true" className="size-3.5" />
+            Reset sandbox
+          </Button>
+        )}
+      </div>
+      {resetting && (
+        <ConfirmDialog
+          title="Reset the sandbox?"
+          description="Everything entered here (marks, attendance, changes) is wiped, and ten fresh practice teams are made in one room with scoring open for at least ten hours."
+          confirmLabel="Reset sandbox"
+          tone="danger"
+          onClose={() => setResetting(false)}
+          onConfirm={async () => {
+            await resetSandbox();
+            // Every page shows the old data, so start the page afresh.
+            window.location.reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function Frame({ admin, onSignOut, children }: { admin: AdminUser; onSignOut: () => void; children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
@@ -206,7 +248,10 @@ function Frame({ admin, onSignOut, children }: { admin: AdminUser; onSignOut: ()
       </header>
 
       <main id="main" className="min-w-0 lg:pl-64">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-9">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+          {SANDBOX && <SandboxBanner admin={admin} />}
+          {children}
+        </div>
       </main>
     </div>
   );

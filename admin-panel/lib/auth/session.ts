@@ -7,6 +7,12 @@
 /** Mock data only when explicitly asked for; anything else (including unset) talks to the real backend. */
 export const API_MODE: "mock" | "live" = process.env.NEXT_PUBLIC_API_MODE === "mock" ? "mock" : "live";
 
+/**
+ * A practice copy of the panel for demonstrations (built with NEXT_PUBLIC_SANDBOX=true, against a backend that runs
+ * SANDBOX_MODE): organisers and judges sign in with an access code instead of Google, and the panel says it is practice data.
+ */
+export const SANDBOX = API_MODE === "live" && process.env.NEXT_PUBLIC_SANDBOX === "true";
+
 /** Local development against the real backend: the demo picker signs in with tokens from its /dev/token endpoint. */
 export const DEV_SIGN_IN = API_MODE === "live" && process.env.NEXT_PUBLIC_DEV_SIGN_IN === "true";
 

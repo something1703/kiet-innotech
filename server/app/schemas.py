@@ -205,6 +205,15 @@ class SessionOut(BaseModel):
     name: str
 
 
+class SandboxOut(BaseModel):
+    """What a sandbox reset made."""
+
+    teams: int
+    judges: int
+    room: str
+    note: str
+
+
 class TeamInput(Input):
     name: str = Field(max_length=rules.TEAM_NAME_LENGTH[1])
     category: int

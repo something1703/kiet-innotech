@@ -22,11 +22,16 @@
 #
 # Settings live in deploy/production.env (copy production.env.example). The script refuses to run against any AWS
 # account other than AWS_ACCOUNT_ID in that file.
+#
+# A second deployment, the practice sandbox, is the same stack under another name with its own settings file:
+#   DEPLOY_ENV=deploy/sandbox.env ./deploy.sh stack   (then api, sites; see sandbox.env.example)
+# It has its own server, database, bucket and backups, so nothing in it can reach the real event.
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$DEPLOY_DIR")"
-CONFIG="$DEPLOY_DIR/production.env"
+CONFIG="${DEPLOY_ENV:-$DEPLOY_DIR/production.env}"
+[ "${CONFIG#/}" = "$CONFIG" ] && CONFIG="$ROOT/$CONFIG"
 
 [ -f "$CONFIG" ] || { echo "Missing $CONFIG. Copy production.env.example and fill it in." >&2; exit 1; }
 set -a
@@ -215,6 +220,8 @@ SUPER_ADMIN_EMAILS=$SUPER_ADMIN_EMAILS
 REGISTRATION_OPENS=${REGISTRATION_OPENS:-2026-10-03T00:00:00+05:30}
 REGISTRATION_CLOSES=${REGISTRATION_CLOSES:-2026-10-15T23:59:59+05:30}
 ${REGISTRATION_EXTENDED_CLOSES:+REGISTRATION_EXTENDED_CLOSES=$REGISTRATION_EXTENDED_CLOSES}
+${SANDBOX_MODE:+SANDBOX_MODE=$SANDBOX_MODE}
+${SANDBOX_ACCESS_CODE:+SANDBOX_ACCESS_CODE=$SANDBOX_ACCESS_CODE}
 NOMINATIONS_DEADLINE=${NOMINATIONS_DEADLINE:-2026-10-24T18:00:00+05:30}
 RESULTS_PUBLISH_FROM=${RESULTS_PUBLISH_FROM:-2026-10-26T00:00:00+05:30}
 EMAIL_BACKEND=${EMAIL_BACKEND:-log}
@@ -247,6 +254,7 @@ build_site() {
   docker run --rm -v "$ROOT/$app:/app" -v "innotech-$app-nm:/app/node_modules" -w /app \
     -e NEXT_PUBLIC_API_MODE=live -e NEXT_PUBLIC_API_URL="$api_url" -e NEXT_PUBLIC_GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_IDS%%,*}" \
     -e NEXT_PUBLIC_REGISTRATION_OPENS="${REGISTRATION_OPENS:-}" -e NEXT_PUBLIC_REGISTRATION_CLOSES="${REGISTRATION_CLOSES:-}" \
+    -e NEXT_PUBLIC_SANDBOX="${SANDBOX_MODE:-}" \
     -e NEXT_TELEMETRY_DISABLED=1 node:22-alpine sh -c "npm ci --no-audit --no-fund && npm run build"
 }
 

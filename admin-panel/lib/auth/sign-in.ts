@@ -20,6 +20,11 @@ export async function googleSignIn(credential: string) {
   startSession((await send("POST", "/auth/google", { body: { credential, app: APP } })) as SessionResponse);
 }
 
+/** Sandbox only: the access code stands in for Google. 403 = wrong code, or not an organiser or judge there. */
+export async function sandboxSignIn(email: string, code: string) {
+  startSession((await send("POST", "/sandbox/token", { body: { email, code } })) as SessionResponse);
+}
+
 /** Local development backend only (NEXT_PUBLIC_DEV_SIGN_IN=true): signs in as any email without Google. */
 export async function devSignIn(email: string, name: string) {
   let response: unknown;
