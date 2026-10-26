@@ -519,6 +519,46 @@ export type PresenceMember = {
 };
 
 /** A team's students after a change of attendance. When every one is absent the team scores 0. */
+/** One problem statement of one department in the release preview: who wins it, or why nobody does. */
+export type ReleaseGroup = {
+  department: string;
+  category: number;
+  title: string;
+  /** The winning places: 1, or 2 where the department has two. */
+  places: number;
+  winners: { place: number; teamName: string; teamCode: string; average: number | null; prize: number }[];
+  /** Winners a department admin or super admin declared by hand, kept as declared. */
+  declaredByHand: boolean;
+  reason: string | null;
+  /** Teams that were neither absent nor scored by every judge: they cannot be ranked. */
+  notRanked: number;
+  /** A team just outside the winning places is level with the last winner: an admin should decide it before the release. */
+  tieAtCut: boolean;
+};
+
+/** What releasing the department results would do, and whether it is already done. */
+export type ReleaseReadiness = {
+  released: boolean;
+  releasedBy: string | null;
+  releasedAt: string | null;
+  /** Rooms whose judging time has not run out yet. */
+  openRooms: number;
+  groups: ReleaseGroup[];
+  winnerTeams: number;
+  groupsWithoutWinner: number;
+  students: number;
+  present: number;
+  absent: number;
+  notMarked: number;
+  winnerStudents: number;
+  participationStudents: number;
+  judges: number;
+  /** Is the winner / participation / judge certificate design published? */
+  templates: Record<string, boolean>;
+};
+
+export type ReleaseResult = { winners: number; groupsWithoutWinner: number; declared: number };
+
 export type TeamPresence = { teamId: string; members: PresenceMember[]; allAbsent: boolean };
 
 /** One student of the department round, for the attendance list: no team, just who they are and when they are judged. */

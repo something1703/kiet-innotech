@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { Award, Download } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-import { certificateLabels } from "@/lib/certificate-defaults";
+import { certificateFileNames, certificateLabels } from "@/lib/certificate-defaults";
+import { saveCertificate } from "@/lib/certificate-download";
 import type { CertificateAvailability, CertificateType } from "@/lib/types";
 import { Button, Notice } from "@/components/ui/form";
 import { PageHeading, Panel } from "@/components/portal/PageHeading";
 
 export default function CertificatesPage() {
   const [certificates, setCertificates] = useState<CertificateAvailability[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<CertificateType | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -17,8 +19,10 @@ export default function CertificatesPage() {
   useEffect(() => {
     let cancelled = false;
     api.getMyCertificates().then(
-      (list) => {
-        if (!cancelled) setCertificates(list);
+      (result) => {
+        if (cancelled) return;
+        setCertificates(result.certificates);
+        setMessage(result.message);
       },
       (err: unknown) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load your certificates.");
@@ -46,13 +50,7 @@ export default function CertificatesPage() {
     setDownloading(type);
     setError(null);
     try {
-      const blob = await api.downloadCertificate(type);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `innotech26-${type}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveCertificate(await api.downloadCertificate(type), certificateFileNames[type]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not download the certificate.");
     } finally {
@@ -63,8 +61,9 @@ export default function CertificatesPage() {
   return (
     <>
       <PageHeading eyebrow="Your achievements" title="Certificates">
-        Download your InnoTech26 certificates. Participation needs your department results to be published and your
-        attendance to be marked at the venue. Winners need the department awards to be published.
+        Download your InnoTech26 certificate. Certificates open once the organisers release the department round results, and
+        go to students who were marked present at the round: a winner certificate for the winning teams, a participation
+        certificate for everyone else.
       </PageHeading>
 
       {error && <Notice tone="error">{error}</Notice>}
@@ -75,10 +74,7 @@ export default function CertificatesPage() {
 
       {certificates && certificates.length === 0 && (
         <Panel title="Nothing to download yet">
-          <p className="text-sm text-muted">
-            There is no certificate available for your account yet. Certificates appear here after you are marked
-            present and the organisers publish the department results or awards.
-          </p>
+          <p className="text-sm text-muted">{message ?? "There is no certificate available for your account yet."}</p>
         </Panel>
       )}
 

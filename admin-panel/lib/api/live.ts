@@ -200,7 +200,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { AcceptResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -486,6 +486,11 @@ export const liveApi: AdminApi = {
     return sendFontForm<CertificateFont>("/admin/certificate-fonts", form);
   },
   deleteCertificateFont: (fontId) => request<void>("DELETE", `/admin/certificate-fonts/${id(fontId)}`),
+
+  releaseReadiness: () => request<ReleaseReadiness>("GET", "/admin/judging/department/release"),
+  releaseResults: (releaseWithOpenRooms) =>
+    request<ReleaseResult>("POST", "/admin/judging/department/release", { confirm: "RELEASE", releaseWithOpenRooms }),
+  withdrawRelease: (reason) => request<void>("POST", "/admin/judging/department/release/withdraw", { reason }),
 
   judgeCertificates: async () =>
     (await request<{ certificates: CertificateAvailability[] }>("GET", "/judge/certificates")).certificates,

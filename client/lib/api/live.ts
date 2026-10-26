@@ -88,7 +88,7 @@ export const liveApi: StudentApi = {
     request<void>("POST", `/invitations/${invitationId}/${accept ? "accept" : "decline"}`),
   getMyPass: () => request<EventPass>("GET", "/me/pass"),
   getMyResults: () => request<{ cards: ResultCard[] }>("GET", "/me/results"),
-  getMyCertificates: async () => (await request<{ certificates: CertificateAvailability[] }>("GET", "/me/certificates")).certificates,
+  getMyCertificates: () => request<{ certificates: CertificateAvailability[]; message: string | null }>("GET", "/me/certificates"),
   downloadCertificate: (type: CertificateType) => download(`/me/certificates/${type}.pdf`),
 };
 

@@ -1,4 +1,4 @@
-import type { AcceptResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -171,6 +171,12 @@ export interface AdminApi {
   deleteCertificateFont(id: string): Promise<void>;
 
   /** The judge's own certificate, once the judge template is published. */
+  /** Super admin: what releasing the department results would do (winners per problem statement, who gets a certificate). */
+  releaseReadiness(): Promise<ReleaseReadiness>;
+  /** Super admin: names the winners, shows them to students and opens the certificates. */
+  releaseResults(releaseWithOpenRooms: boolean): Promise<ReleaseResult>;
+  /** Super admin: hides the results and certificates again. */
+  withdrawRelease(reason: string): Promise<void>;
   judgeCertificates(): Promise<CertificateAvailability[]>;
   downloadJudgeCertificate(type: CertificateType): Promise<Blob>;
 }

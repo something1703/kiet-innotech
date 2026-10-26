@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Ban, CalendarClock, CircleCheck, CircleHelp, CircleX, Clock, Frown, Hourglass, MapPin, PartyPopper, QrCode, Trophy } from "lucide-react";
+import { ArrowRight, Award, Ban, CalendarClock, CircleCheck, CircleHelp, CircleX, Clock, Download, Frown, Hourglass, MapPin, PartyPopper, Play, QrCode, Trophy } from "lucide-react";
 import { api } from "@/lib/api";
+import { certificateFileNames } from "@/lib/certificate-defaults";
+import { saveCertificate } from "@/lib/certificate-download";
+import { categories } from "@/lib/content";
 import { attendanceEnabled } from "@/lib/features";
 import type { EventPass, ResultCard } from "@/lib/types";
+import { usePortal } from "./PortalProvider";
+import { ResultReveal, type RevealResult } from "./ResultReveal";
 
 const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -26,8 +31,53 @@ const looks: Record<ResultCard["status"], { box: string; Icon: typeof Trophy }> 
  * announced: awaiting, finalist or qualified, better luck next time, disqualified, or a prize with its amount.
  */
 export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean }) {
+  const { me, team } = usePortal();
   const [pass, setPass] = useState<EventPass | null>(null);
   const [results, setResults] = useState<ResultCard[]>([]);
+  const [manual, setManual] = useState<RevealResult | null>(null);
+  const [closedKey, setClosedKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // The department result as a moment: a winner always, a student who was present when their certificate is ready.
+  const resultCard = results.find((c) => c.round === "department" && (c.status === "winner" || (c.status === "participated" && c.certificate)));
+  const revealFor = (card: ResultCard): RevealResult | null => {
+    if (!me.profile || !team) return null;
+    return {
+      kind: card.status === "winner" ? (card.place === 1 ? "first" : "second") : "participation",
+      studentName: me.profile.fullName,
+      teamName: team.name,
+      teamCode: team.code,
+      department: team.department ?? me.profile.department ?? "",
+      category: team.category,
+      categoryTitle: categories.find((c) => c.number === team.category)?.title ?? "",
+      amount: card.amount,
+    };
+  };
+  // The first time a student opens the page after their result is out, it plays by itself; "Watch your result" plays it again.
+  const seenKey = resultCard ? `innotech-reveal:${me.email.toLowerCase()}:${resultCard.status}:${resultCard.place ?? 0}` : null;
+  const auto = resultCard && seenKey && closedKey !== seenKey && !wasSeen(seenKey) ? revealFor(resultCard) : null;
+  const reveal = manual ?? auto;
+  function closeReveal() {
+    if (seenKey) {
+      markSeen(seenKey);
+      setClosedKey(seenKey);
+    }
+    setManual(null);
+  }
+
+  async function download(card: ResultCard) {
+    if (!card.certificate) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      saveCertificate(await api.downloadCertificate(card.certificate), certificateFileNames[card.certificate]);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not download the certificate.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -43,8 +93,19 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
 
   return (
     <div className="space-y-4">
+      {reveal && resultCard && (
+        <ResultReveal
+          result={reveal}
+          onClose={closeReveal}
+          onDownload={resultCard.certificate ? () => download(resultCard) : undefined}
+          downloadNote="Certificates are given to students who were marked present at the department round."
+        />
+      )}
       {results.map((card) => {
-        const { box, Icon } = looks[card.status];
+        const looked = looks[card.status];
+        const box = looked.box;
+        const Icon = card.status === "participated" && card.round === "department" ? Award : looked.Icon;
+        const celebrate = card.round === "department" && (card.status === "winner" || (card.status === "participated" && card.certificate));
         const bright = card.status === "winner" || card.status === "finalist" || card.status === "qualified";
         return (
           <section key={`${card.round}-${card.status}`} aria-label={card.title} className={`flex items-start gap-4 rounded-3xl p-5 ring-1 sm:p-6 ${box}`}>
@@ -58,6 +119,33 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
               <h2 className="mt-1 font-display text-xl font-bold">{card.title}</h2>
               {card.amount !== null && <p className="mt-1 font-display text-3xl font-bold">₹{card.amount.toLocaleString("en-IN")}</p>}
               <p className={`mt-1 text-sm ${bright ? "text-white/90" : card.status === "disqualified" || card.status === "rejected" ? "text-red-800" : "text-muted"}`}>{card.message}</p>
+              {celebrate && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {card.certificate && (
+                    <button
+                      type="button"
+                      onClick={() => void download(card)}
+                      disabled={saving}
+                      className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition disabled:opacity-60 ${bright ? "bg-white text-navy-900 hover:bg-brand-50" : "bg-accent-500 text-white hover:bg-accent-600"}`}
+                    >
+                      <Download size={16} aria-hidden="true" />
+                      {saving ? "Preparing…" : "Download certificate"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setManual(revealFor(card))}
+                    className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition ${bright ? "text-white ring-white/40 hover:bg-white/10" : "text-ink ring-line hover:bg-surface"}`}
+                  >
+                    <Play size={14} aria-hidden="true" />
+                    Watch your result
+                  </button>
+                </div>
+              )}
+              {celebrate && saveError && <p className={`mt-2 text-sm ${bright ? "text-white" : "text-red-700"}`}>{saveError}</p>}
+              {card.round === "department" && card.status === "winner" && !card.certificate && (
+                <p className="mt-3 text-xs text-white/85">The certificate is for team members who were marked present at the department round.</p>
+              )}
             </div>
           </section>
         );
@@ -133,6 +221,23 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
       ))}
     </div>
   );
+}
+
+/** Whether this result has already played for this student on this device. Without storage it counts as seen: no replay on every visit. */
+function wasSeen(key: string) {
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return true;
+  }
+}
+
+function markSeen(key: string) {
+  try {
+    localStorage.setItem(key, "1");
+  } catch {
+    // nothing to remember it with
+  }
 }
 
 /** The same state as the line below, as a badge you can see at a glance. */

@@ -36,8 +36,8 @@ export interface StudentApi {
   getMyPass(): Promise<EventPass>;
   /** The team's results, once announced (awaiting until then). */
   getMyResults(): Promise<{ cards: ResultCard[] }>;
-  /** Certificates this student may download now (attendance and publication gates applied). */
-  getMyCertificates(): Promise<CertificateAvailability[]>;
+  /** Certificates this student may download now (attendance and release gates applied), or why there is none. */
+  getMyCertificates(): Promise<{ certificates: CertificateAvailability[]; message: string | null }>;
   /** Downloads one of the student's own certificates; the server derives the recipient from the session. */
   downloadCertificate(type: CertificateType): Promise<Blob>;
 }

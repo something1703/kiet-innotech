@@ -226,7 +226,7 @@ function Row({
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-flex items-center gap-1 rounded-full bg-accent-500 px-2.5 py-1 text-xs font-bold text-white">
               <Trophy aria-hidden="true" className="size-3" />
-              {ordinal(row.award.place)} · {rupees(row.award.amount)}
+              {ordinal(row.award.place)}{row.award.amount > 0 ? ` · ${rupees(row.award.amount)}` : ""}
             </span>
             {canAward && (
               <button

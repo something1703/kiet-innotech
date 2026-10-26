@@ -152,7 +152,8 @@ def decline_invitation(invitation_id: uuid.UUID, user: CurrentUser, db: Db, sett
 
 @router.get("/me/certificates")
 def my_certificates(user: CurrentUser, db: Db) -> CertificatesOut:
-    return CertificatesOut(certificates=certificates.get_student_certificates(db, user))
+    available, message = certificates.get_student_certificates(db, user)
+    return CertificatesOut(certificates=available, message=message)
 
 
 @router.get("/me/certificates/{cert_type}.pdf")

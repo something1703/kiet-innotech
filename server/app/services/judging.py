@@ -118,6 +118,16 @@ def _check_round(round_: str) -> None:
         raise ApiError(f'Unknown round "{round_}".', 404)
 
 
+RELEASED_MESSAGE = (
+    "The department results are released. Withdraw the release first if marks need to change, so the winners and certificates "
+    "are worked out again from the new marks."
+)
+
+
+def results_released(db: Session) -> bool:
+    return db.get(AppState, "dept_results_released") is not None
+
+
 def round_open(db: Session, round_: str) -> bool:
     """A round is open while its app_state row exists."""
     return db.get(AppState, _round_key(round_)) is not None
@@ -883,6 +893,8 @@ def extend_rooms(db: Session, admin: Admin, data: ExtendRoomsInput) -> ExtendRoo
     already locked can edit again. Clearing `until` takes the extension back (the judges' own locks stay as they are).
     """
     _require_super(admin)
+    if data.until is not None and results_released(db):
+        raise ApiError(RELEASED_MESSAGE, 409)
     now = utcnow()
     if data.until is not None and not (now < data.until <= now + timedelta(days=7)):
         raise ApiError("Choose a time from now up to a week ahead.", 422)
@@ -1564,6 +1576,11 @@ def publish_awards(db: Session, admin: Admin, round_: str, publish: bool) -> Non
     else:
         if state is None:
             raise ApiError("The winners are not published.", 409)
+        if round_ == "department" and db.get(AppState, "dept_results_released") is not None:
+            raise ApiError(
+                "The department results are released: withdraw the release instead, it hides the winners and the certificates together.",
+                409,
+            )
         db.delete(state)
         audit.record(db, admin.email, "judging.awards_withdrawn", detail=f"Winners of the {ROUND_LABELS[round_]} hidden from students")
     db.commit()
@@ -1757,6 +1774,8 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
     panel, link = _own_room(db, juror, panel_id, shared=True)
     if db.scalar(select(PanelTeam.team_id).where(PanelTeam.panel_id == panel_id, PanelTeam.team_id == team_id)) is None:
         raise ApiError("This team is not allotted to your panel.", 403)
+    if panel.round == "department" and results_released(db):
+        raise ApiError(RELEASED_MESSAGE, 409)
     _require_scoring_time(db, panel)
     if link.locked_at is not None:
         raise ApiError(FINAL_SCORE, 409)
@@ -1843,6 +1862,8 @@ def unlock_judge(db: Session, admin: Admin, panel_id: uuid.UUID, juror_email: st
     panel = _lock_panel(db, panel_id)
     if not _may_edit_marks(admin, panel, utcnow()):
         raise ApiError("Only a super admin, or this department's admin during the room's time slot, can unlock a judge.", 403)
+    if panel.round == "department" and results_released(db):
+        raise ApiError(RELEASED_MESSAGE, 409)
     link = db.scalar(
         select(PanelJuror)
         .where(PanelJuror.panel_id == panel.id, PanelJuror.juror_email == juror_email.strip().lower())
@@ -1875,6 +1896,8 @@ def edit_score(db: Session, admin: Admin, panel_id: uuid.UUID, team_id: uuid.UUI
     panel = _lock_panel(db, panel_id)
     if not _may_edit_marks(admin, panel, utcnow()):
         raise ApiError("Only a super admin, or this department's admin during the room's time slot, can change submitted marks.", 403)
+    if panel.round == "department" and results_released(db):
+        raise ApiError(RELEASED_MESSAGE, 409)
     reason = _strong_reason(data.reason) if admin.role != "super_admin" else " ".join(data.reason.split()) or "no reason given"
     juror_email = juror_email.strip().lower()
     if db.get(PanelJuror, (panel.id, juror_email)) is None:

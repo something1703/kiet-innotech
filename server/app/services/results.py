@@ -17,7 +17,9 @@ from .. import rules
 from ..models import AppState, Award, FinalTent, Team, TeamMember, User
 from ..schemas import ResultCard, ResultsOut
 from . import admin as admin_service
-from . import judging
+from . import certificates, judging, release
+
+FINALE_SOON = "Your Grand Finale details will be shared with you soon: watch this page, and your email, for the stall and timings."
 
 
 def _rupees(amount: int) -> str:
@@ -149,42 +151,74 @@ def my_results(db: Session, user: User) -> ResultsOut:
 
     if team.route == "department":
         award = awards.get("department") if published["department"] else None
+        released = release.is_released(db)
+        finalists_out = db.get(AppState, admin_service.RESULTS_KEY) is not None
+        cert_type, _ = certificates.student_certificate_status(db, user)
         if award:
+            prize = f" and wins {_rupees(award.amount)}" if award.amount else ""
             cards.append(
                 ResultCard(
                     round="department",
                     status="winner",
                     title=f"Department winner · {team.department}",
-                    message=f"Your team came {_place(award.place)} in Category {team.category} and wins {_rupees(award.amount)}.",
+                    message=f"Your team came {_place(award.place)} in Category {team.category}{prize}. {FINALE_SOON}",
                     place=award.place,
-                    amount=award.amount,
+                    amount=award.amount or None,
+                    certificate=cert_type if cert_type == "dept_winner" else None,
                 )
             )
-        if db.get(AppState, admin_service.RESULTS_KEY) is None:
-            cards.append(
-                ResultCard(
-                    round="department",
-                    status="awaiting",
-                    title="Department round results awaited",
-                    message="The finalists are declared on 26 October.",
+            # A winner is never told "not selected" or "results awaited": the Grand Finale details follow.
+            if finalists_out and team.result == "finalist":
+                cards.append(
+                    ResultCard(
+                        round="department",
+                        status="finalist",
+                        title="You are a finalist!",
+                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
+                    )
                 )
-            )
-        elif team.result == "finalist":
-            cards.append(
-                ResultCard(
-                    round="department",
-                    status="finalist",
-                    title="You are a finalist!",
-                    message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
-                )
-            )
         else:
-            cards.append(
-                ResultCard(
-                    round="department",
-                    status="not_selected",
-                    title="Not selected for the Grand Finale",
-                    message="Better luck next time! Thank you for taking part in InnoTech'26.",
+            if released:
+                cards.append(
+                    ResultCard(
+                        round="department",
+                        status="participated",
+                        title="Department round results are out",
+                        message=(
+                            "Thank you for taking part. Your participation certificate is ready to download."
+                            if cert_type == "dept_participation"
+                            else certificates.student_certificate_status(db, user)[1] or ""
+                        ),
+                        certificate=cert_type if cert_type == "dept_participation" else None,
+                    )
                 )
-            )
+            if not finalists_out:
+                cards.append(
+                    ResultCard(
+                        round="department",
+                        status="awaiting",
+                        title="Grand Finale list awaited" if released else "Department round results awaited",
+                        message="The Grand Finale finalists are announced soon on this page."
+                        if released
+                        else "The finalists are declared on 26 October.",
+                    )
+                )
+            elif team.result == "finalist":
+                cards.append(
+                    ResultCard(
+                        round="department",
+                        status="finalist",
+                        title="You are a finalist!",
+                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
+                    )
+                )
+            else:
+                cards.append(
+                    ResultCard(
+                        round="department",
+                        status="not_selected",
+                        title="Not selected for the Grand Finale",
+                        message="Better luck next time! Thank you for taking part in InnoTech'26.",
+                    )
+                )
     return ResultsOut(cards=cards)

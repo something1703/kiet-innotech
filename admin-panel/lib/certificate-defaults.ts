@@ -9,6 +9,16 @@ export const CERTIFICATE_TYPES: CertificateType[] = [
   "institute_winner",
 ];
 
+/** What a downloaded certificate file is called. */
+export const certificateFileNames: Record<CertificateType, string> = {
+  dept_judge: "InnoTech26-Judge-Certificate.pdf",
+  dept_participation: "InnoTech26-Participation-Certificate.pdf",
+  dept_winner: "InnoTech26-Winner-Certificate.pdf",
+  institute_judge: "InnoTech26-Institute-Judge-Certificate.pdf",
+  institute_participation: "InnoTech26-Institute-Participation-Certificate.pdf",
+  institute_winner: "InnoTech26-Institute-Winner-Certificate.pdf",
+};
+
 export const certificateLabels: Record<CertificateType, string> = {
   dept_judge: "Department · Judge",
   dept_participation: "Department · Participation",

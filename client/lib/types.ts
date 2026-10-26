@@ -155,6 +155,8 @@ export type ResultCard = {
   message: string;
   place: number | null;
   amount: number | null;
+  /** The certificate this student can download for this result right now, if any. */
+  certificate?: CertificateType | null;
 };
 
 export type CertificateType =

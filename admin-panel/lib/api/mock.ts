@@ -1429,6 +1429,9 @@ export const mockApi: AdminApi = {
   listCertificateFonts: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
   uploadCertificateFont: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
   deleteCertificateFont: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
+  releaseReadiness: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
+  releaseResults: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
+  withdrawRelease: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
   judgeCertificates: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
   downloadJudgeCertificate: () => Promise.reject(new ApiError(501, CERTIFICATES_LIVE_ONLY)),
 

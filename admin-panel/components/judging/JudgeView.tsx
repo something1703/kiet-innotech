@@ -5,7 +5,8 @@ import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Crown, Downlo
 import { api, errorMessage } from "@/lib/api";
 import type { AttendanceState, CertificateType, JudgePanel, JudgeTeam, LockResult } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
-import { certificateLabels } from "@/lib/certificate-defaults";
+import { certificateFileNames, certificateLabels } from "@/lib/certificate-defaults";
+import { saveCertificate } from "@/lib/certificate-download";
 import { judgeManualUrl } from "@/lib/content";
 import { categoryTitle, formatDateTime, plural, roundLabels } from "@/lib/format";
 import { roomClock, roomLabel, slotLabel, slotState, timeLabel, reasonProblem, MIN_REASON_LENGTH, type RoomClock } from "@/lib/rooms";
@@ -859,13 +860,7 @@ function JudgeCertificate() {
     setType(certificate);
     setError(null);
     try {
-      const blob = await api.downloadJudgeCertificate(certificate);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `innotech26-${certificate}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveCertificate(await api.downloadJudgeCertificate(certificate), certificateFileNames[certificate]);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -882,7 +877,7 @@ function JudgeCertificate() {
           <Award aria-hidden="true" className="mt-0.5 size-5 text-accent-500" />
           <div>
             <h2 className="font-display text-base font-bold text-navy-900">Judge certificate</h2>
-            <p className="text-sm text-muted">Your certificate appears here once the organisers publish the judge template.</p>
+            <p className="text-sm text-muted">{certificates.data.find((item) => item.reason)?.reason ?? "Your certificate appears here once the organisers release the department results."}</p>
           </div>
         </div>
       </section>

@@ -18,6 +18,7 @@ import { Field, Select } from "@/components/ui/Field";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
+import { ReleasePanel } from "./ReleasePanel";
 import { SearchBox } from "@/components/ui/SearchBox";
 
 const rupees = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
@@ -219,6 +220,8 @@ function Board() {
         }
       />
 
+      <ReleasePanel onChanged={() => board.reload()} />
+
       {/* The rules, from the event document */}
       <section aria-label="How the leaderboard works" className="grid gap-3 md:grid-cols-3">
         {[
@@ -392,7 +395,7 @@ function CategoryCard({ category }: { category: LeaderboardCategory }) {
                     </p>
                     <span className="mt-1 flex flex-wrap gap-1">
                       <Pill tone={s.tone}>{s.label}</Pill>
-                      {t.award && <Pill tone="orange">{t.award.place === 1 ? "1st" : "2nd"} · {rupees(t.award.amount)}</Pill>}
+                      {t.award && <Pill tone="orange">{t.award.place === 1 ? "1st" : "2nd"}{t.award.amount > 0 ? ` · ${rupees(t.award.amount)}` : ""}</Pill>}
                     </span>
                   </div>
                   <div className="shrink-0 text-right">

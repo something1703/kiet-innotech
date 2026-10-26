@@ -1320,6 +1320,8 @@ class ResultCard(BaseModel):
     message: str
     place: int | None = None
     amount: int | None = None
+    # The certificate this student can download right now for this result, if any (a type such as dept_winner).
+    certificate: str | None = None
 
 
 class ResultsOut(BaseModel):
@@ -1392,6 +1394,68 @@ class UnlockInput(Input):
     reason: str = Field(default="", max_length=500)
 
 
+class ReleaseInput(Input):
+    confirm: str = Field(max_length=20)
+    # Rooms whose judging time has not run out yet: release anyway.
+    release_with_open_rooms: bool = False
+
+
+class WithdrawReleaseInput(Input):
+    reason: str = Field(min_length=5, max_length=500)
+
+
+class ReleaseWinnerOut(BaseModel):
+    place: int
+    team_name: str
+    team_code: str
+    average: float | None
+    prize: int
+
+
+class ReleaseGroupOut(BaseModel):
+    department: str
+    category: int
+    title: str
+    # The problem statement's winning places (1, or 2).
+    places: int
+    winners: list[ReleaseWinnerOut]
+    # Winners a department admin or super admin declared by hand, kept as declared.
+    declared_by_hand: bool = False
+    # Why this problem statement has no winner.
+    reason: str | None = None
+    # Teams that were neither absent nor scored by every judge: they cannot be ranked.
+    not_ranked: int = 0
+    # A team just outside the winning places is level with the last winner: an admin should decide it before the release.
+    tie_at_cut: bool = False
+    # Why this problem statement blocks the release (a declared winner who is no longer taking part).
+    blocker: str | None = None
+
+
+class ReleaseReadinessOut(BaseModel):
+    released: bool
+    released_by: str | None = None
+    released_at: datetime | None = None
+    open_rooms: int
+    groups: list[ReleaseGroupOut]
+    winner_teams: int
+    groups_without_winner: int
+    students: int
+    present: int
+    absent: int
+    not_marked: int
+    winner_students: int
+    participation_students: int
+    judges: int
+    # dept_participation / dept_winner / dept_judge: is the template published?
+    templates: dict[str, bool]
+
+
+class ReleaseOut(BaseModel):
+    winners: int
+    groups_without_winner: int
+    declared: int
+
+
 class CertField(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -1436,6 +1500,8 @@ class CertificateAvailability(BaseModel):
 
 class CertificatesOut(BaseModel):
     certificates: list[CertificateAvailability]
+    # Why there is nothing to download, in words the student can act on.
+    message: str | None = None
 
 
 class CertificateFontOut(BaseModel):

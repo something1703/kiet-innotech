@@ -138,6 +138,14 @@ Certificates: `GET /me/certificates` and `GET /me/certificates/{type}.pdf` (stud
 `GET /judge/certificates/{type}.pdf` (a judge's own), and super-admin design endpoints
 `GET /admin/certificates`, `GET|PUT /admin/certificates/{type}/template|fields|publish|withdraw`,
 `GET /admin/certificates/{type}/preview|sample.pdf`, `GET|POST /admin/certificate-fonts`, `DELETE /admin/certificate-fonts/{id}`.
-Templates and uploaded fonts are stored in Postgres; PDFs are rendered on demand with PyMuPDF. A student is eligible only
-after they are marked present for the department round, and only once results (participation) or department awards
-(winner) are published. The recipient always comes from the session, never from the request.
+Templates and uploaded fonts are stored in Postgres; PDFs are rendered on demand with PyMuPDF.
+
+Releasing the department results (super admin): `GET /admin/judging/department/release` previews it (winners per problem statement, the
+ones without a winner and why, ties, open rooms, who would get which certificate), `POST /admin/judging/department/release`
+(`{confirm: "RELEASE", release_with_open_rooms}`) names the winners from the rankings (the problem statement's winning places, 1 or 2;
+only teams still taking part; none where nobody was scored by every judge or everyone was absent), shows them to students and opens
+the certificates, and `POST /admin/judging/department/release/withdraw` hides it all again. Until then students and judges see
+nothing. While the results are released marks cannot change (judge saves, organiser corrections, unlocking, extending rooms): withdraw
+first, fix, release again. A student gets one certificate and only if marked present for the department round: the winner certificate
+for a winning team, the participation certificate otherwise. A judge gets one only if they scored a team or were marked present in a
+department room. The recipient always comes from the session, never from the request.

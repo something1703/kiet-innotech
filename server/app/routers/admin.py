@@ -64,6 +64,9 @@ from ..schemas import (
     RankingsOut,
     ReadinessOut,
     ReasonInput,
+    ReleaseInput,
+    ReleaseOut,
+    ReleaseReadinessOut,
     RestoreInput,
     RollCallOut,
     RoundOut,
@@ -86,9 +89,10 @@ from ..schemas import (
     TimetableOut,
     UnlockInput,
     UnpublishInput,
+    WithdrawReleaseInput,
 )
 from ..services import admin as service
-from ..services import attendance, certificates, judging, rollcall, schedule
+from ..services import attendance, audit, certificates, judging, release, rollcall, schedule
 from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -737,6 +741,7 @@ async def upload_certificate_template(
     if name:
         tmpl.name = name
     tmpl.is_published = False
+    audit.record(db, super_admin.email, "certificate.template_uploaded", detail=f"{cert_type}: new design uploaded, unpublished")
     db.commit()
     db.refresh(tmpl)
     return _template_out(tmpl)
@@ -749,6 +754,7 @@ def save_certificate_fields(cert_type: str, data: CertFieldsInput, super_admin: 
         raise ApiError("Certificate template not found.", 404)
     tmpl.fields_json = json.dumps([f.model_dump() for f in data.fields])
     tmpl.is_published = False
+    audit.record(db, super_admin.email, "certificate.fields_saved", detail=f"{cert_type}: {len(data.fields)} field(s), unpublished")
     db.commit()
     db.refresh(tmpl)
     return _template_out(tmpl)
@@ -762,6 +768,7 @@ def publish_certificate(cert_type: str, super_admin: SuperAdmin, db: Db) -> Cert
     if not json.loads(tmpl.fields_json or "[]"):
         raise ApiError("Add at least one field before publishing.")
     tmpl.is_published = True
+    audit.record(db, super_admin.email, "certificate.template_published", detail=f"{cert_type} published")
     db.commit()
     db.refresh(tmpl)
     return _template_out(tmpl)
@@ -773,6 +780,7 @@ def withdraw_certificate(cert_type: str, super_admin: SuperAdmin, db: Db) -> Cer
     if not tmpl:
         raise ApiError("Certificate template not found.", 404)
     tmpl.is_published = False
+    audit.record(db, super_admin.email, "certificate.template_withdrawn", detail=f"{cert_type} withdrawn")
     db.commit()
     db.refresh(tmpl)
     return _template_out(tmpl)
@@ -822,4 +830,24 @@ def delete_certificate_font(font_id: uuid.UUID, super_admin: SuperAdmin, db: Db)
             raise ApiError(f"{font.name} is used by a certificate. Change those fields before deleting it.", 409)
     db.delete(font)
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- Releasing the department results (super admin only) ----------
+
+
+@router.get("/judging/department/release")
+def release_readiness(super_admin: SuperAdmin, db: Db) -> ReleaseReadinessOut:
+    """What releasing the department results would do: the winners, the problem statements without one, who gets a certificate."""
+    return release.readiness(db, super_admin)
+
+
+@router.post("/judging/department/release")
+def release_results(data: ReleaseInput, super_admin: SuperAdmin, db: Db) -> ReleaseOut:
+    return release.release(db, super_admin, data)
+
+
+@router.post("/judging/department/release/withdraw", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_release(data: WithdrawReleaseInput, super_admin: SuperAdmin, db: Db) -> Response:
+    release.withdraw(db, super_admin, data)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

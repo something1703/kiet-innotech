@@ -1,8 +1,21 @@
 """Certificate templates, eligibility (including attendance) and downloads."""
 
+from datetime import datetime
+
 import pymupdf
-from test_admin import publish, world  # noqa: F401  (fixture)
+from test_admin import world  # noqa: F401  (fixture)
 from test_judging import judging, scored_room  # noqa: F401  (fixture)
+
+from app import rules
+from app.services import judging as judging_service
+
+# Every room's time is over by then (the test room's slot ends at 13:00).
+AFTER = datetime(2026, 10, 22, 20, 0, tzinfo=rules.IST)
+
+
+def release_department(root, **extra):
+    """The super admin's "Release department results" button."""
+    return root.post("/admin/judging/department/release", {"confirm": "RELEASE", **extra})
 
 
 def sample_pdf() -> bytes:
@@ -46,16 +59,6 @@ def upload(admin, cert_type: str = "dept_participation", fields: list | None = N
     return published.json()
 
 
-def publish_results(context, settings):
-    cse, it = context["cse"], context["it"]
-    teams = context["teams"]
-    cse_teams = [teams["cse_a"]["id"], teams["cse_b"]["id"]]
-    assert cse.put("/admin/finalists/CSE", {"nominations": [{"category": 1, "team_ids": cse_teams}]}).status_code == 200
-    assert it.put("/admin/finalists/IT", {"nominations": [{"category": 1, "team_ids": [teams["it_a"]["id"]]}]}).status_code == 200
-    response = publish(context["root"], settings)
-    assert response.status_code == 200, response.text
-
-
 def mark_present(admin, email: str, api):
     me = api.get("/me/pass").json()
     response = admin.post(
@@ -65,24 +68,26 @@ def mark_present(admin, email: str, api):
     assert response.status_code == 200, response.text
 
 
-def test_only_present_students_get_a_certificate_after_results(world, as_user, settings):  # noqa: F811
-    root = world["root"]
-    a, b = as_user("a@kiet.edu"), as_user("b@kiet.edu")
+def test_only_present_students_get_a_certificate_after_release(judging, as_user, monkeypatch):  # noqa: F811
+    root = judging["root"]
+    e, f = as_user("e@kiet.edu"), as_user("f@kiet.edu")  # CSE Gamma: took part, was not among the winners
+    scored_room(judging)
     upload(root)
 
-    # Results are not out yet.
-    assert a.get("/me/certificates").json()["certificates"] == []
-    publish_results(world, settings)
+    # The results are not released yet.
+    assert e.get("/me/certificates").json()["certificates"] == []
+    monkeypatch.setattr(judging_service, "utcnow", lambda: AFTER)
+    assert release_department(root).status_code == 200
 
     # Nobody is marked yet: no certificates.
-    assert a.get("/me/certificates").json()["certificates"] == []
-    assert a.get("/me/certificates/dept_participation.pdf").status_code == 404
+    assert e.get("/me/certificates").json()["certificates"] == []
+    assert e.get("/me/certificates/dept_participation.pdf").status_code == 404
 
-    # Only the team member who checked in gets one; their present teammate in the same team does not.
-    mark_present(root, "a@kiet.edu", a)
-    certificates = a.get("/me/certificates").json()["certificates"]
+    # Only the team member who checked in gets one; their teammate who was not marked does not.
+    mark_present(root, "e@kiet.edu", e)
+    certificates = e.get("/me/certificates").json()["certificates"]
     assert certificates == [{"type": "dept_participation", "available": True, "reason": None}]
-    download = a.get("/me/certificates/dept_participation.pdf")
+    download = e.get("/me/certificates/dept_participation.pdf")
     assert download.status_code == 200 and download.headers["content-type"] == "application/pdf"
     assert download.content.startswith(b"%PDF")
     with pymupdf.open(stream=download.content, filetype="pdf") as pdf:
@@ -91,18 +96,18 @@ def test_only_present_students_get_a_certificate_after_results(world, as_user, s
         placed = page.search_for("Test Student")[0]
         assert abs(placed.x0 + placed.width / 2 - 420) < 2  # centred in x_pt 200 + w_pt 440
         assert abs(placed.y0 - 250) < 2
-    assert b.get("/me/certificates").json()["certificates"] == []
-    assert b.get("/me/certificates/dept_participation.pdf").status_code == 404
+    assert f.get("/me/certificates").json()["certificates"] == []
+    assert f.get("/me/certificates/dept_participation.pdf").status_code == 404
 
     # An explicit absence is not presence, even though a row exists.
-    b_id = b.get("/me/pass").json()["user_id"]
-    team_id = world["teams"]["cse_a"]["id"]
-    assert root.put(f"/admin/teams/{team_id}/attendance/{b_id}", json={"present": False}).status_code == 200
-    assert b.get("/me/certificates").json()["certificates"] == []
+    f_id = f.get("/me/pass").json()["user_id"]
+    team_id = judging["teams"]["cse_c"]["id"]
+    assert root.put(f"/admin/teams/{team_id}/attendance/{f_id}", json={"state": "absent"}).status_code == 200
+    assert f.get("/me/certificates").json()["certificates"] == []
 
     # Withdrawing the template takes the certificate away again.
     assert root.put("/admin/certificates/dept_participation/withdraw").status_code == 200
-    assert a.get("/me/certificates/dept_participation.pdf").status_code == 404
+    assert e.get("/me/certificates/dept_participation.pdf").status_code == 404
 
     # Changing the field source changes the next download.
     upload(
@@ -120,16 +125,16 @@ def test_only_present_students_get_a_certificate_after_results(world, as_user, s
             }
         ],
     )
-    with pymupdf.open(stream=a.get("/me/certificates/dept_participation.pdf").content, filetype="pdf") as pdf:
+    with pymupdf.open(stream=e.get("/me/certificates/dept_participation.pdf").content, filetype="pdf") as pdf:
         text = pdf[0].get_text()
         assert "CSE" in text
         assert "Test Student" not in text
 
 
-def test_winners_need_awards_published_and_attendance(judging, as_user):  # noqa: F811
+def test_winner_certificates_follow_the_release_and_attendance(judging, as_user, monkeypatch):  # noqa: F811
     root = judging["root"]
     a, c = as_user("a@kiet.edu"), as_user("c@kiet.edu")
-    teams = scored_room(judging)
+    scored_room(judging)  # CSE Alpha 50, CSE Beta 40: CSE has two winning places in problem statement 1
     mark_present(root, "a@kiet.edu", a)
     mark_present(root, "c@kiet.edu", c)
     upload(
@@ -151,16 +156,14 @@ def test_winners_need_awards_published_and_attendance(judging, as_user):  # noqa
         ],
     )
 
-    # Winners are declared but not published yet.
+    # Before the release nothing shows, whatever the rankings say.
     assert a.get("/me/certificates").json()["certificates"] == []
-    assert root.post("/admin/judging/department/awards", {"team_id": teams["cse_a"]["id"], "place": 1}).status_code == 204
-    assert a.get("/me/certificates").json()["certificates"] == []
-
-    assert root.post("/admin/judging/department/awards/publish").status_code == 204
+    monkeypatch.setattr(judging_service, "utcnow", lambda: AFTER)
+    assert release_department(root).status_code == 200
     assert a.get("/me/certificates").json()["certificates"] == [{"type": "dept_winner", "available": True, "reason": None}]
-    assert c.get("/me/certificates").json()["certificates"] == []
+    assert c.get("/me/certificates").json()["certificates"] == [{"type": "dept_winner", "available": True, "reason": None}]
 
-    # A present member of the winning team but not the leader also gets one.
+    # A present member of a winning team who is not the leader also gets one; a member not marked present does not.
     b = as_user("b@kiet.edu")
     assert b.get("/me/certificates").json()["certificates"] == []
     mark_present(root, "b@kiet.edu", b)
@@ -170,24 +173,32 @@ def test_winners_need_awards_published_and_attendance(judging, as_user):  # noqa
         text = pdf[0].get_text()
         assert "Smart Solutions, Smarter Society" in text
         assert "1st" in text
+    with pymupdf.open(stream=c.get("/me/certificates/dept_winner.pdf").content, filetype="pdf") as pdf:
+        assert "2nd" in pdf[0].get_text()
 
 
-def test_judges_get_one_certificate_once_published(world, as_user):  # noqa: F811
-    root = world["root"]
-    response = root.post(
-        "/admin/jurors",
-        {"email": "judge@kiet.edu", "name": "Judge One", "kind": "external", "organisation": "Acme", "phone": "9876543210"},
-    )
-    assert response.status_code == 201, response.text
-    judge = as_user("judge@kiet.edu")
-    assert judge.get("/judge/certificates").json()["certificates"] == [{"type": "dept_judge", "available": False, "reason": None}]
+def test_judges_get_a_certificate_only_if_they_judged_and_the_results_are_released(judging, as_user, monkeypatch):  # noqa: F811
+    root = judging["root"]
+    scored_room(judging)
+    it_prof, expert = judging["it_prof"], judging["external"]  # the expert is appointed but sits in no room and scores nothing
+    unavailable = [
+        {"type": "dept_judge", "available": False, "reason": it_prof.get("/judge/certificates").json()["certificates"][0]["reason"]}
+    ]
+    assert it_prof.get("/judge/certificates").json()["certificates"] == unavailable
     upload(root, "dept_judge")
-    assert judge.get("/judge/certificates").json()["certificates"] == [{"type": "dept_judge", "available": True, "reason": None}]
-    download = judge.get("/judge/certificates/dept_judge.pdf")
+    assert it_prof.get("/judge/certificates").json()["certificates"][0]["available"] is False  # published, not released
+    monkeypatch.setattr(judging_service, "utcnow", lambda: AFTER)
+    assert release_department(root).status_code == 200
+    assert it_prof.get("/judge/certificates").json()["certificates"] == [{"type": "dept_judge", "available": True, "reason": None}]
+    download = it_prof.get("/judge/certificates/dept_judge.pdf")
     assert download.status_code == 200 and download.content.startswith(b"%PDF")
     with pymupdf.open(stream=download.content, filetype="pdf") as pdf:
-        assert "Judge One" in pdf[0].get_text()
-    assert judge.get("/judge/certificates/dept_participation.pdf").status_code == 404
+        assert "IT Professor" in pdf[0].get_text()
+    assert it_prof.get("/judge/certificates/dept_participation.pdf").status_code == 404
+    # A judge who judged nothing gets none, and is told so.
+    nothing = expert.get("/judge/certificates").json()["certificates"][0]
+    assert nothing["available"] is False and "No judging was recorded" in nothing["reason"]
+    assert expert.get("/judge/certificates/dept_judge.pdf").status_code == 404
 
 
 def test_template_upload_validation_and_fonts(world):  # noqa: F811
@@ -219,7 +230,9 @@ def test_template_upload_validation_and_fonts(world):  # noqa: F811
     upload(
         root,
         "dept_winner",
-        fields=[{"id": "category", "label": "category", "x_pt": 50, "y_pt": 50, "w_pt": 740, "h_pt": 30, "font": "Montserrat", "fontsize": 18}],
+        fields=[
+            {"id": "category", "label": "category", "x_pt": 50, "y_pt": 50, "w_pt": 740, "h_pt": 30, "font": "Montserrat", "fontsize": 18}
+        ],
     )
     winner_sample = root.get("/admin/certificates/dept_winner/sample.pdf")
     assert winner_sample.status_code == 200
