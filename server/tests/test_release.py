@@ -98,7 +98,11 @@ def test_release_names_winners_and_opens_the_right_certificates(judging, as_user
     # A team that did not win: participation. A student not marked present: no certificate, and told why.
     other = [x for x in cards(e) if x["status"] == "participated"]
     assert len(other) == 1 and other[0]["certificate"] == "dept_participation"
-    assert {x["status"] for x in cards(e)} == {"participated", "awaiting"}
+    # No "Grand Finale awaited" for a team that did not win: it is told plainly, and kindly, that it did not.
+    assert [x["status"] for x in cards(e)] == ["participated"]
+    assert "did not win" in other[0]["title"].lower() or "not among the winners" in other[0]["title"].lower()
+    assert "does not go to the Grand Finale" in other[0]["message"] and "ready to download" in other[0]["message"]
+    assert not any("awaited" in x["title"].lower() for x in cards(e))
     assert certs(a)[0] == ["dept_winner"] and certs(c)[0] == ["dept_winner"] and certs(e)[0] == ["dept_participation"]
     # Not marked present (b is on the winning team): no certificate, a clear message, and the card does not promise one.
     assert certs(b)[0] == [] and "marked present" in certs(b)[1]
@@ -422,3 +426,28 @@ def test_a_department_with_three_winning_places_names_three_winners(judging, as_
     # And the leaderboard-style rankings carry the third place too.
     ranked = root.get("/admin/judging/department/rankings").json()["groups"][0]["teams"]
     assert sorted(t["award"]["place"] for t in ranked if t["award"]) == [1, 2, 3]
+
+
+def test_a_team_that_did_not_win_is_told_so_and_never_sees_the_finale_awaited(judging, as_user, monkeypatch):  # noqa: F811
+    root = judging["root"]
+    set_room(judging)
+    open_round(judging)
+    all_templates(root)
+    score_both(judging, "cse_a", FULL)
+    score_both(judging, "cse_b", [4, 4, 4, 4, 4, 4, 4, 4, 8])
+    score_both(judging, "cse_c", [3, 3, 3, 3, 3, 3, 3, 3, 6])
+    present, absent = as_user("e@kiet.edu"), as_user("f@kiet.edu")  # CSE Gamma: third of two places, so it did not win
+    mark_present(root, "e@kiet.edu", present)
+    monkeypatch.setattr(judging_service, "utcnow", lambda: AFTER)
+    # Before the release nothing changes for them.
+    assert [x["status"] for x in cards(present)] == ["awaiting"]
+    assert release(root).status_code == 200
+    for who, certificate in ((present, "dept_participation"), (absent, None)):
+        shown = cards(who)
+        assert [x["status"] for x in shown] == ["participated"] and shown[0]["title"] == "Not among the winners this time"
+        assert "did not win Category 1 for CSE" in shown[0]["message"] and "does not go to the Grand Finale" in shown[0]["message"]
+        assert shown[0]["certificate"] == certificate
+    assert "ready to download" in cards(present)[0]["message"]
+    assert "marked present" in cards(absent)[0]["message"]  # told why there is no certificate
+    # The winners still see the finale note.
+    assert "Grand Finale details" in cards(as_user("a@kiet.edu"))[0]["message"]

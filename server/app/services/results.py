@@ -177,30 +177,46 @@ def my_results(db: Session, user: User) -> ResultsOut:
                         message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
                     )
                 )
-        else:
-            if released:
+        elif released:
+            # The results are out and this team did not win. Say so plainly and kindly, with the certificate to download.
+            # The Grand Finale is for the winners (and any team the department nominated), so no "awaited" card here.
+            nominated = finalists_out and team.result == "finalist"
+            _, why_not = certificates.student_certificate_status(db, user)
+            ready = cert_type == "dept_participation"
+            if nominated:
+                title, text = "Department round results are out", "Thank you for taking part."
+            else:
+                title = "Not among the winners this time"
+                text = (
+                    f"Thank you for taking part in InnoTech'26. Your team did not win Category {team.category}"
+                    f"{f' for {team.department}' if team.department else ''}, so it does not go to the Grand Finale."
+                )
+            cards.append(
+                ResultCard(
+                    round="department",
+                    status="participated",
+                    title=title,
+                    message=f"{text} " + ("Your participation certificate is ready to download." if ready else (why_not or "")),
+                    certificate=cert_type if ready else None,
+                )
+            )
+            if nominated:
                 cards.append(
                     ResultCard(
                         round="department",
-                        status="participated",
-                        title="Department round results are out",
-                        message=(
-                            "Thank you for taking part. Your participation certificate is ready to download."
-                            if cert_type == "dept_participation"
-                            else certificates.student_certificate_status(db, user)[1] or ""
-                        ),
-                        certificate=cert_type if cert_type == "dept_participation" else None,
+                        status="finalist",
+                        title="You are a finalist!",
+                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
                     )
                 )
+        else:
             if not finalists_out:
                 cards.append(
                     ResultCard(
                         round="department",
                         status="awaiting",
-                        title="Grand Finale list awaited" if released else "Department round results awaited",
-                        message="The Grand Finale finalists are announced soon on this page."
-                        if released
-                        else "The finalists are declared on 26 October.",
+                        title="Department round results awaited",
+                        message="The finalists are declared on 26 October.",
                     )
                 )
             elif team.result == "finalist":
