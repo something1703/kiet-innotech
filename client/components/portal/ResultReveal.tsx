@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ordinal } from "@/lib/ordinal";
 import { Award, Download, Medal, RotateCcw, Rocket, Trophy, Volume2, VolumeX, X } from "lucide-react";
 
-export type RevealKind = "first" | "second";
+export type RevealKind = "first" | "second" | "third";
 
 export type RevealResult = {
   kind: RevealKind;
   studentName: string;
+  /** 1 for 1st, 2 for 2nd, 3 for 3rd and so on: the medal text and the colours follow it. */
+  place: number;
   teamName: string;
   teamCode: string;
   department: string;
@@ -38,6 +41,16 @@ const LOOK = {
     eyebrow: "text-slate-200",
     confetti: ["#e2e8f0", "#cbd5e1", "#94a3b8", "#e85524", "#ffffff", "#f7a07a"],
     place: "2nd",
+    title: "Department winner",
+  },
+  third: {
+    medal: "from-amber-500 via-orange-500 to-amber-800",
+    ring: "ring-orange-300/60",
+    glow: "rgba(234, 120, 40, 0.5)",
+    ray: "rgba(251, 146, 60, 0.15)",
+    eyebrow: "text-orange-300",
+    confetti: ["#fb923c", "#ea580c", "#fdba74", "#e85524", "#ffffff", "#fbbf24"],
+    place: "3rd",
     title: "Department winner",
   },
 } as const;
@@ -203,7 +216,7 @@ function Winner({ result }: { result: RevealResult }) {
           <div className="absolute inset-3 rounded-full ring-2 ring-white/40" />
           <span className="rr-shine absolute inset-0 overflow-hidden rounded-full" aria-hidden="true" />
           <Medal className="size-10 text-navy-900/70" aria-hidden="true" />
-          <span className="font-display text-4xl font-black leading-none text-navy-900 sm:text-5xl">{look.place}</span>
+          <span className="font-display text-4xl font-black leading-none text-navy-900 sm:text-5xl">{ordinal(result.place)}</span>
           <span className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.25em] text-navy-900/70">Place</span>
         </div>
       </div>
@@ -214,7 +227,7 @@ function Winner({ result }: { result: RevealResult }) {
         Congratulations, {firstName(result.studentName)}!
       </h1>
       <p className="rr-rise mt-3 text-base text-white/80" style={{ animationDelay: "0.8s" }}>
-        <span className="font-semibold text-white">{result.teamName}</span> ({result.teamCode}) came {look.place} in PS {result.category}: {result.categoryTitle}.
+        <span className="font-semibold text-white">{result.teamName}</span> ({result.teamCode}) came {ordinal(result.place)} in PS {result.category}: {result.categoryTitle}.
       </p>
       {result.amount !== null && (
         <div className="rr-rise mt-6 rounded-2xl bg-white/10 px-6 py-4 ring-1 ring-white/15" style={{ animationDelay: "1s" }}>

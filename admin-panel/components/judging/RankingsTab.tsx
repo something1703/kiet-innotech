@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Eye, EyeOff, Medal, Trophy, X } from "lucide-react";
+import { ordinal } from "@/lib/format";
 import { api, errorMessage } from "@/lib/api";
 import type { JudgingRound, RankedTeam, Rankings } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -20,7 +21,6 @@ import { YearChips } from "@/components/teams/YearChips";
 
 const placeTone = ["text-accent-500", "text-slate-400", "text-amber-700"];
 const rupees = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
-const ordinal = (place: number) => (place === 1 ? "1st" : "2nd");
 
 /** The average of both judges' totals, ranked with the event's tie-breakers; organisers declare the prize winners here. */
 export function RankingsTab({ round }: { round: JudgingRound }) {

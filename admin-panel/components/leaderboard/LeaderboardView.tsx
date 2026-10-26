@@ -8,7 +8,7 @@ import type { AdminTeam, Leaderboard, LeaderboardCategory, LeaderboardTeam } fro
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departmentLabel, nominatingDepartments } from "@/lib/content";
 import { downloadWorkbook, sheet } from "@/lib/excel";
-import { formatDateTime, plural } from "@/lib/format";
+import { formatDateTime, ordinal, plural } from "@/lib/format";
 import { teamHref } from "@/lib/routes";
 import { useQuery } from "@/lib/use-query";
 import { intParam, pickParam, useUrlParams } from "@/lib/use-url-params";
@@ -164,7 +164,7 @@ function Board() {
             { header: "Leader phone", width: 14, value: (w) => leaderOf(w)?.phone ?? "", text: true },
             { header: "Leader email", width: 30, value: (w) => leaderOf(w)?.email ?? "" },
             { header: "Members", width: 60, value: (w) => membersOf(w).map((m) => `${m.fullName} (${m.rollNumber || "no roll no."})`).join("; ") },
-            { header: "Declared", width: 12, value: (w) => (w.team.award ? `Yes, ${w.team.award.place === 1 ? "1st" : "2nd"}` : "Not yet") },
+            { header: "Declared", width: 12, value: (w) => (w.team.award ? `Yes, ${ordinal(w.team.award.place)}` : "Not yet") },
           ],
           winners,
         ),
@@ -395,7 +395,7 @@ function CategoryCard({ category }: { category: LeaderboardCategory }) {
                     </p>
                     <span className="mt-1 flex flex-wrap gap-1">
                       <Pill tone={s.tone}>{s.label}</Pill>
-                      {t.award && <Pill tone="orange">{t.award.place === 1 ? "1st" : "2nd"}{t.award.amount > 0 ? ` · ${rupees(t.award.amount)}` : ""}</Pill>}
+                      {t.award && <Pill tone="orange">{ordinal(t.award.place)}{t.award.amount > 0 ? ` · ${rupees(t.award.amount)}` : ""}</Pill>}
                     </span>
                   </div>
                   <div className="shrink-0 text-right">

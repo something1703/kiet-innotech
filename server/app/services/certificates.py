@@ -98,7 +98,7 @@ def _winning_award(db: Session, team: Team) -> Award | None:
     """The team's department award, once winners are shown to students."""
     if not release.awards_published(db):
         return None
-    return db.scalar(select(Award).where(Award.team_id == team.id, Award.round == "department", Award.place.in_([1, 2])))
+    return db.scalar(select(Award).where(Award.team_id == team.id, Award.round == "department", Award.place >= 1))
 
 
 def student_certificate_status(db: Session, user: User) -> tuple[str | None, str | None]:
@@ -249,7 +249,7 @@ def _build_student_data(db: Session, user: User, team: Team, award: Award | None
         "organisation": ORGANISER_LINE,
     }
     if award:
-        data["place"] = "1st" if award.place == 1 else "2nd"
+        data["place"] = rules.ordinal(award.place)
         data["award_amount"] = str(award.amount) if award.amount else ""
     return data
 

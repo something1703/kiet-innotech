@@ -5,7 +5,7 @@ import { Award, CheckCircle2, Rocket, TriangleAlert } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ReleaseReadiness } from "@/lib/admin-types";
 import { departmentLabel } from "@/lib/content";
-import { formatDateTime, plural } from "@/lib/format";
+import { formatDateTime, ordinal, plural } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -187,7 +187,7 @@ function Preview({ data, anyway, setAnyway }: { data: ReleaseReadiness; anyway: 
                 </span>
                 {g.winners.map((w) => (
                   <Pill key={w.teamCode} tone={w.place === 1 ? "orange" : "slate"}>
-                    {w.place === 1 ? "1st" : "2nd"} {w.teamName} ({w.teamCode})
+                    {ordinal(w.place)} {w.teamName} ({w.teamCode})
                   </Pill>
                 ))}
                 {g.declaredByHand && <span className="text-xs text-muted">declared by hand</span>}

@@ -206,6 +206,12 @@ def category_error(category: int, participant_type: str, years: list[int]) -> st
     return None
 
 
+def ordinal(number: int) -> str:
+    """1st, 2nd, 3rd, 4th ... 11th, 12th, 13th, 21st."""
+    suffix = "th" if 10 <= number % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
+
+
 def finalist_quota(department: str, category: int) -> int:
     return 2 if department in DOUBLE_QUOTA_DEPARTMENTS and category <= 4 else 1
 

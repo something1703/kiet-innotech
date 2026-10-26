@@ -38,7 +38,7 @@ from . import audit, judging
 RELEASE_KEY = "dept_results_released"
 RELEASE_PHRASE = "RELEASE"
 RELEASE_MARK = "release:"
-MAX_WINNING_PLACES = 2  # awards.place is 1 or 2
+MAX_WINNING_PLACES = 10  # a department's finalist quota is at most 10; awards.place goes up to 10
 
 
 def is_released(db: Session) -> bool:

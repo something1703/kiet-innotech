@@ -401,12 +401,12 @@ class Attendance(Base):
 
 
 class Award(Base):
-    """A prize place (1st or 2nd) declared by the organisers from the rankings. Students see it once the round's awards are published."""
+    """A winning place (1st, 2nd, 3rd ... up to the department's finalist quota) declared from the rankings."""
 
     __tablename__ = "awards"
     __table_args__ = (
         CheckConstraint("round IN ('department', 'final')", name="round"),
-        CheckConstraint("place IN (1, 2)", name="place"),
+        CheckConstraint("place >= 1 AND place <= 10", name="place"),
         # A team wins once per round, and each place of a group (department + category, or finale category) once.
         Index("uq_awards_round_team", "round", "team_id", unique=True),
         Index("uq_awards_round_group_place", "round", "group_key", "place", unique=True),

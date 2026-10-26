@@ -44,7 +44,8 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
   const revealFor = (card: ResultCard): RevealResult | null => {
     if (!me.profile || !team) return null;
     return {
-      kind: card.place === 1 ? "first" : "second",
+      kind: card.place === 1 ? "first" : card.place === 2 ? "second" : "third",
+      place: card.place ?? 1,
       studentName: me.profile.fullName,
       teamName: team.name,
       teamCode: team.code,

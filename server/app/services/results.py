@@ -27,7 +27,7 @@ def _rupees(amount: int) -> str:
 
 
 def _place(place: int) -> str:
-    return "1st" if place == 1 else "2nd"
+    return rules.ordinal(place)
 
 
 def _other_institution_cards(db: Session, team: Team, awards: dict, published: dict) -> list[ResultCard]:

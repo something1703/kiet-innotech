@@ -375,3 +375,50 @@ def test_marks_cannot_change_under_released_results_until_they_are_withdrawn(jud
     )
     assert fixed.status_code == 200, fixed.text
     assert release(root).status_code == 200
+
+
+def test_a_department_with_three_winning_places_names_three_winners(judging, as_user, monkeypatch):  # noqa: F811
+    """CSE has three places in problem statement 1 this year: 1st, 2nd and 3rd all win, and the 3rd is told so and gets a certificate."""
+    root = judging["root"]
+    set_room(judging)
+    open_round(judging)
+    all_templates(root)
+    upload(
+        root,
+        "dept_winner",
+        fields=[
+            {
+                "id": "n",
+                "label": "recipient_name",
+                "x_pt": 100,
+                "y_pt": 200,
+                "w_pt": 400,
+                "h_pt": 36,
+                "font": "Montserrat Bold",
+                "fontsize": 23,
+            },
+            {"id": "p", "label": "place", "x_pt": 100, "y_pt": 260, "w_pt": 400, "h_pt": 36, "font": "Montserrat Bold", "fontsize": 23},
+        ],
+    )
+    quotas = root.put("/admin/finalists/quotas", {"quotas": [{"department": "CSE", "category": 1, "quota": 3}]})
+    assert quotas.status_code == 200, quotas.text
+    score_both(judging, "cse_a", FULL)
+    score_both(judging, "cse_b", [4, 4, 4, 4, 4, 4, 4, 4, 8])
+    score_both(judging, "cse_c", [3, 3, 3, 3, 3, 3, 3, 3, 6])
+    e = as_user("e@kiet.edu")  # CSE Gamma: third
+    mark_present(root, "e@kiet.edu", e)
+    monkeypatch.setattr(judging_service, "utcnow", lambda: AFTER)
+    group = root.get("/admin/judging/department/release").json()["groups"][0]
+    assert group["places"] == 3 and [(w["place"], w["team_name"]) for w in group["winners"]] == [
+        (1, "CSE Alpha"),
+        (2, "CSE Beta"),
+        (3, "CSE Gamma"),
+    ]
+    assert [w["prize"] for w in group["winners"]] == [2000, 0, 0]
+    assert release(root).json()["winners"] == 3
+    winner = next(x for x in cards(e) if x["status"] == "winner")
+    assert winner["place"] == 3 and "3rd" in winner["message"] and winner["amount"] is None and winner["certificate"] == "dept_winner"
+    assert "3rd" in pdf_text(e.get("/me/certificates/dept_winner.pdf"))
+    # And the leaderboard-style rankings carry the third place too.
+    ranked = root.get("/admin/judging/department/rankings").json()["groups"][0]["teams"]
+    assert sorted(t["award"]["place"] for t in ranked if t["award"]) == [1, 2, 3]

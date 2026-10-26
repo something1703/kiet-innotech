@@ -1537,7 +1537,7 @@ def declare_award(db: Session, admin: Admin, round_: str, data: AwardInput) -> N
         raise ApiError(f"{other.name if other else 'Another team'} already holds this place. Remove it there first.", 409)
     db.execute(delete(Award).where(Award.round == round_, Award.team_id == team.id))
     db.add(Award(round=round_, team_id=team.id, group_key=key, place=data.place, amount=amount, declared_by=admin.email))
-    place = "1st" if data.place == 1 else "2nd"
+    place = rules.ordinal(data.place)
     audit.record(db, admin.email, "judging.award_declared", team, f"{place} place, Rs {amount}, {ROUND_LABELS[round_]}")
     db.commit()
 
@@ -1556,7 +1556,7 @@ def remove_award(db: Session, admin: Admin, round_: str, team_id: uuid.UUID) -> 
     if admin.role == "admin" and team.department != admin.department:
         raise ApiError(f"You can change winners for {admin.department} only.", 403)
     db.delete(award)
-    audit.record(db, admin.email, "judging.award_removed", team, f"{'1st' if award.place == 1 else '2nd'} place, {ROUND_LABELS[round_]}")
+    audit.record(db, admin.email, "judging.award_removed", team, f"{rules.ordinal(award.place)} place, {ROUND_LABELS[round_]}")
     db.commit()
 
 
