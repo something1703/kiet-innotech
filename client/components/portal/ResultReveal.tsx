@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Award, Download, Medal, RotateCcw, Rocket, Trophy, Volume2, VolumeX, X } from "lucide-react";
 
-export type RevealKind = "first" | "second" | "participation";
+export type RevealKind = "first" | "second";
 
 export type RevealResult = {
   kind: RevealKind;
@@ -43,10 +43,10 @@ const LOOK = {
 } as const;
 
 /**
- * The moment a student learns their department-round result: a sealed card they tap to open (the tap also lets the browser
- * play sound), a drumroll, then the reveal. Winners get a medal, light rays, confetti, a cymbal and a fanfare; everyone else
- * gets a warm thank-you and a soft chime, never a fake celebration. Sound is made in the browser (no files), can be muted,
- * and with reduced motion the page skips the movement and goes straight to the result.
+ * The moment a winning team learns it won: a sealed card they tap to open (the tap also lets the browser play sound), a
+ * drumroll, then the reveal with a medal, light rays, confetti, a cymbal and a fanfare, and the note that their Grand Finale
+ * details follow. Winners only: everyone else just gets their result card and certificate on the dashboard. Sound is made in the
+ * browser (no files) and can be muted; with reduced motion the page skips the movement and goes straight to the result.
  */
 export function ResultReveal({
   result,
@@ -66,7 +66,6 @@ export function ResultReveal({
   const [burst, setBurst] = useState(0);
   const sound = useRef<Sound | null>(null);
   const timers = useRef<number[]>([]);
-  const winner = result.kind !== "participation";
 
   useEffect(() => {
     const pending = timers.current;
@@ -86,11 +85,6 @@ export function ResultReveal({
     sound.current ??= new Sound();
     sound.current.setMuted(muted);
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!winner) {
-      setPhase("revealed");
-      sound.current.chime();
-      return;
-    }
     const roll = still ? 0 : 2400;
     setPhase(still ? "revealed" : "drumroll");
     if (!still) sound.current.drumroll(roll / 1000);
@@ -122,12 +116,10 @@ export function ResultReveal({
               ? "radial-gradient(60% 45% at 50% 40%, rgba(232,85,36,0.18), transparent 70%)"
               : phase === "drumroll"
                 ? "radial-gradient(28% 22% at 50% 42%, rgba(255,255,255,0.16), transparent 75%)"
-                : winner
-                  ? `radial-gradient(70% 55% at 50% 38%, ${LOOK[result.kind as "first" | "second"].glow}, transparent 72%)`
-                  : "radial-gradient(60% 45% at 50% 40%, rgba(232,85,36,0.16), transparent 70%)",
+                : `radial-gradient(70% 55% at 50% 38%, ${LOOK[result.kind].glow}, transparent 72%)`,
         }}
       />
-      {winner && <Confetti burst={burst} colors={LOOK[result.kind as "first" | "second"].confetti} />}
+      <Confetti burst={burst} colors={LOOK[result.kind].confetti} />
 
       <div className="fixed right-3 top-3 z-20 flex gap-2 sm:right-5 sm:top-5">
         <button type="button" onClick={toggleSound} aria-label={muted ? "Turn sound on" : "Turn sound off"} className={iconButton}>
@@ -169,21 +161,20 @@ export function ResultReveal({
           </div>
         )}
 
-        {phase === "revealed" && winner && <Winner result={result} />}
-        {phase === "revealed" && !winner && <ThankYou result={result} />}
+        {phase === "revealed" && <Winner result={result} />}
 
         {phase === "revealed" && !onDownload && downloadNote && (
-          <p className="rr-rise mt-8 max-w-sm text-sm text-white/65" style={{ animationDelay: winner ? "1.4s" : "0.5s" }}>
+          <p className="rr-rise mt-8 max-w-sm text-sm text-white/65" style={{ animationDelay: "1.4s" }}>
             {downloadNote}
           </p>
         )}
 
         {phase === "revealed" && (
-          <div className="rr-rise mt-8 flex flex-wrap justify-center gap-3" style={{ animationDelay: winner ? "1.4s" : "0.5s" }}>
+          <div className="rr-rise mt-8 flex flex-wrap justify-center gap-3" style={{ animationDelay: "1.4s" }}>
             {onDownload && (
               <button type="button" onClick={() => void onDownload()} className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 font-semibold text-navy-900 shadow-lg transition hover:bg-brand-50">
                 <Download className="size-4" aria-hidden="true" />
-                {winner ? "Download winner certificate" : "Download participation certificate"}
+                Download winner certificate
               </button>
             )}
             <button type="button" onClick={reveal} className="inline-flex h-12 items-center gap-2 rounded-full px-5 font-semibold text-white/80 ring-1 ring-white/20 transition hover:bg-white/10">
@@ -198,7 +189,7 @@ export function ResultReveal({
 }
 
 function Winner({ result }: { result: RevealResult }) {
-  const look = LOOK[result.kind as "first" | "second"];
+  const look = LOOK[result.kind];
   return (
     <div className="mt-6 flex flex-col items-center [text-shadow:0_2px_14px_rgba(0,0,0,0.75)]" aria-live="polite">
       <div className="relative flex size-48 items-center justify-center sm:size-72">
@@ -237,21 +228,6 @@ function Winner({ result }: { result: RevealResult }) {
           <span className="block font-semibold text-white">Grand Finale · 30 October</span>
           Your Grand Finale details will be shared with you soon. Watch this page and your email.
         </span>
-      </p>
-    </div>
-  );
-}
-
-function ThankYou({ result }: { result: RevealResult }) {
-  return (
-    <div className="rr-rise mt-8 flex flex-col items-center" aria-live="polite">
-      <span className="flex size-24 items-center justify-center rounded-full bg-brand-500/15 ring-1 ring-brand-400/40">
-        <Award className="size-11 text-brand-300" aria-hidden="true" />
-      </span>
-      <h1 className="mt-6 font-display text-3xl font-bold">Thank you for taking part, {firstName(result.studentName)}</h1>
-      <p className="mt-3 max-w-md text-base text-white/75">
-        {result.teamName} was not among the winners of PS {result.category} this time. Building, presenting and defending your idea in front of
-        the judges is an achievement in itself. Your participation certificate is ready.
       </p>
     </div>
   );
@@ -349,7 +325,7 @@ function Confetti({ burst, colors }: { burst: number; colors: readonly string[] 
   return <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 z-[5] size-full" />;
 }
 
-/** All the sound, made with the Web Audio API: a snare drumroll, a cymbal, a brass fanfare and a soft chime. */
+/** All the sound, made with the Web Audio API: a snare drumroll, a cymbal, and a brass fanfare. */
 class Sound {
   private ctx = new AudioContext();
   private master: GainNode;
@@ -486,24 +462,6 @@ class Sound {
     const chord = first ? [0, 4, 7, 12, 16] : [0, 4, 7, 12];
     for (const semi of chord) this.brass(n(semi), chordAt, first ? 1.8 : 1.4, 0.1);
     this.brass(n(-12), chordAt, first ? 1.8 : 1.4, 0.12);
-  }
-
-  /** A soft bell triad for the thank-you. */
-  chime() {
-    const t = this.ctx.currentTime + 0.05;
-    [523.25, 659.25, 783.99].forEach((f, i) => {
-      const osc = this.ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = f;
-      const g = this.ctx.createGain();
-      const at = t + i * 0.18;
-      g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(0.18, at + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, at + 2.2);
-      osc.connect(g).connect(this.master);
-      osc.start(at);
-      osc.stop(at + 2.3);
-    });
   }
 }
 

@@ -39,12 +39,12 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // The department result as a moment: a winner always, a student who was present when their certificate is ready.
-  const resultCard = results.find((c) => c.round === "department" && (c.status === "winner" || (c.status === "participated" && c.certificate)));
+  // The department result as a moment, for winners only. Everyone else just gets their result card with the certificate to download.
+  const resultCard = results.find((c) => c.round === "department" && c.status === "winner");
   const revealFor = (card: ResultCard): RevealResult | null => {
     if (!me.profile || !team) return null;
     return {
-      kind: card.status === "winner" ? (card.place === 1 ? "first" : "second") : "participation",
+      kind: card.place === 1 ? "first" : "second",
       studentName: me.profile.fullName,
       teamName: team.name,
       teamCode: team.code,
@@ -105,7 +105,8 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
         const looked = looks[card.status];
         const box = looked.box;
         const Icon = card.status === "participated" && card.round === "department" ? Award : looked.Icon;
-        const celebrate = card.round === "department" && (card.status === "winner" || (card.status === "participated" && card.certificate));
+        const celebrate = card.round === "department" && card.status === "winner";
+        const offersCertificate = card.round === "department" && Boolean(card.certificate);
         const bright = card.status === "winner" || card.status === "finalist" || card.status === "qualified";
         return (
           <section key={`${card.round}-${card.status}`} aria-label={card.title} className={`flex items-start gap-4 rounded-3xl p-5 ring-1 sm:p-6 ${box}`}>
@@ -119,7 +120,7 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
               <h2 className="mt-1 font-display text-xl font-bold">{card.title}</h2>
               {card.amount !== null && <p className="mt-1 font-display text-3xl font-bold">₹{card.amount.toLocaleString("en-IN")}</p>}
               <p className={`mt-1 text-sm ${bright ? "text-white/90" : card.status === "disqualified" || card.status === "rejected" ? "text-red-800" : "text-muted"}`}>{card.message}</p>
-              {celebrate && (
+              {(celebrate || offersCertificate) && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {card.certificate && (
                     <button
@@ -132,17 +133,19 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
                       {saving ? "Preparing…" : "Download certificate"}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setManual(revealFor(card))}
-                    className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition ${bright ? "text-white ring-white/40 hover:bg-white/10" : "text-ink ring-line hover:bg-surface"}`}
-                  >
-                    <Play size={14} aria-hidden="true" />
-                    Watch your result
-                  </button>
+                  {celebrate && (
+                    <button
+                      type="button"
+                      onClick={() => setManual(revealFor(card))}
+                      className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition ${bright ? "text-white ring-white/40 hover:bg-white/10" : "text-ink ring-line hover:bg-surface"}`}
+                    >
+                      <Play size={14} aria-hidden="true" />
+                      Watch your result
+                    </button>
+                  )}
                 </div>
               )}
-              {celebrate && saveError && <p className={`mt-2 text-sm ${bright ? "text-white" : "text-red-700"}`}>{saveError}</p>}
+              {(celebrate || offersCertificate) && saveError && <p className={`mt-2 text-sm ${bright ? "text-white" : "text-red-700"}`}>{saveError}</p>}
               {card.round === "department" && card.status === "winner" && !card.certificate && (
                 <p className="mt-3 text-xs text-white/85">The certificate is for team members who were marked present at the department round.</p>
               )}
