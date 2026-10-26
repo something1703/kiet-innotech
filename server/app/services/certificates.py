@@ -146,6 +146,18 @@ def get_judge_certificates(db: Session, juror: Juror) -> list:
     return [{"type": "dept_judge", "available": ok, "reason": reason}]
 
 
+def unprintable_names(db: Session) -> list[str]:
+    """Students taking part whose profile name has characters the font cannot draw (their certificate uses their account name)."""
+    teams = select(Team.id).where(Team.route == "department", judging._eligible_condition("department"))
+    rows = db.execute(
+        select(Profile.full_name, User.email)
+        .join(User, User.id == Profile.user_id)
+        .join(TeamMember, TeamMember.user_id == Profile.user_id)
+        .where(TeamMember.team_id.in_(teams))
+    ).tuples()
+    return sorted(f"{name} ({email})" for name, email in rows if not printable(name))
+
+
 def recipient_counts(db: Session, winner_team_ids: set) -> dict:
     """How many students and judges the release would give a certificate to, for the confirmation screen."""
     teams = select(Team.id).where(Team.route == "department", judging._eligible_condition("department"))
@@ -198,10 +210,37 @@ def _judged(db: Session, juror: Juror) -> bool:
     )
 
 
+_PRINT_FONT: fitz.Font | None = None
+
+
+def printable(text: str) -> bool:
+    """Whether the certificate font can draw every character of this text (it has no Devanagari, Tamil, emoji and so on)."""
+    global _PRINT_FONT
+    if _PRINT_FONT is None:
+        _PRINT_FONT = fitz.Font(fontbuffer=(FONT_DIR / BUILTIN_FONTS["Montserrat Bold"]).read_bytes())
+    return all(ch.isspace() or _PRINT_FONT.has_glyph(ord(ch)) for ch in text)
+
+
+def display_name(*candidates: str) -> str:
+    """
+    The name to print: the first candidate (profile name, then the account's own name) the font can draw. If none can, the
+    first one with the characters it cannot draw removed, so a certificate is still produced rather than blank boxes.
+    """
+    names = [" ".join(c.split()) for c in candidates if c and c.strip()]
+    for name in names:
+        if printable(name):
+            return name
+    if names:
+        cleaned = " ".join("".join(ch for ch in names[0] if ch.isspace() or printable(ch)).split())
+        if cleaned:
+            return cleaned
+    return "Participant"
+
+
 def _build_student_data(db: Session, user: User, team: Team, award: Award | None = None) -> dict:
     profile = db.get(Profile, user.id)
     data = {
-        "recipient_name": profile.full_name if profile else user.name,
+        "recipient_name": display_name(profile.full_name if profile else "", user.name),
         "team_name": team.name,
         "team_code": team.code,
         "department": team.department or (profile.department if profile else "") or "",
@@ -216,7 +255,7 @@ def _build_student_data(db: Session, user: User, team: Team, award: Award | None
 
 
 def _build_judge_data(juror: Juror) -> dict:
-    return {"recipient_name": juror.name, "department": juror.department or "", "organisation": ORGANISER_LINE}
+    return {"recipient_name": display_name(juror.name), "department": juror.department or "", "organisation": ORGANISER_LINE}
 
 
 def _hex_to_rgb(hex_color: str):
@@ -239,6 +278,7 @@ def render_certificate(db: Session, template_type: str, recipient_data: dict, *,
     doc = fitz.open(stream=tmpl.pdf_data, filetype="pdf")
     page = doc[0]
     inserted: dict[str, str] = {}  # each font goes into the file once, however many boxes use it
+    measuring: dict[str, fitz.Font] = {}
 
     for field in fields:
         label = field.get("label") or field.get("source_key") or ""
@@ -279,6 +319,14 @@ def render_certificate(db: Session, template_type: str, recipient_data: dict, *,
         rect = fitz.Rect(x, y, x + w, y + h)
         fitted = size
         placed = False
+        if h < size * 2.4:
+            # A box made for one line (a name): shrink until it fits the width, rather than wrapping into two small lines.
+            measure = measuring.setdefault(font_name, fitz.Font(fontbuffer=fonts[font_name]))
+            while fitted > 8 and measure.text_length(text, fontsize=fitted) > w - 2:
+                fitted -= 0.5
+            if measure.text_length(text, fontsize=fitted) > w - 2:
+                while len(text) > 4 and measure.text_length(text, fontsize=fitted) > w - 2:
+                    text = text[:-2].rstrip() + "…"
         while fitted >= MAX_SHRINK_PT:
             remaining = page.insert_textbox(
                 rect,

@@ -142,6 +142,13 @@ function Preview({ data, anyway, setAnyway }: { data: ReleaseReadiness; anyway: 
           {missing.map(([type]) => templateNames[type] ?? type).join(", ")}: students and judges will see &ldquo;your certificate is being prepared&rdquo; until you publish them on the Certificates page.
         </Notice>
       )}
+      {data.unprintableNames.length > 0 && (
+        <Notice tone="warning" title={`${plural(data.unprintableNames.length, "student")} with a name the certificate cannot print`}>
+          Their certificate uses the name of their Google account (or the part of the name that can be printed). Fix the name on the Students page first if
+          that is not right: {data.unprintableNames.slice(0, 8).join(", ")}
+          {data.unprintableNames.length > 8 ? ` and ${data.unprintableNames.length - 8} more` : ""}.
+        </Notice>
+      )}
       {data.groups.some((g) => g.tieAtCut) && (
         <Notice tone="warning" title="A tie at the winning places">
           {data.groups

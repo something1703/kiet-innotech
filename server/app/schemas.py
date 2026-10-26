@@ -1448,6 +1448,8 @@ class ReleaseReadinessOut(BaseModel):
     judges: int
     # dept_participation / dept_winner / dept_judge: is the template published?
     templates: dict[str, bool]
+    # Students whose name has characters the certificate font cannot draw: they get their account name (or the printable part).
+    unprintable_names: list[str] = []
 
 
 class ReleaseOut(BaseModel):

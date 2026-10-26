@@ -555,6 +555,8 @@ export type ReleaseReadiness = {
   judges: number;
   /** Is the winner / participation / judge certificate design published? */
   templates: Record<string, boolean>;
+  /** Students whose name has characters the certificate font cannot draw (Hindi, Tamil, emoji): they get their account name. */
+  unprintableNames: string[];
 };
 
 export type ReleaseResult = { winners: number; groupsWithoutWinner: number; declared: number };

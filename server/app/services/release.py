@@ -173,6 +173,7 @@ def readiness(db: Session, admin) -> ReleaseReadinessOut:
         participation_students=people["participation_students"],
         judges=people["judges"],
         templates=people["templates"],
+        unprintable_names=certificates.unprintable_names(db),
     )
 
 

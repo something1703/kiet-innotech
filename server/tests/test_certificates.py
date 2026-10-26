@@ -265,3 +265,51 @@ def test_template_upload_validation_and_fonts(world):  # noqa: F811
     root.put("/admin/certificates/dept_winner/fields", json={"fields": []})
     assert root.delete(f"/admin/certificate-fonts/{font.json()['id']}").status_code == 204
     assert root.delete(f"/admin/certificate-fonts/{font.json()['id']}").status_code == 404
+
+
+def test_names_the_font_cannot_draw_fall_back_instead_of_printing_blanks():
+    from app.services import certificates as certs
+
+    assert certs.printable("Ananya Sharma") and certs.printable("José Álvarez-Müller O'Neil") and certs.printable("A. K. Singh")
+    assert not certs.printable("आर्यन शर्मा") and not certs.printable("Test 😀")
+    # The profile name if it can be drawn, else the account's own name, else what can be drawn of it, else a plain word.
+    assert certs.display_name("आर्यन शर्मा", "Aaryan Sharma") == "Aaryan Sharma"
+    assert certs.display_name("Aryan शर्मा", "आर्यन") == "Aryan"
+    assert certs.display_name("😀") == "Participant" and certs.display_name("") == "Participant"
+    assert certs.display_name("  Ananya    Sharma ") == "Ananya Sharma"
+
+
+def test_a_name_stays_on_one_line_however_long(world, as_user):  # noqa: F811
+    from app.db import get_sessionmaker
+    from app.services import certificates as certs
+
+    upload(
+        world["root"],
+        fields=[
+            {
+                "id": "name",
+                "label": "recipient_name",
+                "x_pt": 200,
+                "y_pt": 250,
+                "w_pt": 400,
+                "h_pt": 36,
+                "font": "Montserrat Bold",
+                "fontsize": 23,
+            }
+        ],
+    )
+    with get_sessionmaker()() as db:
+        for name in (
+            "Om Rao",
+            "Venkata Satya Narayana Raghavendra Subramanian",
+            "Muhammad Abdul Rahman bin Abdullah Al-Hashimi Junior",
+            "W" * 70,
+        ):
+            pdf = certs.render_certificate(db, "dept_participation", {"recipient_name": name})
+            with pymupdf.open(stream=pdf, filetype="pdf") as doc:
+                lines = [line for block in doc[0].get_text("dict")["blocks"] for line in block.get("lines", [])]
+                words = [
+                    s for line in lines for s in line["spans"] if s["text"].strip() and s["bbox"][1] > 240
+                ]  # below the template's own text
+                assert len({round(s["bbox"][1]) for s in words}) == 1, (name, len(lines))  # one line
+                assert all(s["bbox"][0] >= 199 and s["bbox"][2] <= 601 for s in words), name  # inside the 400 pt box
