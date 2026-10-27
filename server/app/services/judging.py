@@ -1426,10 +1426,10 @@ def leaderboard(db: Session, admin: Admin, settings: Settings, department: str |
     The department round's leaderboard, department by department and problem statement by problem statement, from the same
     rankings (average of both judges, then innovation, then query addressing). The first teams up to the department's
     finalist quota for that problem statement are in line for the Grand Finale; departments still nominate their finalists.
-    Super admins only.
+    Super admins see every department; a department's admin sees their own.
     """
-    if admin.role != "super_admin":
-        raise ApiError("The leaderboard is for super admins only.", 403)
+    if admin.role not in ("super_admin", "admin"):
+        raise ApiError("The leaderboard is for super admins and department admins.", 403)
     ranked = rankings(db, admin, "department", department)
     quota = admin_service.quotas(db)
     nominated = set(db.scalars(select(FinalistNomination.team_id)))

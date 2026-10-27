@@ -440,6 +440,15 @@ def _require_super(admin: Admin, what: str) -> None:
         raise ApiError(f"Only a super admin can {what}.", 403)
 
 
+TEAMS_LOCKED = "Team details are locked for department admins. Ask a super admin to make this change."
+
+
+def _require_teams_unlocked(admin: Admin) -> None:
+    """Department admins read teams but no longer change them (not even withdraw); super admins and the type admins still do."""
+    if admin.role == "admin":
+        raise ApiError(TEAMS_LOCKED, 403)
+
+
 def _results_published(db: Session) -> AppState | None:
     return db.get(AppState, RESULTS_KEY)
 
@@ -455,6 +464,8 @@ def change_status(
 ) -> AdminTeamOut:
     if action in ("disqualify", "restore"):
         _require_super(admin, f"{action} teams")
+    else:
+        _require_teams_unlocked(admin)
     team = _visible_team(db, admin, team_id, lock=True)
     _apply_status(db, admin, team, action, reason, unban_members=unban_members, published=_results_published(db) is not None)
     db.commit()
@@ -1109,6 +1120,8 @@ def bulk_teams(
         _require_approver(admin)
     elif action != "withdraw":
         _require_super(admin, f"{action} teams")
+    else:
+        _require_teams_unlocked(admin)
     if action in BULK_NEEDS_REASON and (not reason or len(reason) < 5):
         raise ApiError("Please give a reason of at least five characters.", 422)
     window = schedule.load(db, settings) if action == "archive" and settings is not None else None

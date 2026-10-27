@@ -95,11 +95,16 @@ def test_team_filters_search_sort_and_paging(world):
 def test_withdraw_disqualify_restore(world):
     cse, root = world["cse"], world["root"]
     team_id = world["teams"]["cse_a"]["id"]
-    assert cse.post(f"/admin/teams/{team_id}/withdraw", {"reason": "no"}).status_code == 422  # reason too short
-    assert cse.post(f"/admin/teams/{world['teams']['it_a']['id']}/withdraw", {"reason": "Member left"}).status_code == 403
-    response = cse.post(f"/admin/teams/{team_id}/withdraw", {"reason": "A member withdrew."})
+    # Team details are locked for department admins: they can read teams but no longer change them, not even withdraw.
+    locked = cse.post(f"/admin/teams/{team_id}/withdraw", {"reason": "A member withdrew."})
+    assert locked.status_code == 403 and "locked for department admins" in locked.json()["detail"]
+    assert cse.get(f"/admin/teams/{team_id}").status_code == 200
+    assert root.get(f"/admin/teams/{team_id}").json()["status"] == "submitted"
+    # A super admin does it.
+    assert root.post(f"/admin/teams/{team_id}/withdraw", {"reason": "no"}).status_code == 422  # reason too short
+    response = root.post(f"/admin/teams/{team_id}/withdraw", {"reason": "A member withdrew."})
     assert response.json()["status"] == "withdrawn"
-    assert cse.post(f"/admin/teams/{team_id}/withdraw", {"reason": "A member withdrew."}).status_code == 409
+    assert root.post(f"/admin/teams/{team_id}/withdraw", {"reason": "A member withdrew."}).status_code == 409
 
     assert cse.post(f"/admin/teams/{team_id}/restore", {"reason": "Mistake, restore"}).status_code == 403
     assert root.post(f"/admin/teams/{team_id}/restore", {"reason": "Mistake, restore"}).json()["status"] == "submitted"
@@ -146,7 +151,7 @@ def test_finalist_quota_and_publish(world, as_user, settings):
 def test_withdrawn_team_loses_nomination(world):
     cse, teams = world["cse"], world["teams"]
     cse.put("/admin/finalists/CSE", {"nominations": [{"category": 1, "team_ids": [teams["cse_a"]["id"]]}]})
-    cse.post(f"/admin/teams/{teams['cse_a']['id']}/withdraw", {"reason": "A member withdrew."})
+    world["root"].post(f"/admin/teams/{teams['cse_a']['id']}/withdraw", {"reason": "A member withdrew."})
     assert cse.get("/admin/finalists").json()["categories"][0]["nominated"] == []
 
 

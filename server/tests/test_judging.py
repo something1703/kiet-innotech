@@ -1030,8 +1030,14 @@ def test_the_leaderboard_ranks_each_problem_statement_against_the_finalist_quota
         if cat["category"] == 1
     )
     assert [t["nominated"] for t in ps1["teams"]] == [True, False, False]
-    # Super admins only: department admins and judges cannot open it.
-    assert cse.get("/admin/leaderboard").status_code == 403 and it.get("/admin/leaderboard").status_code == 403
+    # A department admin sees their own department's board and nobody else's; judges cannot open it.
+    own = cse.get("/admin/leaderboard")
+    assert own.status_code == 200 and [d["department"] for d in own.json()["departments"]] == ["CSE"]
+    assert own.json()["departments"][0]["categories"][0]["teams"][0]["team"]["code"] == a["code"]
+    assert (
+        cse.get("/admin/leaderboard", params={"department": "IT"}).json()["departments"][0]["department"] == "CSE"
+    )  # cannot ask for another
+    assert [d["department"] for d in it.get("/admin/leaderboard").json()["departments"]] == []  # IT has no room in this world
     assert judging["it_prof"].get("/admin/leaderboard").status_code == 403
 
 

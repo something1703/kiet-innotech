@@ -39,7 +39,7 @@ const nav: { title: string; items: NavItem[] }[] = [
   {
     title: "Event",
     items: [
-      { href: "/leaderboard", label: "Leaderboard", Icon: Medal, roles: ["super_admin"] },
+      { href: "/leaderboard", label: "Leaderboard", Icon: Medal, roles: ["super_admin", "admin"] },
       { href: "/finalists", label: "Finalists", Icon: Trophy, roles: ["super_admin", "admin"] },
       { href: "/judging", label: "Judging", Icon: Scale, roles: ORGANISERS },
       { href: "/attendance-report", label: "Student attendance", Icon: UserCheck, roles: ["super_admin", "admin"] },

@@ -31,9 +31,13 @@ def test_bulk_withdraw_disqualify_and_restore(world):  # noqa: F811
     assert bulk(cse, "disqualify", [a["id"]]).status_code == 403
     assert status_of(root, a) == "submitted"
 
-    # A department admin may withdraw their own department's teams; another department's team is "not found".
-    out = bulk(cse, "withdraw", [c["id"], it_a["id"]]).json()
-    assert (out["changed"], out["not_found"], out["skipped"]) == (1, 1, [])
+    # Team details are locked for department admins, withdrawing included; nothing changes.
+    locked = bulk(cse, "withdraw", [c["id"], it_a["id"]])
+    assert locked.status_code == 403 and "locked for department admins" in locked.json()["detail"]
+    assert (status_of(root, c), status_of(root, it_a)) == ("submitted", "submitted")
+    # A super admin withdraws.
+    out = bulk(root, "withdraw", [c["id"]]).json()
+    assert (out["changed"], out["not_found"], out["skipped"]) == (1, 0, [])
     assert (status_of(root, c), status_of(root, it_a)) == ("withdrawn", "submitted")
 
     out = bulk(root, "disqualify", [a["id"], b["id"], college["id"], str(uuid.uuid4())]).json()

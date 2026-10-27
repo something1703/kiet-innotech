@@ -33,11 +33,11 @@ const podium = ["bg-amber-400 text-white ring-amber-300", "bg-slate-300 text-nav
  */
 export function LeaderboardView() {
   const admin = useAdmin();
-  if (admin.role !== "super_admin") {
+  if (admin.role !== "super_admin" && admin.role !== "admin") {
     return (
       <div className="space-y-6">
         <PageHeader eyebrow="Department round" title="Leaderboard" />
-        <Notice tone="info">The leaderboard is for super admins only.</Notice>
+        <Notice tone="info">The leaderboard is for super admins and department admins.</Notice>
       </div>
     );
   }
@@ -220,7 +220,7 @@ function Board() {
         }
       />
 
-      <ReleasePanel onChanged={() => board.reload()} />
+      {isSuper && <ReleasePanel onChanged={() => board.reload()} />}
 
       {/* The rules, from the event document */}
       <section aria-label="How the leaderboard works" className="grid gap-3 md:grid-cols-3">

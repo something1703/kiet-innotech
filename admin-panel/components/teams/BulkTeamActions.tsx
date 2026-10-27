@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Archive, BadgeCheck, Ban, ChevronDown, CircleX, RotateCcw, Send, Undo2, UserMinus, X, type LucideIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAdmin } from "@/lib/auth/AuthProvider";
 import type { AdminTeam, BulkAction, BulkResult } from "@/lib/admin-types";
 import { plural } from "@/lib/format";
 import { buttonClass } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ const items: Item[] = [
 
 /** The "Actions" button of the selection bar, with the bulk actions the admin may use. */
 export function BulkActionMenu({ approver, isSuper, onPick }: { approver: boolean; isSuper: boolean; onPick: (action: BulkAction) => void }) {
+  const admin = useAdmin();
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -49,8 +51,12 @@ export function BulkActionMenu({ approver, isSuper, onPick }: { approver: boolea
     };
   }, [open]);
 
-  const allowed = items.filter((item) => item.who === "all" || (item.who === "approver" && approver) || (item.who === "super" && isSuper));
+  // Team details are locked for department admins: they can read teams but not withdraw them.
+  const allowed = items
+    .filter((item) => item.who === "all" || (item.who === "approver" && approver) || (item.who === "super" && isSuper))
+    .filter((item) => !(item.action === "withdraw" && admin.role === "admin"));
   const groups = (["Acceptance", "Status"] as const).map((name) => ({ name, items: allowed.filter((item) => item.group === name) })).filter((g) => g.items.length > 0);
+  if (groups.length === 0) return null;
 
   return (
     <div ref={wrapper} className="relative">

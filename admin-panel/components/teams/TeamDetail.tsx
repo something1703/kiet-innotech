@@ -228,7 +228,9 @@ function TeamView({ id }: { id: string }) {
   if (!team.data) return <Loading label="Loading team" />;
 
   const t = team.data;
-  const canWithdraw = t.status === "draft" || t.status === "submitted";
+  // Team details are locked for department admins: they read a team but a super admin changes it.
+  const locked = admin.role === "admin";
+  const canWithdraw = (t.status === "draft" || t.status === "submitted") && !locked;
   const canDisqualify = isSuper && (canWithdraw || t.status === "archived");
   const canRestore = isSuper && (t.status === "withdrawn" || t.status === "disqualified" || t.status === "archived");
   const canBan = isSuper;
@@ -324,6 +326,7 @@ function TeamView({ id }: { id: string }) {
               {t.route === "department" && <ResultPill result={t.result} />}
               <Pill tone={t.route === "finale" ? "orange" : "cyan"}>{routeLabels[t.route]}</Pill>
               {otherDepartments.length > 0 && <Pill tone="navy">Mixed departments</Pill>}
+              {locked && <Pill tone="slate">Locked: a super admin changes team details</Pill>}
               {t.approvalRequired && (
                 <Pill tone={t.approvedAt ? "green" : rejected ? "red" : "orange"}>{t.approvedAt ? "Accepted" : rejected ? "Rejected" : "Awaiting approval"}</Pill>
               )}
