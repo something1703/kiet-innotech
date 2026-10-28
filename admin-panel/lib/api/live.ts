@@ -175,6 +175,17 @@
  *          clear reason (at least 15 characters). 403 otherwise.
  *   POST   /admin/panels/{id}/jurors/{juror_email}/unlock  body { reason } → Panel   (same people; lets a judge change their marks again)
  *   GET    /admin/jurors → Juror[];  POST /admin/jurors body JurorInput → Juror;  DELETE /admin/jurors/{email} → 204
+ *   POST   /admin/jurors/import  body { judges: [{ name, email, organisation, phone }] } → { judges: JudgeImportRow[] }  (super admin;
+ *          outside judges with a sign-in password each, shown once)
+ *   POST   /admin/jurors/{email}/password → { email, name, password } (super admin; shown once);  DELETE … /password → 204
+ *   POST   /auth/judge  body { email, password } → session (no bearer token). The session opens the judge's own page only.
+ *   POST   /admin/finalists/lock  body { confirm: "LOCK" } → LockFinalistsResult  (super admin, once, after the release)
+ *   GET    /desk → Desk;  GET /desk/teams?q= → DeskTeam[];  GET /desk/teams/export → DeskTeam[]   (super admins, desk volunteers)
+ *   POST   /desk/teams/{id}/check-in { user_ids } | /check-out { user_id, reason } → DeskTeam
+ *   POST   /desk/teams/{id}/coupons { meal, user_ids } → { team, given, already, not_checked_in }
+ *   POST   /desk/teams/{id}/coupons/{meal}/{user_id}/take-back { reason } → DeskTeam   (super admin)
+ *   POST   /desk/extras { meal, quantity, recipient } → MealExtra;  DELETE /desk/extras/{id} (super admin)
+ *   POST   /desk/meals { label } | PUT /desk/meals/{key} { label?, open? } | DELETE /desk/meals/{key} → Desk  (super admin)
  *   PUT    /admin/finalists/quotas  (super admin) body { quotas: [{ department, category, quota }] } → FinalistSummary
  *   PUT    /admin/teams/{team}/attendance/{user}  body { state: "present" | "absent" | "not_marked" } → TeamPresence   (super admin; the team's department admin; any time)
  *   PUT    /judge/panels/{panel}/teams/{team}/attendance/{user}  body { state: "present" | "absent" | "not_marked" } → TeamPresence   (either judge of the room, during its time)
@@ -200,7 +211,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { CouponsResult, Desk, DeskTeam, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -397,6 +408,8 @@ export const liveApi: AdminApi = {
   saveFinalists: (department, nominations) =>
     request<FinalistBoard>("PUT", `/admin/finalists/${id(department)}`, { nominations }),
   finalistSummary: () => request<FinalistSummary>("GET", "/admin/finalists/summary"),
+  // The server insists on the typed phrase too: locking cannot be undone.
+  lockFinalists: () => request<LockFinalistsResult>("POST", "/admin/finalists/lock", { confirm: "LOCK" }),
   // The server insists on the typed phrase too, so a stray request cannot publish.
   publishResults: () => request<PublishResult>("POST", "/admin/results/publish", { confirm: "PUBLISH" }),
   unpublishResults: (reason) => request<void>("POST", "/admin/results/unpublish", { confirm: "UNPUBLISH", reason }),
@@ -435,6 +448,9 @@ export const liveApi: AdminApi = {
   listJurors: () => request<Juror[]>("GET", "/admin/jurors"),
   addJuror: (input) => request<Juror>("POST", "/admin/jurors", input),
   removeJuror: (email) => request<void>("DELETE", `/admin/jurors/${id(email)}`),
+  importJurors: async (judges) => (await request<{ judges: JudgeImportRow[] }>("POST", "/admin/jurors/import", { judges })).judges,
+  setJurorPassword: (email) => request<JurorPassword>("POST", `/admin/jurors/${id(email)}/password`),
+  removeJurorPassword: (email) => request<void>("DELETE", `/admin/jurors/${id(email)}/password`),
   editScore: (panelId, teamId, jurorEmail, marks, remarks, reason) =>
     request<Score>("PUT", `/admin/panels/${id(panelId)}/teams/${id(teamId)}/scores/${id(jurorEmail)}`, { marks, remarks, reason }),
 
@@ -495,4 +511,18 @@ export const liveApi: AdminApi = {
   judgeCertificates: async () =>
     (await request<{ certificates: CertificateAvailability[] }>("GET", "/judge/certificates")).certificates,
   downloadJudgeCertificate: (type) => requestBlob(`/judge/certificates/${id(type)}.pdf`),
+
+  desk: () => request<Desk>("GET", "/desk"),
+  deskSearch: (q) => request<DeskTeam[]>("GET", `/desk/teams${queryString({ q })}`),
+  deskExport: () => request<DeskTeam[]>("GET", "/desk/teams/export"),
+  deskCheckIn: (teamId, userIds) => request<DeskTeam>("POST", `/desk/teams/${id(teamId)}/check-in`, { userIds }),
+  deskCheckOut: (teamId, userId, reason) => request<DeskTeam>("POST", `/desk/teams/${id(teamId)}/check-out`, { userId, reason }),
+  deskGiveCoupons: (teamId, meal, userIds) => request<CouponsResult>("POST", `/desk/teams/${id(teamId)}/coupons`, { meal, userIds }),
+  deskTakeBackCoupon: (teamId, meal, userId, reason) =>
+    request<DeskTeam>("POST", `/desk/teams/${id(teamId)}/coupons/${id(meal)}/${id(userId)}/take-back`, { reason }),
+  deskGiveExtras: (meal, quantity, recipient) => request<MealExtra>("POST", "/desk/extras", { meal, quantity, recipient }),
+  deskRemoveExtra: (extraId) => request<void>("DELETE", `/desk/extras/${id(extraId)}`),
+  deskAddMeal: (label) => request<Desk>("POST", "/desk/meals", { label }),
+  deskUpdateMeal: (key, change) => request<Desk>("PUT", `/desk/meals/${id(key)}`, change),
+  deskDeleteMeal: (key) => request<Desk>("DELETE", `/desk/meals/${id(key)}`),
 };

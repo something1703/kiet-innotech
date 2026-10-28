@@ -84,6 +84,8 @@ from .serializers import invitation_out, profile_out
 logger = logging.getLogger(__name__)
 
 RESULTS_KEY = "results_published"
+# Set once a super admin locks the finalist list for the Grand Finale (services/finalists.py); it is never removed.
+FINALISTS_LOCK_KEY = "finalists_locked"
 STATUSES = ("draft", "submitted", "withdrawn", "disqualified", "archived")
 
 
@@ -105,6 +107,7 @@ ROLE_SCOPE_LABELS = {
     "college_admin": "other colleges",
     "school_admin": "schools",
     "startup_admin": "startups",
+    "desk": "the event desk",
 }
 
 
@@ -451,6 +454,10 @@ def _require_teams_unlocked(admin: Admin) -> None:
 
 def _results_published(db: Session) -> AppState | None:
     return db.get(AppState, RESULTS_KEY)
+
+
+def finalists_locked(db: Session) -> AppState | None:
+    return db.get(AppState, FINALISTS_LOCK_KEY)
 
 
 def change_status(
@@ -1784,10 +1791,12 @@ def finalist_board(db: Session, admin: Admin, department: str, settings: Setting
     ]
     updated = db.get(AppState, f"finalists:{department}")
     published = _results_published(db)
+    locked = finalists_locked(db)
     return FinalistBoardOut(
         department=department,
         nominations_deadline=window.nominations_deadline,
-        nominations_locked=window.nominations_closed() and not _is_super(admin),
+        nominations_locked=(window.nominations_closed() and not _is_super(admin)) or locked is not None,
+        locked_at=locked.updated_at if locked else None,
         published_at=published.updated_at if published else None,
         updated_at=updated.updated_at if updated else None,
         updated_by=updated.value if updated else None,
@@ -1864,11 +1873,20 @@ def finalist_summary(db: Session, admin: Admin, settings: Settings) -> FinalistS
     eligible_count = Counter((t.department, t.category) for t in eligible)
     eligible_ids = {t.id for t in eligible}
     nominated_count = Counter((n.department, n.category) for n in db.scalars(select(FinalistNomination)) if n.team_id in eligible_ids)
+    from . import finalists  # finalists builds on this module
+
     published = _results_published(db)
+    locked = finalists_locked(db)
     direct = list(db.scalars(select(Team).where(Team.route == "finale", Team.status == "submitted").order_by(Team.number)))
+    winners, gone = finalists.winners(db)
     return FinalistSummaryOut(
         published_at=published.updated_at if published else None,
         published_by=published.value if published else None,
+        locked_at=locked.updated_at if locked else None,
+        locked_by=locked.value if locked else None,
+        lock_blocked=None if locked else finalists.lock_blocker(db),
+        lock_winners=len(winners),
+        lock_left_out=len(gone),
         nominations_deadline=schedule.load(db, settings).nominations_deadline,
         publish_blocked=None if published else publish_blocker(db, settings),
         results_publish_from=schedule.load(db, settings).results_from,
@@ -1950,6 +1968,8 @@ def unpublish_blocker(db: Session) -> str | None:
     """Why published results can no longer be withdrawn, or None. Once the finale is being prepared, they stay."""
     from . import judging  # judging builds on this module
 
+    if finalists_locked(db) is not None:
+        return "The finalist list is locked for the Grand Finale, so the published results stay."
     if judging.round_open(db, "final"):
         return "Final-round judging is open, so the published results can no longer be withdrawn."
     if db.scalar(select(func.count()).select_from(Score).where(Score.round == "final")):

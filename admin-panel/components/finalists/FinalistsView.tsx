@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { SlidersHorizontal, Send, Undo2 } from "lucide-react";
+import { Lock, SlidersHorizontal, Send, Undo2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { FinalistSummary } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -41,6 +41,11 @@ function Board({
   if (!board.data || board.data.department !== department || board.loading) return <Loading label={`Loading ${department} teams`} />;
   return (
     <div className="space-y-4">
+      {board.data.lockedAt && (
+        <Notice tone="success" title="Finalist list locked for the Grand Finale">
+          Locked {formatDateTime(board.data.lockedAt)}. The department winners are the finalists; nothing here can change any more.
+        </Notice>
+      )}
       {conflict && (
         <Notice tone="error" title="Nominations were not saved">
           {conflict} The board has been reloaded with the latest nominations. Check them and save again.
@@ -136,6 +141,8 @@ function SuperAdminFinalists() {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [quotas, setQuotas] = useState(false);
+  const [locking, setLocking] = useState(false);
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const data = summary.data;
   const nominatedTotal = data?.matrix.reduce((sum, row) => sum + row.categories.reduce((s, c) => s + c.nominated, 0), 0) ?? 0;
@@ -173,6 +180,37 @@ function SuperAdminFinalists() {
     <div className="space-y-10">
       {summary.error && <Notice tone="error">{summary.error}</Notice>}
       {!data && !summary.error && <Loading label="Loading nominations" />}
+
+      {data && (
+        <section aria-labelledby="lock-title" className="space-y-3">
+          <SectionTitle id="lock-title" title="Grand Finale finalist list" />
+          {data.lockedAt ? (
+            <Notice tone="success" title="Finalist list locked">
+              Locked {formatDateTime(data.lockedAt)} by {data.lockedBy}. The department winners are the finalists for the Grand Finale; results,
+              nominations and the department release can no longer change. Allot their stalls and finale panels on the Judging page.
+            </Notice>
+          ) : (
+            <div className="flex flex-col gap-3 border-y border-line py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted">
+                Lock in the <span className="font-semibold text-navy-900">{data.lockWinners}</span> department winners as the Grand Finale finalists.
+                {data.lockLeftOut > 0 && ` ${data.lockLeftOut} winner(s) disqualified or withdrawn since the release are left out.`}
+              </p>
+              <Button
+                onClick={() => {
+                  setLockMessage(null);
+                  setLocking(true);
+                }}
+                disabled={summary.loading || data.lockBlocked !== null}
+              >
+                <Lock aria-hidden="true" className="size-4" />
+                Lock finalist list
+              </Button>
+            </div>
+          )}
+          {!data.lockedAt && data.lockBlocked && <Notice tone="info">{data.lockBlocked}</Notice>}
+          {lockMessage && <Notice tone="success">{lockMessage}</Notice>}
+        </section>
+      )}
 
       {data && (
         <section aria-labelledby="publish-title" className="space-y-3">
@@ -340,6 +378,33 @@ function SuperAdminFinalists() {
             <li>Finalist and not-selected results go back to pending, so students stop seeing them.</li>
             <li>Nominations are kept and unlock again (department admins only until their deadline).</li>
             <li>It is saved in the activity log with your reason.</li>
+          </ul>
+        </ConfirmDialog>
+      )}
+
+      {locking && data && !summary.loading && (
+        <ConfirmDialog
+          title="Lock the finalist list?"
+          description="This cannot be undone from the panel. Do it once the department results are final."
+          confirmLabel="Lock finalist list"
+          typeToConfirm="LOCK"
+          onClose={() => setLocking(false)}
+          onConfirm={async () => {
+            const result = await api.lockFinalists();
+            setLocking(false);
+            setLockMessage(
+              `${result.finalists} finalists locked in; ${result.notSelected} other department teams are marked not selected` +
+                (result.leftOut ? `; ${result.leftOut} winner(s) no longer taking part were left out.` : "."),
+            );
+            summary.reload();
+            setBoardNonce((n) => n + 1);
+          }}
+        >
+          <ul className="list-disc space-y-1 pl-5 text-sm text-navy-800">
+            <li>The {data.lockWinners} department winners become the finalists and are published to students{data.publishedAt ? " (results are already published, so they stay as they are)" : ""}.</li>
+            <li>The other submitted department teams are marked not selected.</li>
+            <li>The department round&apos;s judging is locked, and the release, results and nominations can no longer change.</li>
+            <li>The finalists then appear on the Judging page for stalls and finale panels.</li>
           </ul>
         </ConfirmDialog>
       )}

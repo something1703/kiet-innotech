@@ -14,6 +14,7 @@ import { Loading, Notice } from "@/components/ui/Notice";
 import { Brand, KietLogo } from "@/components/layout/Brand";
 import { NotAuthorised } from "@/components/layout/NotAuthorised";
 import { GoogleButton } from "./GoogleButton";
+import { JudgeSignIn } from "./JudgeSignIn";
 
 const demoAccounts = [
   ...demoAdmins.map((admin) => ({
@@ -31,6 +32,8 @@ export function LoginView() {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState(false);
+  // Organisers (and KIET faculty judges) sign in with Google; outside judges at the Grand Finale with a password.
+  const [method, setMethod] = useState<"google" | "judge">("google");
 
   useEffect(() => {
     if (state.status === "signed_in") router.replace(next);
@@ -98,7 +101,9 @@ export function LoginView() {
           <KietLogo className="h-10 w-auto" />
           <h2 className="mt-8 font-display text-2xl font-bold text-navy-900">Sign in to the admin panel</h2>
           <p className="mt-2 text-sm text-muted">
-            Use the Google account your coordinator registered as an admin. Student accounts cannot sign in here.
+            {method === "judge"
+              ? "Grand Finale judges: use the email and password the organisers gave you."
+              : "Use the Google account your coordinator registered as an admin. Student accounts cannot sign in here."}
           </p>
 
           {state.status === "loading" && pending === null ? (
@@ -111,7 +116,37 @@ export function LoginView() {
                 <Notice tone="info">Your session has ended. Sign in again to continue.</Notice>
               )}
 
-              {API_MODE === "live" && !DEV_SIGN_IN ? (
+              {API_MODE === "live" && (
+                <div role="tablist" aria-label="How you sign in" className="grid grid-cols-2 gap-1 rounded-full bg-surface p-1 ring-1 ring-line">
+                  {(
+                    [
+                      ["google", "Organisers & KIET faculty"],
+                      ["judge", "Grand Finale judges"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="tab"
+                      aria-selected={method === value}
+                      onClick={() => {
+                        setMethod(value);
+                        setError(null);
+                      }}
+                      className={`rounded-full px-3 py-2 text-xs font-semibold transition ${method === value ? "bg-white text-navy-900 shadow-sm ring-1 ring-line" : "text-muted hover:text-navy-900"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {API_MODE === "live" && method === "judge" ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted">Judges from outside KIET sign in with their email and the password the organisers gave them.</p>
+                  <JudgeSignIn onSignedIn={refresh} disabled={busy} />
+                </div>
+              ) : API_MODE === "live" && !DEV_SIGN_IN ? (
                 GOOGLE_CLIENT_ID ? (
                   <div className="space-y-3">
                     <GoogleButton onCredential={google} busy={busy} />

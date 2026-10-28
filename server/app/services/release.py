@@ -135,6 +135,7 @@ def readiness(db: Session, admin) -> ReleaseReadinessOut:
     state = db.get(AppState, RELEASE_KEY)
     people = certificates.recipient_counts(db, winner_ids)
     return ReleaseReadinessOut(
+        finalists_locked=admin_service.finalists_locked(db) is not None,
         released=state is not None,
         released_by=state.value if state else None,
         released_at=state.updated_at if state else None,
@@ -238,6 +239,8 @@ def withdraw(db: Session, admin, data: WithdrawReleaseInput) -> None:
     state = db.get(AppState, RELEASE_KEY)
     if state is None:
         raise ApiError("The department results are not released.", 409)
+    if admin_service.finalists_locked(db) is not None:
+        raise ApiError("The finalist list is locked for the Grand Finale, so the department results can no longer be withdrawn.", 409)
     db.execute(delete(Award).where(Award.round == "department", Award.declared_by.like(f"{RELEASE_MARK}%")))
     db.delete(state)
     awards_state = db.get(AppState, judging._awards_key("department"))

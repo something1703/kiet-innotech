@@ -187,12 +187,15 @@ class Admin(Base):
     """
     Organisers. Super admins see everything; admins are scoped to one KIET department (COE KIET is one of them);
     outside admins see only teams and students from other colleges and schools; college admins only other colleges;
-    school admins only schools; startup admins only startups.
+    school admins only schools; startup admins only startups. Desk volunteers use only the Grand Finale event desk
+    (check-in and food coupons).
     """
 
     __tablename__ = "admins"
     __table_args__ = (
-        CheckConstraint("role IN ('super_admin', 'admin', 'outside_admin', 'startup_admin', 'college_admin', 'school_admin')", name="role"),
+        CheckConstraint(
+            "role IN ('super_admin', 'admin', 'outside_admin', 'startup_admin', 'college_admin', 'school_admin', 'desk')", name="role"
+        ),
         CheckConstraint("role <> 'admin' OR department IS NOT NULL", name="department"),
     )
 
@@ -274,6 +277,10 @@ class Juror(Base):
     phone: Mapped[str] = mapped_column(String(10), default="")
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     created_by: Mapped[str | None] = mapped_column(String(320))
+    # Outside judges sign in with their email and this password (scrypt, see services/judge_accounts.py) instead of Google.
+    password_hash: Mapped[str | None] = mapped_column(String(200))
+    password_set_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    password_set_by: Mapped[str | None] = mapped_column(String(320))
 
 
 class Panel(Base):
@@ -458,3 +465,45 @@ class CertificateFont(Base):
     data: Mapped[bytes] = mapped_column(LargeBinary)
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+
+
+# ---------- Grand Finale event desk ----------
+
+
+class Meal(Base):
+    """A meal food coupons are handed out for at the Grand Finale, e.g. lunch. Coupons are given only while it is open."""
+
+    __tablename__ = "meals"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    label: Mapped[str] = mapped_column(String(60))
+    position: Mapped[int] = mapped_column(Integer)
+    open: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    created_by: Mapped[str | None] = mapped_column(String(320))
+
+
+class MealCoupon(Base):
+    """One food coupon given to one checked-in student for one meal. The key makes a second coupon impossible."""
+
+    __tablename__ = "meal_coupons"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    meal: Mapped[str] = mapped_column(ForeignKey("meals.key", ondelete="RESTRICT"), primary_key=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    issued_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    issued_by: Mapped[str] = mapped_column(String(320))
+
+
+class MealExtra(Base):
+    """Coupons given out in bulk to people who are not students, e.g. judges, volunteers or guests."""
+
+    __tablename__ = "meal_extras"
+    __table_args__ = (CheckConstraint("quantity BETWEEN 1 AND 500", name="quantity"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    meal: Mapped[str] = mapped_column(ForeignKey("meals.key", ondelete="RESTRICT"))
+    quantity: Mapped[int] = mapped_column(Integer)
+    recipient: Mapped[str] = mapped_column(String(120))
+    issued_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    issued_by: Mapped[str] = mapped_column(String(320))

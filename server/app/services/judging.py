@@ -102,7 +102,7 @@ from ..schemas import (
     UnlockInput,
 )
 from . import admin as admin_service
-from . import audit, presence, schedule
+from . import audit, judge_accounts, presence, schedule
 
 logger = logging.getLogger(__name__)
 
@@ -660,6 +660,8 @@ def _set_round(db: Session, admin: Admin, settings: Settings, round_: str, open_
     if open_:
         if state is not None:
             raise ApiError("Judging is already open for this round.", 409)
+        if round_ == "department" and admin_service.finalists_locked(db) is not None:
+            raise ApiError("The finalist list is locked for the Grand Finale, so the department round stays locked.", 409)
         if blocked := open_blocker(db, settings, round_):
             raise ApiError(blocked, 409)
         db.add(AppState(key=key, value=admin.email, updated_at=utcnow()))
@@ -727,6 +729,8 @@ def _juror_out(db: Session, jurors: list[Juror]) -> list[JurorOut]:
             scores=scores.get(j.email, 0),
             added_at=j.created_at,
             added_by=j.created_by,
+            has_password=j.password_hash is not None,
+            password_set_at=j.password_set_at,
         )
         for j in jurors
     ]
@@ -758,6 +762,10 @@ def add_juror(db: Session, admin: Admin, data: JurorInput) -> JurorOut:
         phone=data.phone,
         created_by=admin.email,
     )
+    # An outside judge signs in with a password, made now and shown once; KIET faculty sign in with Google.
+    password = judge_accounts.new_password(data.email) if data.kind == "external" else None
+    if password:
+        juror.password_hash, juror.password_set_at, juror.password_set_by = judge_accounts.hash_password(password), utcnow(), admin.email
     db.add(juror)
     where = data.department if data.kind == "faculty" else data.organisation
     audit.record(db, admin.email, "judging.judge_added", detail=f"{data.email} ({data.name}, {where})")
@@ -766,7 +774,7 @@ def add_juror(db: Session, admin: Admin, data: JurorInput) -> JurorOut:
     except IntegrityError as exc:
         db.rollback()
         raise ApiError("This email is already a judge.", 409) from exc
-    return _juror_out(db, [juror])[0]
+    return _juror_out(db, [juror])[0].model_copy(update={"password": password})
 
 
 def remove_juror(db: Session, admin: Admin, email: str) -> None:

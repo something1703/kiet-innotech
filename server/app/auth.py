@@ -5,7 +5,9 @@ Signing in exchanges proof of an email address for our own session token:
 - Google: the browser gets an ID token from Google Identity Services and posts it to /auth/google. It must be
   signed by Google, issued to one of our OAuth clients, unexpired and carry a verified email. @kiet.edu accounts
   must also come from KIET's Google Workspace ("hd" claim), which is what makes the @kiet.edu rule trustworthy.
-- (Later) email + one-time code, issuing the same session token.
+- Outside judges at the Grand Finale: email and password (POST /auth/judge, services/judge_accounts.py). Such a session
+  is marked ("amr": "pwd") and opens the judge's own judging page only, never organiser endpoints, even when the same
+  email is also an organiser (they sign in with Google for that).
 
 Every other request carries the session token (Authorization: Bearer <token>). It is an HS256 JWT whose audience
 is the app it was issued for ("portal" or "admin"), so a student token never opens the admin panel.
@@ -46,6 +48,12 @@ LAST_SEEN_RESOLUTION = timedelta(minutes=5)
 class Identity:
     email: str
     name: str
+    # Signed in with a judge's password rather than Google: the judging page only.
+    password: bool = False
+
+
+PASSWORD_ONLY = "You signed in with a judge password, which opens your judging page only. Organisers sign in with Google."
+DESK_ONLY = "This account is for the Grand Finale event desk only."
 
 
 # ---------- Signing in ----------
@@ -100,6 +108,8 @@ def issue_session(identity: Identity, app: App, settings: Settings) -> dict[str,
     now = int(time.time())
     expires = now + hours * 3600
     claims = {"iss": SESSION_ISSUER, "aud": app, "sub": identity.email, "name": identity.name, "iat": now, "exp": expires}
+    if identity.password:
+        claims["amr"] = "pwd"
     return {
         "token": jwt.encode(claims, settings.session_secret, algorithm="HS256"),
         "expires_at": datetime.fromtimestamp(expires, UTC).isoformat(),
@@ -165,7 +175,7 @@ def verify_session(token: str, app: App, settings: Settings) -> Identity:
     email = str(claims["sub"]).strip().lower()
     if "@" not in email:
         raise ApiError("Your session has expired. Please sign in again.", 401)
-    return Identity(email=email, name=str(claims.get("name") or "").strip()[:200])
+    return Identity(email=email, name=str(claims.get("name") or "").strip()[:200], password=claims.get("amr") == "pwd")
 
 
 def _bearer(authorization: str | None) -> str:
@@ -227,9 +237,13 @@ def get_current_admin(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Admin:
+    if identity.password:
+        raise ApiError(PASSWORD_ONLY, 403)
     admin = find_admin(db, identity.email, settings)
     if admin is None:
         raise ApiError("This account is not an InnoTech26 organiser.", 403)
+    if admin.role == "desk":
+        raise ApiError(DESK_ONLY, 403)
     return admin
 
 
@@ -272,7 +286,10 @@ def get_current_staff(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Staff:
-    admin = find_admin(db, identity.email, settings)
+    # A judge's password session, or a desk volunteer, acts as a judge (or nobody) here, never as an organiser.
+    admin = None if identity.password else find_admin(db, identity.email, settings)
+    if admin is not None and admin.role == "desk":
+        admin = None
     juror = db.get(Juror, identity.email)
     if admin is None and juror is None:
         raise ApiError("This account is not an InnoTech26 organiser or judge.", 403)
@@ -280,3 +297,20 @@ def get_current_staff(
 
 
 CurrentStaff = Annotated[Staff, Depends(get_current_staff)]
+
+
+def get_desk_admin(
+    identity: Annotated[Identity, Depends(get_admin_identity)],
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Admin:
+    """Who may use the Grand Finale event desk: super admins and desk volunteers."""
+    if identity.password:
+        raise ApiError(PASSWORD_ONLY, 403)
+    admin = find_admin(db, identity.email, settings)
+    if admin is None or admin.role not in ("super_admin", "desk"):
+        raise ApiError("The event desk is for super admins and desk volunteers.", 403)
+    return admin
+
+
+DeskAdmin = Annotated[Admin, Depends(get_desk_admin)]

@@ -61,7 +61,9 @@ export function ReleasePanel({ onChanged }: { onChanged: () => void }) {
             </p>
           </div>
         </div>
-        {data.released ? (
+        {data.released && data.finalistsLocked ? (
+          <span className="text-xs font-semibold text-muted">Finalist list locked: the release stays.</span>
+        ) : data.released ? (
           <Button variant="secondary" onClick={() => setWithdrawing(true)}>
             Withdraw
           </Button>

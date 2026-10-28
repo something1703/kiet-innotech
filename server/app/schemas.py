@@ -329,7 +329,7 @@ class ReasonInput(Input):
     reason: str = Field(min_length=5, max_length=500)
 
 
-AdminRole = Literal["super_admin", "admin", "outside_admin", "startup_admin", "college_admin", "school_admin"]
+AdminRole = Literal["super_admin", "admin", "outside_admin", "startup_admin", "college_admin", "school_admin", "desk"]
 
 
 class AdminInput(Input):
@@ -591,6 +591,8 @@ class FinalistBoardOut(BaseModel):
     nominations_deadline: datetime | None = None
     # True when the deadline has passed and the signed-in admin can no longer change this board.
     nominations_locked: bool = False
+    # Set once a super admin has locked the finalist list for the Grand Finale: nothing on the board changes after that.
+    locked_at: datetime | None = None
     published_at: datetime | None
     updated_at: datetime | None
     updated_by: str | None
@@ -618,6 +620,13 @@ class FinalistSummaryOut(BaseModel):
     results_publish_from: datetime | None = None
     # Once published: why the results can no longer be withdrawn (None = a super admin can still withdraw them).
     unpublish_blocked: str | None = None
+    # The finalist list for the Grand Finale: when it was locked and by whom, or why it cannot be locked yet.
+    locked_at: datetime | None = None
+    locked_by: str | None = None
+    lock_blocked: str | None = None
+    # Department winners still taking part (they become the finalists), and winners who no longer are.
+    lock_winners: int = 0
+    lock_left_out: int = 0
     matrix: list[MatrixRow]
     direct_teams: list[TeamSummaryOut]
 
@@ -636,6 +645,18 @@ class PublishOut(BaseModel):
     published_at: datetime
     finalists: int
     not_selected: int
+
+
+class LockFinalistsInput(Input):
+    confirm: str = Field(max_length=20)
+
+
+class LockFinalistsOut(BaseModel):
+    locked_at: datetime
+    finalists: int
+    not_selected: int
+    # Department winners who were disqualified or withdrew after the release, so they are not finalists.
+    left_out: int = 0
 
 
 class AuditPage(BaseModel):
@@ -689,9 +710,10 @@ class JurorInput(Input):
 
     @model_validator(mode="after")
     def check_kind(self) -> "JurorInput":
-        # Judges sign in with their KIET Google account, which Google itself confirms belongs to KIET's workspace.
-        if not rules.is_kiet_email(self.email):
-            raise ValueError("Judges need a @kiet.edu email: they sign in with their KIET Google account.")
+        # KIET faculty sign in with their KIET Google account, which Google itself confirms belongs to KIET's workspace.
+        # Outside judges may use any email: they sign in with a password the super admin gives them.
+        if self.kind == "faculty" and not rules.is_kiet_email(self.email):
+            raise ValueError("KIET faculty judges need a @kiet.edu email: they sign in with their KIET Google account.")
         if self.kind == "faculty":
             if self.department not in rules.DEPARTMENTS:
                 raise ValueError("Choose the KIET department this faculty member belongs to.")
@@ -726,6 +748,60 @@ class JurorOut(BaseModel):
     scores: int
     added_at: datetime | None
     added_by: str | None
+    # Whether the judge can sign in with a password (outside judges at the Grand Finale), and when it was last set.
+    has_password: bool = False
+    password_set_at: datetime | None = None
+    # Only when the judge was just appointed with a new password: shown once, to hand to the judge.
+    password: str | None = None
+
+
+class JudgeLoginInput(Input):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class JurorPasswordOut(BaseModel):
+    email: str
+    name: str
+    # Shown once: only its hash is stored.
+    password: str
+
+
+class JudgeImportItem(Input):
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(max_length=320)
+    organisation: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=20)
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value: str) -> str:
+        return _email(value)
+
+    @field_validator("phone")
+    @classmethod
+    def check_phone(cls, value: str) -> str:
+        if not value:
+            return ""
+        if not rules.is_valid_phone(value):
+            raise ValueError(f"{value} is not a 10-digit Indian mobile number; leave the phone empty instead.")
+        return rules.normalise_phone(value)
+
+
+class JudgeImportInput(Input):
+    judges: list[JudgeImportItem] = Field(min_length=1, max_length=200)
+
+
+class JudgeImportRow(BaseModel):
+    email: str
+    name: str
+    # created: appointed now; password_added: was a judge without a password; exists: already had a password (unchanged).
+    status: Literal["created", "password_added", "exists"]
+    password: str | None
+
+
+class JudgeImportOut(BaseModel):
+    judges: list[JudgeImportRow]
 
 
 class PanelPlace(Input):
@@ -1432,6 +1508,8 @@ class ReleaseGroupOut(BaseModel):
 
 
 class ReleaseReadinessOut(BaseModel):
+    # Once the finalist list is locked the release can no longer be withdrawn.
+    finalists_locked: bool = False
     released: bool
     released_by: str | None = None
     released_at: datetime | None = None
@@ -1692,3 +1770,103 @@ class ReadinessOut(BaseModel):
     rows: list[ReadinessRow]
     # The caller's own department, if they are a department admin.
     mine: str | None = None
+
+
+# ---------- Grand Finale event desk ----------
+
+
+class DeskMemberOut(BaseModel):
+    user_id: uuid.UUID
+    full_name: str
+    role: str
+    course: str
+    year: int
+    department: str | None
+    roll_number: str
+    # The last four digits only, to confirm with the student.
+    phone: str
+    banned: bool = False
+    checked_in_at: datetime | None
+    checked_in_by: str | None
+    # Meal key -> when the coupon was given.
+    coupons: dict[str, datetime]
+
+
+class DeskTeamOut(BaseModel):
+    id: uuid.UUID
+    code: str
+    name: str
+    category: int
+    project_title: str
+    participant_type: str
+    institution: str
+    department: str | None
+    route: str
+    tent: str | None
+    members: list[DeskMemberOut]
+
+
+class MealOut(BaseModel):
+    key: str
+    label: str
+    open: bool
+    # Coupons given to students, and in bulk to others.
+    given: int
+    extras: int
+
+
+class MealExtraOut(BaseModel):
+    id: uuid.UUID
+    meal: str
+    quantity: int
+    recipient: str
+    issued_at: datetime
+    issued_by: str
+
+
+class DeskOut(BaseModel):
+    teams: int
+    teams_checked_in: int
+    students: int
+    students_checked_in: int
+    meals: list[MealOut]
+    extras: list[MealExtraOut]
+    # Super admins set up meals and take coupons back; desk volunteers check in and give coupons.
+    can_manage: bool
+    server_time: datetime
+
+
+class CheckInInput(Input):
+    user_ids: list[uuid.UUID] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
+
+
+class CheckOutInput(Input):
+    user_id: uuid.UUID
+    reason: str = Field(min_length=5, max_length=300)
+
+
+class CouponsInput(Input):
+    meal: str = Field(min_length=1, max_length=40)
+    user_ids: list[uuid.UUID] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
+
+
+class CouponsOut(BaseModel):
+    team: DeskTeamOut
+    given: list[str]
+    already: list[str]
+    not_checked_in: list[str]
+
+
+class MealInput(Input):
+    label: str = Field(min_length=2, max_length=60)
+
+
+class MealUpdateInput(Input):
+    label: str | None = Field(default=None, min_length=2, max_length=60)
+    open: bool | None = None
+
+
+class MealExtraInput(Input):
+    meal: str = Field(min_length=1, max_length=40)
+    quantity: int = Field(ge=1, le=500)
+    recipient: str = Field(min_length=2, max_length=120)

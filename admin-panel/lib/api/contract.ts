@@ -1,4 +1,4 @@
-import type { AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { CouponsResult, Desk, DeskTeam, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -79,6 +79,8 @@ export interface AdminApi {
   unpublishResults(reason: string): Promise<void>;
   /** Super admin: how many teams each department may nominate per category. */
   saveQuotas(quotas: QuotaCell[]): Promise<FinalistSummary>;
+  /** Super admin, once: the department winners become the Grand Finale finalists, published and locked for good. */
+  lockFinalists(): Promise<LockFinalistsResult>;
 
   listAdmins(): Promise<AdminUser[]>;
   addAdmin(input: AdminInput): Promise<AdminUser>;
@@ -118,8 +120,15 @@ export interface AdminApi {
   /** Marks a judge present in their room, or takes the mark back. Super admins, and a department's admin for their own rooms. */
   setJudgePresent(panelId: string, jurorEmail: string, present: boolean): Promise<Panel>;
   listJurors(): Promise<Juror[]>;
+  /** An outside judge comes back with their new sign-in password (`password`), shown once. */
   addJuror(input: JurorInput): Promise<Juror>;
   removeJuror(email: string): Promise<void>;
+  /** Super admin: appoints outside judges in one go, each with a sign-in password (shown once). */
+  importJurors(judges: JudgeImportItem[]): Promise<JudgeImportRow[]>;
+  /** Super admin: a new sign-in password for a judge (the old one stops working), shown once. */
+  setJurorPassword(email: string): Promise<JurorPassword>;
+  /** Super admin: the judge can no longer sign in with a password. */
+  removeJurorPassword(email: string): Promise<void>;
   /**
    * Changes (or enters) a judge's marks, and keeps the reason in the activity log. A super admin at any time, without
    * a reason; the department's own admin during the room's slot and buffer, with a clear reason.
@@ -179,6 +188,27 @@ export interface AdminApi {
   withdrawRelease(reason: string): Promise<void>;
   judgeCertificates(): Promise<CertificateAvailability[]>;
   downloadJudgeCertificate(type: CertificateType): Promise<Blob>;
+
+  /** The Grand Finale event desk (super admins and desk volunteers): counts, meals and coupons given to others. */
+  desk(): Promise<Desk>;
+  /** Finale teams by team code or number, stall, team name, institution, or a member's name, roll number or phone. */
+  deskSearch(q: string): Promise<DeskTeam[]>;
+  /** Every finale team with check-ins and coupons, for the downloads. */
+  deskExport(): Promise<DeskTeam[]>;
+  deskCheckIn(teamId: string, userIds: string[]): Promise<DeskTeam>;
+  /** Takes a check-in back; coupons already given stay given. */
+  deskCheckOut(teamId: string, userId: string, reason: string): Promise<DeskTeam>;
+  /** One coupon for the meal to each listed member who is checked in and has not had one. */
+  deskGiveCoupons(teamId: string, meal: string, userIds: string[]): Promise<CouponsResult>;
+  /** Super admin: takes a student's coupon back. */
+  deskTakeBackCoupon(teamId: string, meal: string, userId: string, reason: string): Promise<DeskTeam>;
+  /** Coupons for people who are not students (judges, volunteers, guests), in bulk. */
+  deskGiveExtras(meal: string, quantity: number, recipient: string): Promise<MealExtra>;
+  deskRemoveExtra(id: string): Promise<void>;
+  /** Super admin: meals coupons are given for. A new meal starts closed. */
+  deskAddMeal(label: string): Promise<Desk>;
+  deskUpdateMeal(key: string, change: { label?: string; open?: boolean }): Promise<Desk>;
+  deskDeleteMeal(key: string): Promise<Desk>;
 }
 
 export class ApiError extends Error {

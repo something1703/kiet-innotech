@@ -20,6 +20,11 @@ export async function googleSignIn(credential: string) {
   startSession((await send("POST", "/auth/google", { body: { credential, app: APP } })) as SessionResponse);
 }
 
+/** Outside judges: the email and password the organisers gave them. The session opens their judging page only. */
+export async function judgeSignIn(email: string, password: string) {
+  startSession((await send("POST", "/auth/judge", { body: { email: email.trim(), password } })) as SessionResponse);
+}
+
 /** Local development backend only (NEXT_PUBLIC_DEV_SIGN_IN=true): signs in as any email without Google. */
 export async function devSignIn(email: string, name: string) {
   let response: unknown;

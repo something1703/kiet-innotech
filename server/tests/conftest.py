@@ -84,8 +84,8 @@ class Api:
         self.admin = {"Authorization": f"Bearer {token(email, app='admin')}"}
 
     def headers(self, path: str) -> dict[str, str]:
-        # The judge page lives in the admin panel too.
-        return self.admin if path.startswith(("/admin", "/judge")) else self.portal
+        # The judge page and the event desk live in the admin panel too.
+        return self.admin if path.startswith(("/admin", "/judge", "/desk")) else self.portal
 
     def get(self, path: str, **kwargs):
         return self.client.get(path, headers=self.headers(path), **kwargs)

@@ -8,8 +8,9 @@ import type { ParticipantType, Profile, Team, TeamMember, TeamResult, TeamRoute,
 /**
  * Organiser roles. A department admin sees one KIET department (COE KIET is one of them); an outside admin other
  * colleges and schools; a college admin other colleges only; a school admin schools only; a startup admin only startups.
+ * A desk volunteer uses only the Grand Finale event desk (check-in and food coupons).
  */
-export type AdminRole = "super_admin" | "admin" | "outside_admin" | "college_admin" | "school_admin" | "startup_admin";
+export type AdminRole = "super_admin" | "admin" | "outside_admin" | "college_admin" | "school_admin" | "startup_admin" | "desk";
 
 export type AdminUser = {
   email: string;
@@ -339,6 +340,8 @@ export type FinalistBoard = {
   nominationsLocked: boolean;
   /** Set once the super admin publishes results; nominations are then read-only. */
   publishedAt: string | null;
+  /** Set once the super admin locks the finalist list for the Grand Finale: nothing on the board changes after that. */
+  lockedAt?: string | null;
   updatedAt: string | null;
   updatedBy: string | null;
   categories: FinalistCategory[];
@@ -355,6 +358,13 @@ export type FinalistSummary = {
   resultsPublishFrom: string | null;
   /** Once published: why the results can no longer be withdrawn (null = a super admin can still withdraw them). */
   unpublishBlocked: string | null;
+  /** The finalist list for the Grand Finale: when it was locked and by whom, or why it cannot be locked yet. */
+  lockedAt: string | null;
+  lockedBy: string | null;
+  lockBlocked: string | null;
+  /** Department winners still taking part (they become the finalists), and winners who no longer are. */
+  lockWinners: number;
+  lockLeftOut: number;
   matrix: {
     department: string;
     categories: { category: number; quota: number; nominated: number; eligible: number }[];
@@ -367,6 +377,14 @@ export type PublishResult = {
   publishedAt: string;
   finalists: number;
   notSelected: number;
+};
+
+export type LockFinalistsResult = {
+  lockedAt: string;
+  finalists: number;
+  notSelected: number;
+  /** Department winners disqualified or withdrawn after the release, so not finalists. */
+  leftOut: number;
 };
 
 /** An organiser creates a team for registered students, whether or not registration is open. */
@@ -397,6 +415,24 @@ export type Juror = {
   scores: number;
   addedAt: string | null;
   addedBy: string | null;
+  /** Outside judges sign in with their email and a password; when it was last set. */
+  hasPassword: boolean;
+  passwordSetAt: string | null;
+  /** Only right after an outside judge was appointed: their new password, shown once. */
+  password?: string | null;
+};
+
+/** A judge's new sign-in password, shown once (only its hash is stored). */
+export type JurorPassword = { email: string; name: string; password: string };
+
+export type JudgeImportItem = { name: string; email: string; organisation: string; phone: string };
+
+export type JudgeImportRow = {
+  email: string;
+  name: string;
+  /** created: appointed now; passwordAdded: was a judge without a password; exists: already had one (unchanged, no password shown). */
+  status: "created" | "password_added" | "exists";
+  password: string | null;
 };
 
 export type JurorInput = Pick<Juror, "email" | "name" | "kind" | "department" | "organisation" | "phone">;
@@ -538,6 +574,8 @@ export type ReleaseGroup = {
 
 /** What releasing the department results would do, and whether it is already done. */
 export type ReleaseReadiness = {
+  /** Once the finalist list is locked the release can no longer be withdrawn. */
+  finalistsLocked?: boolean;
   released: boolean;
   releasedBy: string | null;
   releasedAt: string | null;
@@ -927,3 +965,54 @@ export type CertificateFont = { id: string; name: string; isBuiltin: boolean };
 export type CertificateFieldInput = Omit<CertificateField, "sourceKey"> & { sourceKey?: string | null };
 
 export type CertificateAvailability = { type: CertificateType; available: boolean; reason: string | null };
+
+// ---------- Grand Finale event desk ----------
+
+export type DeskMember = {
+  userId: string;
+  fullName: string;
+  role: "leader" | "member";
+  course: string;
+  year: number;
+  department: string | null;
+  rollNumber: string;
+  /** The last four digits only, to confirm with the student. */
+  phone: string;
+  banned: boolean;
+  checkedInAt: string | null;
+  checkedInBy: string | null;
+  /** Meal key -> when the coupon was given. */
+  coupons: Record<string, string>;
+};
+
+export type DeskTeam = {
+  id: string;
+  code: string;
+  name: string;
+  category: number;
+  projectTitle: string;
+  participantType: ParticipantType;
+  institution: string;
+  department: string | null;
+  route: TeamRoute;
+  tent: string | null;
+  members: DeskMember[];
+};
+
+export type Meal = { key: string; label: string; open: boolean; given: number; extras: number };
+
+export type MealExtra = { id: string; meal: string; quantity: number; recipient: string; issuedAt: string; issuedBy: string };
+
+export type Desk = {
+  teams: number;
+  teamsCheckedIn: number;
+  students: number;
+  studentsCheckedIn: number;
+  meals: Meal[];
+  extras: MealExtra[];
+  /** Super admins set up meals and take coupons back; desk volunteers check in and give coupons. */
+  canManage: boolean;
+  serverTime: string;
+};
+
+export type CouponsResult = { team: DeskTeam; given: string[]; already: string[]; notCheckedIn: string[] };

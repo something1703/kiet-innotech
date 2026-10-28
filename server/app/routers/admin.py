@@ -42,10 +42,15 @@ from ..schemas import (
     ExtendRoomsOut,
     FinalistBoardOut,
     FinalistSummaryOut,
+    JudgeImportInput,
+    JudgeImportOut,
     JudgingOut,
     JurorInput,
     JurorOut,
+    JurorPasswordOut,
     LeaderboardOut,
+    LockFinalistsInput,
+    LockFinalistsOut,
     ManualAttendanceInput,
     MarkStudentsInput,
     MarkStudentsOut,
@@ -92,7 +97,7 @@ from ..schemas import (
     WithdrawReleaseInput,
 )
 from ..services import admin as service
-from ..services import attendance, audit, certificates, judging, release, rollcall, schedule
+from ..services import attendance, audit, certificates, finalists, judge_accounts, judging, release, rollcall, schedule
 from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -103,9 +108,9 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 
 @router.get("/me")
 def me(identity: Annotated[Identity, Depends(get_admin_identity)], db: Db, settings: AppSettings) -> AdminOut:
-    """The signed-in organiser, or a judge (role "judge") who is not an organiser."""
+    """The signed-in organiser, or a judge (role "judge") who is not an organiser or signed in with their judge password."""
     juror = db.get(Juror, identity.email)
-    admin = find_admin(db, identity.email, settings)
+    admin = None if identity.password else find_admin(db, identity.email, settings)
     if admin is not None:
         return service.admin_out(admin).model_copy(update={"judge": juror is not None})
     if juror is not None:
@@ -300,6 +305,12 @@ def save_finalists(
 @router.post("/results/publish")
 def publish_results(data: PublishInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> PublishOut:
     return service.publish_results(db, admin, settings, data)
+
+
+@router.post("/finalists/lock")
+def lock_finalists(data: LockFinalistsInput, admin: CurrentAdmin, db: Db) -> LockFinalistsOut:
+    """Super admin, once: the department winners become the Grand Finale finalists, published and locked for good."""
+    return finalists.lock(db, admin, data)
 
 
 @router.post("/results/unpublish", status_code=status.HTTP_204_NO_CONTENT)
@@ -641,6 +652,25 @@ def add_juror(data: JurorInput, admin: CurrentAdmin, db: Db) -> JurorOut:
 @router.delete("/jurors/{email}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_juror(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> Response:
     judging.remove_juror(db, admin, email)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/jurors/import")
+def import_jurors(data: JudgeImportInput, admin: CurrentAdmin, db: Db) -> JudgeImportOut:
+    """Super admin: appoints outside judges in one go, each with a password (shown once)."""
+    return judge_accounts.import_judges(db, admin, data)
+
+
+@router.post("/jurors/{email}/password")
+def set_juror_password(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> JurorPasswordOut:
+    """Super admin: a new sign-in password for a judge (the old one stops working), shown once."""
+    return judge_accounts.set_password(db, admin, email)
+
+
+@router.delete("/jurors/{email}/password", status_code=status.HTTP_204_NO_CONTENT)
+def remove_juror_password(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> Response:
+    """Super admin: the judge can no longer sign in with a password."""
+    judge_accounts.remove_password(db, admin, email)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

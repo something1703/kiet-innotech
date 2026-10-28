@@ -93,6 +93,17 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
     ]
 
 
+def _finalist_card(db: Session, team: Team) -> ResultCard:
+    tent = db.get(FinalTent, team.id)
+    where = f"Your stall is {tent.tent}." if tent is not None else "Watch this page for your stall number."
+    return ResultCard(
+        round="department",
+        status="finalist",
+        title="You are a finalist!",
+        message=f"Your team goes to the Grand Finale on 30 October at KIET. {where}",
+    )
+
+
 def my_results(db: Session, user: User) -> ResultsOut:
     team = db.scalar(select(Team).join(TeamMember, TeamMember.team_id == Team.id).where(TeamMember.user_id == user.id))
     other = team is not None and team.participant_type in ("college", "school")
@@ -169,14 +180,7 @@ def my_results(db: Session, user: User) -> ResultsOut:
             )
             # A winner is never told "not selected" or "results awaited": the Grand Finale details follow.
             if finalists_out and team.result == "finalist":
-                cards.append(
-                    ResultCard(
-                        round="department",
-                        status="finalist",
-                        title="You are a finalist!",
-                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
-                    )
-                )
+                cards.append(_finalist_card(db, team))
         elif released:
             # The results are out and this team did not win. Say so plainly and kindly, with the certificate to download.
             # The Grand Finale is for the winners (and any team the department nominated), so no "awaited" card here.
@@ -201,14 +205,7 @@ def my_results(db: Session, user: User) -> ResultsOut:
                 )
             )
             if nominated:
-                cards.append(
-                    ResultCard(
-                        round="department",
-                        status="finalist",
-                        title="You are a finalist!",
-                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
-                    )
-                )
+                cards.append(_finalist_card(db, team))
         else:
             if not finalists_out:
                 cards.append(
@@ -220,14 +217,7 @@ def my_results(db: Session, user: User) -> ResultsOut:
                     )
                 )
             elif team.result == "finalist":
-                cards.append(
-                    ResultCard(
-                        round="department",
-                        status="finalist",
-                        title="You are a finalist!",
-                        message="Your team goes to the Grand Finale on 30 October at KIET. Watch this page for your stall number.",
-                    )
-                )
+                cards.append(_finalist_card(db, team))
             else:
                 cards.append(
                     ResultCard(

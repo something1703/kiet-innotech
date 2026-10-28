@@ -74,6 +74,14 @@ set explicitly.
   verification); an OAuth client of type *Web application* whose *Authorised JavaScript origins* are the portal and admin
   origins (plus `http://localhost:3000` and `:3001` for local testing). No redirect URIs are needed.
 
+- **Grand Finale judges from outside KIET** sign in with their email and a password (`POST /auth/judge`), on the admin
+  panel's login page under "Grand Finale judges". Super admins make the passwords on the Judging page (Judges tab: one at a
+  time, or many from a pasted list, with an Excel download of the logins); only a scrypt hash is stored. A password session
+  opens the judge's own judging page only, never organiser pages, even for an email that is also an organiser. Wrong
+  passwords are rate limited.
+- **Event desk volunteers** (admin role `desk`) sign in with Google like organisers but see only the Event desk page:
+  Grand Finale check-in and food coupons.
+
 ### Other pieces
 
 - **SES**: `EMAIL_BACKEND=ses`, a verified sender identity and SES production access. Emails are sent after the request

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { UserPlus } from "lucide-react";
+import { KeyRound, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Juror } from "@/lib/admin-types";
 import { departmentLabel, departments } from "@/lib/content";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { JudgeHover } from "./JudgeHover";
+import { ImportJudges, PasswordDialog, type Login } from "./JudgeLogins";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { SectionTitle } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -26,6 +27,8 @@ import { TableFrame, tdClass, Th } from "@/components/ui/Table";
 export function JurorsTab({ onChange, canManage }: { onChange: () => void; canManage: boolean }) {
   const jurors = useQuery("jurors", () => api.listJurors());
   const [removing, setRemoving] = useState<Juror | null>(null);
+  const [resetting, setResetting] = useState<Juror | null>(null);
+  const [login, setLogin] = useState<Login | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
@@ -36,13 +39,20 @@ export function JurorsTab({ onChange, canManage }: { onChange: () => void; canMa
       {message && <Notice tone="success">{message}</Notice>}
       {canManage && (
         <section aria-labelledby="add-judge">
-          <SectionTitle id="add-judge" title="Appoint a judge" meta="They sign in to this panel with Google using this email" />
+          <SectionTitle id="add-judge" title="Appoint a judge" meta="KIET faculty sign in with Google; outside judges with their email and a password" />
           <AddJurorForm
             onAdded={(juror) => {
               setMessage(`${juror.name} can now sign in at this panel and will see the rooms you appoint them to.`);
+              if (juror.password) setLogin({ name: juror.name, email: juror.email, password: juror.password });
               jurors.reload();
             }}
           />
+        </section>
+      )}
+      {canManage && (
+        <section aria-labelledby="import-judges">
+          <SectionTitle id="import-judges" title="Grand Finale judges in bulk" meta="Outside judges, each with a sign-in password" />
+          <ImportJudges onDone={() => jurors.reload()} />
         </section>
       )}
 
@@ -84,6 +94,7 @@ export function JurorsTab({ onChange, canManage }: { onChange: () => void; canMa
                   <td className={tdClass}>
                     <Pill tone={j.kind === "faculty" ? "navy" : "orange"}>{j.kind === "faculty" ? "KIET faculty" : "External"}</Pill>
                     <span className="mt-0.5 block text-xs text-muted">{j.kind === "faculty" ? j.department : j.organisation}</span>
+                    {j.hasPassword && <span className="mt-0.5 block text-xs font-semibold text-emerald-700">Password sign-in</span>}
                   </td>
                   <td className={tdClass}>
                     {j.panels.length === 0 ? (
@@ -108,6 +119,13 @@ export function JurorsTab({ onChange, canManage }: { onChange: () => void; canMa
                   </td>
                   <td className={`${tdClass} tabular-nums`}>{j.scores}</td>
                   <td className={`${tdClass} text-right`}>
+                    {canManage && (j.kind === "external" || j.hasPassword) && (
+                      <Button variant="ghost" size="sm" onClick={() => setResetting(j)}>
+                        <KeyRound aria-hidden="true" className="size-3.5" />
+                        {j.hasPassword ? "New password" : "Give a password"}
+                        <span className="sr-only"> for {j.name}</span>
+                      </Button>
+                    )}
                     {!canManage ? null : j.scores > 0 ? (
                       <span className="text-xs text-muted">Has scored teams</span>
                     ) : (
@@ -122,6 +140,27 @@ export function JurorsTab({ onChange, canManage }: { onChange: () => void; canMa
           </TableFrame>
         )}
       </section>
+
+      {resetting && (
+        <ConfirmDialog
+          title={resetting.hasPassword ? "Give a new password?" : "Give a sign-in password?"}
+          description={
+            <>
+              <strong className="text-navy-900">{resetting.name}</strong> will sign in with their email and a new password
+              {resetting.hasPassword ? "; the old password stops working" : ""}. It is shown once.
+            </>
+          }
+          confirmLabel="Make password"
+          onClose={() => setResetting(null)}
+          onConfirm={async () => {
+            const made = await api.setJurorPassword(resetting.email);
+            setResetting(null);
+            setLogin(made);
+            jurors.reload();
+          }}
+        />
+      )}
+      {login && <PasswordDialog login={login} onClose={() => setLogin(null)} />}
 
       {removing && (
         <ConfirmDialog
@@ -159,7 +198,8 @@ function AddJurorForm({ onAdded }: { onAdded: (juror: Juror) => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!/^[^\s@]+@kiet\.edu$/i.test(email.trim())) return setError("Judges need a @kiet.edu email: they sign in with their KIET Google account.");
+    if (kind === "faculty" && !/^[^\s@]+@kiet\.edu$/i.test(email.trim())) return setError("KIET faculty judges need a @kiet.edu email: they sign in with their KIET Google account.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter the judge's email.");
     if (name.trim().length < 2) return setError("Enter the judge's name.");
     if (kind === "faculty" && !department) return setError("Choose the faculty member's department. They will not judge that department's teams.");
     if (kind === "external" && organisation.trim().length < 2) return setError("Enter the organisation an external judge comes from.");
@@ -189,8 +229,8 @@ function AddJurorForm({ onAdded }: { onAdded: (juror: Juror) => void }) {
   return (
     <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl bg-white p-4 ring-1 ring-line sm:p-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Field label="Email" htmlFor="juror-email" hint="Their KIET Google account (@kiet.edu).">
-          <Input id="juror-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" placeholder="name@kiet.edu" />
+        <Field label="Email" htmlFor="juror-email" hint={kind === "faculty" ? "Their KIET Google account (@kiet.edu)." : "Any email; they sign in with it and a password shown after saving."}>
+          <Input id="juror-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" placeholder={kind === "faculty" ? "name@kiet.edu" : "name@company.com"} />
         </Field>
         <Field label="Name" htmlFor="juror-name">
           <Input id="juror-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -198,7 +238,7 @@ function AddJurorForm({ onAdded }: { onAdded: (juror: Juror) => void }) {
         <Field label="Type" htmlFor="juror-kind">
           <Select id="juror-kind" value={kind} onChange={(e) => setKind(e.target.value as Juror["kind"])}>
             <option value="faculty">KIET faculty (department round)</option>
-            <option value="external">Outside expert (finale), with a KIET account</option>
+            <option value="external">Outside expert (Grand Finale), signs in with a password</option>
           </Select>
         </Field>
         {kind === "faculty" ? (

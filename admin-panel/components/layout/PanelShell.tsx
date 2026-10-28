@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Award, CalendarClock, ClipboardCheck, GraduationCap, Inbox, LayoutDashboard, LogOut, Medal, Menu, QrCode, Scale, ShieldCheck, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
+import { Activity, Award, CalendarClock, ClipboardCheck, GraduationCap, Inbox, LayoutDashboard, LogOut, Medal, Menu, QrCode, Scale, ShieldCheck, Ticket, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
 import { clubDepartment } from "@/lib/content";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -45,6 +45,7 @@ const nav: { title: string; items: NavItem[] }[] = [
       { href: "/attendance-report", label: "Student attendance", Icon: UserCheck, roles: ["super_admin", "admin"] },
       { href: "/attendance", label: "Attendance", Icon: QrCode, roles: ORGANISERS },
       { href: "/judge", label: "My judging", Icon: ClipboardCheck, roles: ["judge"] },
+      { href: "/desk", label: "Event desk", Icon: Ticket, roles: ["super_admin", "desk"] },
       { href: "/certificates", label: "Certificates", Icon: Award, roles: ["super_admin"] },
       { href: "/schedule", label: "Schedule", Icon: CalendarClock, roles: ["super_admin"] },
     ],
@@ -86,6 +87,8 @@ function scopeLabel(admin: AdminUser) {
       return "Admin · startups";
     case "judge":
       return "Judge";
+    case "desk":
+      return "Event desk volunteer";
     default:
       return `Admin · ${admin.department}`;
   }
@@ -220,11 +223,12 @@ export function PanelShell({ children }: { children: ReactNode }) {
   const { state, signOut, refresh } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  // Judges who are not organisers have one page.
-  const judgeElsewhere = state.status === "signed_in" && state.admin.role === "judge" && !isActive(pathname, "/judge");
+  // Judges who are not organisers, and desk volunteers, have one page each.
+  const home = state.status === "signed_in" ? ({ judge: "/judge", desk: "/desk" } as Partial<Record<string, string>>)[state.admin.role] : undefined;
+  const judgeElsewhere = home !== undefined && !isActive(pathname, home);
   useEffect(() => {
-    if (judgeElsewhere) router.replace("/judge");
-  }, [judgeElsewhere, router]);
+    if (judgeElsewhere && home) router.replace(home);
+  }, [judgeElsewhere, home, router]);
 
   const signedOutReason = state.status === "signed_out" ? (state.reason ?? null) : undefined;
   useEffect(() => {

@@ -392,6 +392,11 @@ function finalistSummaryOf(db: MockDb): FinalistSummary {
     resultsPublishFrom: resultsFrom(db),
     // The demo has no judging, so nothing is prepared for the finale yet.
     unpublishBlocked: null,
+    lockedAt: null,
+    lockedBy: null,
+    lockBlocked: "The demo has no department results to release, so there are no department winners to lock in.",
+    lockWinners: 0,
+    lockLeftOut: 0,
     matrix: departments.map((department) => ({
       department,
       categories: categories.map((c) => ({
@@ -517,6 +522,7 @@ function writeSchedule(db: MockDb, admin: AdminUser, opens: string, closes: stri
 }
 
 const NOT_IN_DEMO = "Judging works with the real backend only; the demo data has no judges, rooms or scores.";
+const DESK_LIVE_ONLY = "The event desk works with the real backend only; the demo has no Grand Finale teams.";
 const CERTIFICATES_LIVE_ONLY = "Certificates work with the real backend only; the demo has no templates or attendance.";
 
 function auditVisible(db: MockDb, admin: AdminUser, entry: AuditEntry) {
@@ -1409,6 +1415,10 @@ export const mockApi: AdminApi = {
   listJurors: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   addJuror: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   removeJuror: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  importJurors: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  setJurorPassword: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  removeJurorPassword: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  lockFinalists: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   editScore: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   scanPass: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   markPresent: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
@@ -1439,4 +1449,17 @@ export const mockApi: AdminApi = {
   rollCall: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   rollCallAll: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   markStudents: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+
+  desk: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskSearch: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskExport: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskCheckIn: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskCheckOut: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskGiveCoupons: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskTakeBackCoupon: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskGiveExtras: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskRemoveExtra: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskAddMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskUpdateMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskDeleteMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
 };
