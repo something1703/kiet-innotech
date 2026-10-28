@@ -1,4 +1,4 @@
-import type { CouponsResult, Desk, DeskTeam, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -37,6 +37,10 @@ export interface AdminApi {
   bulkTeams(ids: string[], action: BulkAction, options?: { reason?: string; unbanMembers?: boolean }): Promise<BulkResult>;
   /** Super admin: deletes a team and frees its members. The history stays in the audit log. */
   dissolveTeam(id: string, reason: string): Promise<void>;
+  /** Super admin: removes any team for good (finalist, stall, scores and all); `confirm` is the team's code. Students keep their accounts. */
+  deleteTeam(id: string, confirm: string, reason: string): Promise<void>;
+  /** Super admin: a whole team and its students in one go, submitted (and accepted for the Grand Finale where needed). */
+  createCompleteTeam(input: CompleteTeamInput): Promise<AdminTeam>;
   /** Accepts a submitted startup, COE KIET, other-college or school team for the Grand Finale. */
   approveTeam(id: string): Promise<AdminTeam>;
   /** Takes that acceptance back. */
@@ -107,7 +111,8 @@ export interface AdminApi {
   leaderboard(department?: string): Promise<Leaderboard>;
   /** A room's sheet (panelId), a department's (department round), or every finale team. */
   attendance(round: JudgingRound, scope?: { panelId?: string; department?: string }): Promise<AttendanceSheet>;
-  setTents(tents: { teamId: string; tent: string | null }[]): Promise<Judging>;
+  /** `allowShared`: two teams may get the same stall number on purpose (two projects of one club); otherwise that is refused as a typo. */
+  setTents(tents: { teamId: string; tent: string | null }[], allowShared?: boolean): Promise<Judging>;
   createPanel(input: PanelInput): Promise<Panel>;
   updatePanel(id: string, input: PanelPlace): Promise<Panel>;
   /** Sets a department room's buffer: the extra minutes after its slot in which its judges can still submit marks (0 to 60). */

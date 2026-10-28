@@ -213,11 +213,12 @@ def test_the_event_desk_checks_in_and_gives_food_coupons(judging, as_user, monke
     assert coupons(desk, [leader]).status_code == 409  # not open yet
     assert root.put("/desk/meals/lunch", {"open": True}).json()["meals"][0]["open"] is True
 
+    # Giving the coupon checks in whoever was not checked in yet (they are at the desk); a second coupon is refused.
     first = coupons(desk, [leader, member]).json()
-    assert (first["given"], first["already"], first["not_checked_in"]) == (["School Student"], [], ["School Student"])
-    desk.post(f"/desk/teams/{school['id']}/check-in", {"user_ids": [member]})
+    assert (len(first["given"]), first["already"], first["not_checked_in"]) == (2, [], [])
+    assert all(m["checked_in_at"] for m in first["team"]["members"])
     second = coupons(desk, [leader, member]).json()
-    assert (len(second["given"]), len(second["already"])) == (1, 1)
+    assert (len(second["given"]), len(second["already"])) == (0, 2)
     assert all("lunch" in m["coupons"] for m in second["team"]["members"])
 
     overview = desk.get("/desk").json()
@@ -232,8 +233,10 @@ def test_the_event_desk_checks_in_and_gives_food_coupons(judging, as_user, monke
     out = desk.post(f"/desk/teams/{school['id']}/check-out", {"user_id": member, "reason": "Ticked the wrong student"}).json()
     assert [m["checked_in_at"] is None for m in out["members"]] == [False, True] and "lunch" in out["members"][1]["coupons"]
     take_back = f"/desk/teams/{school['id']}/coupons/lunch/{member}/take-back"
-    assert desk.post(take_back, {"reason": "Given by mistake"}).status_code == 403
-    assert "lunch" not in root.post(take_back, {"reason": "Given by mistake"}).json()["members"][1]["coupons"]
+    # The desk marks a coupon as not given (with a reason), and can then give it again.
+    assert desk.post(take_back, {"reason": "no"}).status_code == 422
+    assert "lunch" not in desk.post(take_back, {"reason": "Given by mistake"}).json()["members"][1]["coupons"]
+    assert coupons(desk, [member]).json()["given"] == ["School Student"]
 
     # Coupons for judges and guests, in bulk.
     extra = desk.post("/desk/extras", {"meal": "lunch", "quantity": 18, "recipient": "Judges corner"})
@@ -248,3 +251,79 @@ def test_the_event_desk_checks_in_and_gives_food_coupons(judging, as_user, monke
 
     export = desk.get("/desk/teams/export").json()
     assert {t["code"] for t in export} == {school["code"], teams["college"]["code"]}
+
+
+# ---------- Shared stalls ----------
+
+
+def test_two_teams_share_a_stall_only_when_asked(judging):  # noqa: F811
+    root, teams = judging["root"], judging["teams"]
+    accept_direct(judging)
+    both = [{"team_id": teams["college"]["id"], "tent": "151"}, {"team_id": teams["school"]["id"], "tent": "151"}]
+    assert root.put("/admin/judging/final/tents", {"tents": both}).status_code == 422  # a typo, unless shared on purpose
+    saved = root.put("/admin/judging/final/tents", {"tents": both, "allow_shared": True})
+    assert saved.status_code == 200
+    assert {r["tent"] for r in saved.json()["tents"]} == {"151"}
+
+
+# ---------- Super admins add and delete teams ----------
+
+
+def complete_team(**overrides):
+    body = {
+        "name": "Walk In Wizards",
+        "category": 5,
+        "domain": "Other / not listed",
+        "project_title": "Solar dryer for farmers",
+        "abstract": "",
+        "participant_type": "school",
+        "institution": "Akansha Vidhya Peeth Inter College",
+        "city": "Moradabad",
+        "members": [
+            {"email": "walkin.one@gmail.com", "full_name": "Walk In One", "phone": "9811100001", "year": 11},
+            {"email": "walkin.two@gmail.com", "full_name": "Walk In Two", "phone": "9811100002", "year": 12},
+        ],
+    }
+    return body | overrides
+
+
+def test_a_super_admin_adds_a_complete_team(world, as_user):  # noqa: F811
+    root, cse = world["root"], world["cse"]
+    assert cse.post("/admin/teams/complete", complete_team()).status_code == 403
+    # One bad member: nothing is saved, and the message names the student.
+    bad = complete_team(
+        members=[*complete_team()["members"][:1], {"email": "walkin.two@gmail.com", "full_name": "Walk In Two", "phone": "123", "year": 12}]
+    )
+    refused = root.post("/admin/teams/complete", bad)
+    assert refused.status_code == 422 and "Walk In Two" in refused.json()["detail"]
+    assert root.get("/admin/students", params={"q": "walkin"}).json()["total"] == 0
+
+    made = root.post("/admin/teams/complete", complete_team())
+    assert made.status_code == 201, made.text
+    team = made.json()
+    assert (team["status"], team["route"], team["participant_type"], len(team["members"])) == ("submitted", "finale", "school", 2)
+    assert team["approved_at"] is not None  # accepted, so it can get a stall
+    assert root.get("/admin/students", params={"q": "walkin"}).json()["total"] == 2
+    # The students can sign in and see their team.
+    assert as_user("walkin.two@gmail.com").get("/me/team").json()["code"] == team["code"]
+    # Already registered students are used as they are; one already in a team is refused.
+    again = root.post("/admin/teams/complete", complete_team(name="Second Wizards"))
+    assert again.status_code == 409 and "already in team" in again.json()["detail"]
+
+
+def test_a_super_admin_deletes_any_team(judging, monkeypatch, as_user):  # noqa: F811
+    root, cse, teams = judging["root"], judging["cse"], judging["teams"]
+    released(judging, monkeypatch)
+    assert lock(root).status_code == 200
+    cse_a = teams["cse_a"]
+    assert root.put("/admin/judging/final/tents", {"tents": [{"team_id": cse_a["id"], "tent": "3"}]}).status_code == 200
+    body = {"confirm": cse_a["code"], "reason": "Duplicate entry found"}
+    assert cse.post(f"/admin/teams/{cse_a['id']}/delete", body).status_code == 403
+    assert root.post(f"/admin/teams/{cse_a['id']}/delete", body | {"confirm": "IT26-9999"}).status_code == 422
+    # A locked finalist with a stall and scores is removed too; its students keep their accounts and are free.
+    assert root.post(f"/admin/teams/{cse_a['id']}/delete", body).status_code == 204
+    assert root.get(f"/admin/teams/{cse_a['id']}").status_code == 404
+    a = as_user("a@kiet.edu")
+    assert a.get("/me").status_code == 200 and a.get("/me/team").status_code in (200, 404)
+    assert a.get("/me/team").status_code == 404 or a.get("/me/team").json() is None
+    assert {r["team"]["code"] for r in root.get("/admin/judging/final").json()["tents"]} == {teams["cse_b"]["code"]}

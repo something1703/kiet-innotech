@@ -23,7 +23,7 @@ import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { TableFrame, tdClass, Th } from "@/components/ui/Table";
 import { EditTeamDialog } from "./EditTeamDialog";
 
-type Action = "withdraw" | "disqualify" | "restore" | "ban" | "reopen" | "dissolve" | "approve" | "unapprove" | "reject" | "queue" | "submit";
+type Action = "withdraw" | "disqualify" | "restore" | "ban" | "reopen" | "dissolve" | "delete" | "approve" | "unapprove" | "reject" | "queue" | "submit";
 
 const actionCopy: Record<Action, { title: string; confirm: string; tone: "primary" | "danger"; description: (team: AdminTeam) => ReactNode }> = {
   withdraw: {
@@ -76,6 +76,18 @@ const actionCopy: Record<Action, { title: string; confirm: string; tone: "primar
       <>
         <strong className="text-navy-900">{team.name}</strong> ({team.code}) is deleted and its {team.members.length} members are free to join or create
         another team. This cannot be undone; the history stays in the activity log.
+      </>
+    ),
+  },
+  delete: {
+    title: "Delete team for good",
+    confirm: "Delete team",
+    tone: "danger",
+    description: (team) => (
+      <>
+        <strong className="text-navy-900">{team.name}</strong> ({team.code}) is removed from the database, whatever its state: finalist place, stall,
+        panel, scores, prizes and coupons go with it. Its {team.members.length} students keep their accounts and can be put in another team. This
+        cannot be undone; the activity log keeps the record.
       </>
     ),
   },
@@ -284,6 +296,11 @@ function TeamView({ id }: { id: string }) {
       router.replace("/teams");
       return;
     }
+    if (kind === "delete") {
+      await api.deleteTeam(t.id, t.code, reason);
+      router.replace("/teams");
+      return;
+    }
     const updated =
       kind === "withdraw"
         ? await api.withdrawTeam(t.id, reason)
@@ -392,6 +409,12 @@ function TeamView({ id }: { id: string }) {
                 <Button variant="secondary" className="text-red-700" onClick={() => setAction("dissolve")}>
                   <Trash2 aria-hidden="true" className="size-4" />
                   Dissolve
+                </Button>
+              )}
+              {canDissolve && (
+                <Button variant="danger" onClick={() => setAction("delete")}>
+                  <Trash2 aria-hidden="true" className="size-4" />
+                  Delete team
                 </Button>
               )}
               {canBan && (
@@ -671,7 +694,7 @@ function TeamView({ id }: { id: string }) {
           confirmLabel={actionCopy[action].confirm}
           tone={actionCopy[action].tone}
           reasonLabel={action === "approve" || action === "queue" ? undefined : action === "reject" ? "Reason (the students see it)" : "Reason"}
-          typeToConfirm={action === "dissolve" ? t.name : undefined}
+          typeToConfirm={action === "dissolve" ? t.name : action === "delete" ? t.code : undefined}
           onConfirm={(reason) => run(action, reason)}
           onClose={() => setAction(null)}
         >

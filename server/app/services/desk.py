@@ -4,12 +4,13 @@ The Grand Finale event desk: on-site registration (check-in) and food coupons.
 - Registration: a volunteer finds a team by its code, stall, name, a member's name, roll number or phone, and checks in
   the members who are there. A check-in is the student's Grand Finale attendance (the attendance table, round "final"),
   so the judging pages and attendance sheets see it too. Only teams taking part in the Grand Finale can be checked in.
-- Food coupons: super admins set up the meals (e.g. lunch) and open each one when it is served. A checked-in student gets
-  one coupon per open meal; the table's key makes a second one impossible, whoever tries and however fast. Coupons for
-  people who are not students (judges, volunteers, guests) are given in bulk with who they were for.
+- Food coupons: super admins set up the meals (this year one: lunch) and open each one. A student gets one coupon per open
+  meal; giving it checks them in too, since they are at the desk. The table's key makes a second one impossible, whoever
+  tries and however fast. Coupons for people who are not students (judges, volunteers, start-ups, guests) are given in
+  bulk with who they were for.
 
-Super admins and desk volunteers (admins with role "desk") use the desk. Volunteers can check in, check out with a reason
-and give coupons; only a super admin sets up meals or takes a coupon back.
+Super admins and desk volunteers (admins with role "desk") use the desk. Volunteers check in, mark coupons given or not
+given (with a reason) and give bulk coupons; only a super admin sets up meals or takes bulk coupons back.
 """
 
 import re
@@ -304,8 +305,8 @@ def _open_meal(db: Session, key: str) -> Meal:
 
 def give_coupons(db: Session, admin: Admin, team_id: uuid.UUID, data: CouponsInput) -> CouponsOut:
     """
-    One coupon for the meal to each listed member who is checked in and has not had one. The others are reported: already
-    given (with when and by whom) or not checked in.
+    One coupon for the meal to each listed member who has not had one; a member who was not checked in yet is checked in
+    too (they are at the desk). Members who already had one are reported. Suspended students are refused.
     """
     team = _team(db, team_id)
     meal = _open_meal(db, data.meal)
@@ -317,12 +318,12 @@ def give_coupons(db: Session, admin: Admin, team_id: uuid.UUID, data: CouponsInp
             )
         )
     )
+    missing = [m.user_id for m, _, u in rows if m.user_id not in present]
+    if missing:
+        check_in(db, admin, team.id, CheckInInput(user_ids=missing))
     now = utcnow()
     given, already, not_checked_in = [], [], []
     for member, profile, _ in rows:
-        if member.user_id not in present:
-            not_checked_in.append(profile.full_name)
-            continue
         statement = (
             insert(MealCoupon)
             .values(user_id=member.user_id, meal=meal.key, team_id=team.id, issued_at=now, issued_by=admin.email)
@@ -340,14 +341,16 @@ def give_coupons(db: Session, admin: Admin, team_id: uuid.UUID, data: CouponsInp
 
 
 def take_back_coupon(db: Session, admin: Admin, team_id: uuid.UUID, meal_key: str, user_id: uuid.UUID, reason: str) -> DeskTeamOut:
-    _require_super(admin, "take a food coupon back")
+    """Marks a student's coupon as not given (e.g. ticked by mistake), so it can be given again. Super admins and desk volunteers."""
     team = _team(db, team_id)
     (_, profile, _), *_ = _members(db, team, [user_id])
     coupon = db.get(MealCoupon, (user_id, meal_key), with_for_update=True)
     if coupon is None:
         raise ApiError(f"{profile.full_name} has no coupon for this meal.", 404)
     db.delete(coupon)
-    audit.record(db, admin.email, "desk.coupon_taken_back", team, f"{meal_key} coupon of {profile.full_name} taken back. Reason: {reason}")
+    audit.record(
+        db, admin.email, "desk.coupon_taken_back", team, f"{meal_key} coupon of {profile.full_name} marked not given. Reason: {reason}"
+    )
     db.commit()
     return _teams_out(db, [team])[0]
 

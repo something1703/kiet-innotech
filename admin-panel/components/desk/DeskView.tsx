@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { CircleCheck, Download, Lock, LockOpen, Plus, RefreshCw, Ticket, Trash2, UserCheck, Utensils } from "lucide-react";
+import { CircleCheck, Download, Lock, LockOpen, Plus, Printer, RefreshCw, Ticket, Trash2, UserCheck, Utensils } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Desk, DeskMember, DeskTeam, Meal } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -100,13 +100,22 @@ export function DeskView() {
       <PageHeader
         eyebrow="Grand Finale · 30 October"
         title="Event desk"
-        description="Registration and food coupons. Find a team by its code, stall, name, or a student's name, roll number or phone; check in the students who are here, then give each one their coupon."
+        description="Registration and lunch coupons: one coupon for one person. Find a team by its code, stall, name, or a student's name, roll number or phone; tick who is here and press “Check in & give coupon”. Every coupon given is recorded."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => desk.reload()}>
               <RefreshCw aria-hidden="true" className="size-3.5" />
               Refresh
             </Button>
+            <a
+              href="/coupons/"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-navy-900 ring-1 ring-inset ring-line hover:bg-surface"
+            >
+              <Printer aria-hidden="true" className="size-3.5" />
+              Print all coupons
+            </a>
             <Button variant="secondary" size="sm" onClick={exportAll} pending={exporting} disabled={!data}>
               {!exporting && <Download aria-hidden="true" className="size-3.5" />}
               Download (Excel)
@@ -169,7 +178,7 @@ export function DeskView() {
         )}
         <div className="space-y-4">
           {shown.map((team) => (
-            <TeamCard key={team.id} team={team} meal={activeMeal} canManage={Boolean(data?.canManage)} onUpdated={updated} />
+            <TeamCard key={team.id} team={team} meal={activeMeal} onUpdated={updated} />
           ))}
         </div>
       </section>
@@ -204,9 +213,9 @@ function Stat({ label, value, of, note }: { label: string; value: number; of: nu
   );
 }
 
-function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: Meal | null; canManage: boolean; onUpdated: (team: DeskTeam) => void }) {
-  const notIn = team.members.filter((m) => !m.checkedInAt && !m.banned).map((m) => m.userId);
-  const [selected, setSelected] = useState<string[]>(() => notIn);
+function TeamCard({ team, meal, onUpdated }: { team: DeskTeam; meal: Meal | null; onUpdated: (team: DeskTeam) => void }) {
+  const eligible = team.members.filter((m) => !m.banned).map((m) => m.userId);
+  const [selected, setSelected] = useState<string[]>(() => eligible);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -214,7 +223,9 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
   const [takingBack, setTakingBack] = useState<DeskMember | null>(null);
 
   const checkedIn = team.members.filter((m) => m.checkedInAt);
-  const toGive = meal ? checkedIn.filter((m) => !m.coupons[meal.key]) : [];
+  const picked = team.members.filter((m) => selected.includes(m.userId) && !m.banned);
+  const toCheckIn = picked.filter((m) => !m.checkedInAt);
+  const toGive = meal ? picked.filter((m) => !m.coupons[meal.key]) : [];
   const toggle = (userId: string) => setSelected((s) => (s.includes(userId) ? s.filter((x) => x !== userId) : [...s, userId]));
 
   async function run(what: string, action: () => Promise<string>) {
@@ -232,21 +243,18 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
 
   const checkIn = () =>
     run("check-in", async () => {
-      const ids = selected.filter((id) => notIn.includes(id));
-      const next = await api.deskCheckIn(team.id, ids);
-      onUpdated(next);
-      setSelected([]);
-      return `${plural(ids.length, "student")} checked in.`;
+      onUpdated(await api.deskCheckIn(team.id, toCheckIn.map((m) => m.userId)));
+      return `${plural(toCheckIn.length, "student")} checked in.`;
     });
 
-  const giveCoupons = () =>
-    run("coupons", async () => {
+  /** Gives the coupon (which checks in anyone not checked in yet) to these members. */
+  const giveCoupons = (members: DeskMember[], key: string) =>
+    run(key, async () => {
       if (!meal) return "";
-      const result = await api.deskGiveCoupons(team.id, meal.key, toGive.map((m) => m.userId));
+      const result = await api.deskGiveCoupons(team.id, meal.key, members.map((m) => m.userId));
       onUpdated(result.team);
-      const parts = [`${meal.label} coupon given to ${plural(result.given.length, "student")}`];
+      const parts = [`${meal.label} coupon given to ${result.given.length ? result.given.join(", ") : "nobody new"}`];
       if (result.already.length) parts.push(`already had one: ${result.already.join(", ")}`);
-      if (result.notCheckedIn.length) parts.push(`not checked in: ${result.notCheckedIn.join(", ")}`);
       return `${parts.join("; ")}.`;
     });
 
@@ -269,12 +277,23 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
             {team.participantType !== "kiet" && <span>{team.institution}</span>}
           </p>
         </div>
-        <p className="text-sm font-semibold text-navy-900">
-          {checkedIn.length} / {team.members.length} checked in
-        </p>
+        <div className="flex flex-col items-end gap-2">
+          <p className="text-sm font-semibold text-navy-900">
+            {checkedIn.length} / {team.members.length} checked in
+          </p>
+          <a
+            href={`/coupons/?team=${encodeURIComponent(team.code)}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-navy-900 ring-1 ring-inset ring-line hover:bg-surface"
+          >
+            <Printer aria-hidden="true" className="size-3.5" />
+            Print coupons
+          </a>
+        </div>
       </header>
 
-      <TableFrame label={`Members of ${team.name}`} minWidth="min-w-[640px]">
+      <TableFrame label={`Members of ${team.name}`} minWidth="min-w-[680px]">
         <thead>
           <tr>
             <Th className="w-10">
@@ -294,16 +313,14 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
             return (
               <tr key={m.userId}>
                 <td className={tdClass}>
-                  {!m.checkedInAt && !m.banned && (
+                  {!m.banned && (
                     <input type="checkbox" className="size-4 accent-navy-900" checked={selected.includes(m.userId)} onChange={() => toggle(m.userId)} aria-label={`Select ${m.fullName}`} />
                   )}
                 </td>
                 <td className={tdClass}>
                   <span className="font-semibold text-navy-900">{m.fullName}</span>
                   {m.role === "leader" && <span className="ml-1.5 text-xs font-semibold text-accent-600">Leader</span>}
-                  <span className="block text-xs text-muted">
-                    {[m.rollNumber, m.department, m.course, m.phone].filter(Boolean).join(" · ")}
-                  </span>
+                  <span className="block text-xs text-muted">{[m.rollNumber, m.department, m.course, m.phone].filter(Boolean).join(" · ")}</span>
                   {m.banned && <span className="block text-xs font-semibold text-red-700">Suspended by the organisers: do not check in</span>}
                 </td>
                 <td className={tdClass}>
@@ -318,25 +335,30 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
                 </td>
                 <td className={tdClass}>
                   {!meal ? (
-                    <span className="text-muted">—</span>
+                    <span className="text-muted">No meal open</span>
                   ) : given ? (
-                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-700">
-                      <Ticket aria-hidden="true" className="size-4" />
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
+                      <Ticket aria-hidden="true" className="size-3.5" />
                       Given {formatTime(given)}
                     </span>
+                  ) : m.banned ? (
+                    <span className="text-sm text-muted">—</span>
                   ) : (
-                    <span className="text-sm text-muted">{m.checkedInAt ? "Not given" : "Check in first"}</span>
+                    <Button size="sm" variant="secondary" pending={pending === `give:${m.userId}`} disabled={pending !== null} onClick={() => giveCoupons([m], `give:${m.userId}`)}>
+                      {pending !== `give:${m.userId}` && <Ticket aria-hidden="true" className="size-3.5" />}
+                      Give coupon<span className="sr-only"> to {m.fullName}</span>
+                    </Button>
                   )}
                 </td>
                 <td className={`${tdClass} whitespace-nowrap text-right`}>
+                  {given && meal && (
+                    <Button variant="ghost" size="sm" className="text-red-700" onClick={() => setTakingBack(m)}>
+                      Mark not given<span className="sr-only"> for {m.fullName}</span>
+                    </Button>
+                  )}
                   {m.checkedInAt && (
                     <Button variant="ghost" size="sm" onClick={() => setCheckingOut(m)}>
                       Undo check-in<span className="sr-only"> for {m.fullName}</span>
-                    </Button>
-                  )}
-                  {canManage && given && meal && (
-                    <Button variant="ghost" size="sm" className="text-red-700" onClick={() => setTakingBack(m)}>
-                      Take coupon back<span className="sr-only"> from {m.fullName}</span>
                     </Button>
                   )}
                 </td>
@@ -347,23 +369,24 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
       </TableFrame>
 
       <footer className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3 sm:px-5">
-        <Button onClick={checkIn} pending={pending === "check-in"} disabled={pending !== null || selected.filter((id) => notIn.includes(id)).length === 0}>
-          {pending !== "check-in" && <UserCheck aria-hidden="true" className="size-4" />}
-          Check in {selected.filter((id) => notIn.includes(id)).length || ""} selected
-        </Button>
         {meal && (
-          <Button variant="secondary" onClick={giveCoupons} pending={pending === "coupons"} disabled={pending !== null || toGive.length === 0}>
+          <Button onClick={() => giveCoupons(toGive, "coupons")} pending={pending === "coupons"} disabled={pending !== null || toGive.length === 0}>
             {pending !== "coupons" && <Ticket aria-hidden="true" className="size-4" />}
-            Give {meal.label} coupon{toGive.length === 1 ? "" : "s"} ({toGive.length})
+            Check in &amp; give {meal.label} coupon ({toGive.length})
           </Button>
         )}
+        <Button variant={meal ? "secondary" : "primary"} onClick={checkIn} pending={pending === "check-in"} disabled={pending !== null || toCheckIn.length === 0}>
+          {pending !== "check-in" && <UserCheck aria-hidden="true" className="size-4" />}
+          Check in only ({toCheckIn.length})
+        </Button>
+        <span className="text-xs text-muted">Untick anyone who is not at the desk.</span>
       </footer>
       {(error || message) && <div className="px-4 pb-3 sm:px-5">{error ? <Notice tone="error">{error}</Notice> : <Notice tone="success">{message}</Notice>}</div>}
 
       {checkingOut && (
         <ConfirmDialog
           title={`Undo ${checkingOut.fullName}'s check-in?`}
-          description="Use this when the wrong student was checked in. Coupons already given stay given."
+          description="Use this when the wrong student was checked in. A coupon already given stays given; mark it not given separately."
           confirmLabel="Undo check-in"
           reasonLabel="Why?"
           onClose={() => setCheckingOut(null)}
@@ -375,9 +398,9 @@ function TeamCard({ team, meal, canManage, onUpdated }: { team: DeskTeam; meal: 
       )}
       {takingBack && meal && (
         <ConfirmDialog
-          title={`Take back ${takingBack.fullName}'s ${meal.label} coupon?`}
-          description="The student can then be given the coupon again."
-          confirmLabel="Take coupon back"
+          title={`Mark ${takingBack.fullName}'s ${meal.label} coupon as not given?`}
+          description="Use this when it was ticked by mistake. The coupon can then be given again."
+          confirmLabel="Mark not given"
           tone="danger"
           reasonLabel="Why?"
           onClose={() => setTakingBack(null)}

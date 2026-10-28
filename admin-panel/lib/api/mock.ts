@@ -953,6 +953,23 @@ export const mockApi: AdminApi = {
     save(db);
   },
 
+  async deleteTeam(id, confirm, reason) {
+    await delay();
+    const db = load();
+    const admin = actor(db);
+    requireSuper(admin, "delete teams");
+    const team = findTeam(db, admin, id);
+    const text = requireReason(reason);
+    if (confirm.trim().toUpperCase() !== team.code) throw new ApiError(422, `Type the team's code, ${team.code}, to confirm.`);
+    for (const student of db.students) if (student.teamId === team.id) student.teamId = null;
+    for (const nomination of db.nominations) nomination.teamIds = nomination.teamIds.filter((teamId) => teamId !== team.id);
+    db.teams = db.teams.filter((t) => t.id !== team.id);
+    log(db, { actorEmail: admin.email, action: "team.dissolved", teamId: team.id, teamCode: team.code, department: team.department, detail: `${team.name} deleted. Reason: ${text}` });
+    save(db);
+  },
+
+  createCompleteTeam: () => Promise.reject(new ApiError(501, "Adding a team with new students works with the real backend only.")),
+
   async listStudents(query) {
     await delay();
     const db = load();

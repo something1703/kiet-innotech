@@ -387,6 +387,31 @@ export type LockFinalistsResult = {
   leftOut: number;
 };
 
+/** One student of a team a super admin adds in one go; the college or school, city and type come from the team. */
+export type CompleteTeamMember = {
+  email: string;
+  fullName: string;
+  phone: string;
+  department: string | null;
+  course: string;
+  year: number;
+  rollNumber: string;
+  club: string;
+};
+
+/** Super admin: a whole team and its students in one go (students not registered yet are registered). The first member leads. */
+export type CompleteTeamInput = {
+  name: string;
+  category: number;
+  domain: string;
+  projectTitle: string;
+  abstract: string;
+  participantType: ParticipantType;
+  institution: string;
+  city: string;
+  members: CompleteTeamMember[];
+};
+
 /** An organiser creates a team for registered students, whether or not registration is open. */
 export type AdminTeamInput = {
   name: string;

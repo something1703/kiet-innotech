@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import ColumnElement, String, and_, cast, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -52,6 +52,8 @@ from ..schemas import (
     AuditOut,
     BulkOut,
     CategoryStats,
+    CompleteTeamInput,
+    DeleteTeamInput,
     DepartmentStats,
     DomainStats,
     FinalistBoardOut,
@@ -1188,6 +1190,118 @@ def dissolve_team(db: Session, admin: Admin, team_id: uuid.UUID, reason: str) ->
         "team.dissolved",
         team,
         f"{team.name} dissolved; {len(members)} members freed ({', '.join(members)}). Reason: {reason}",
+    )
+    db.delete(team)
+    db.commit()
+
+
+def create_complete_team(db: Session, admin: Admin, data: CompleteTeamInput, settings: Settings) -> AdminTeamOut:
+    """
+    Super admin: registers the team's students who are not registered yet and creates the team, submitted (and accepted
+    for the Grand Finale where that applies), all in one transaction: if anything is wrong nothing is saved.
+    """
+    _require_super(admin, "add teams")
+    emails = [m.email for m in data.members]
+    if len(set(emails)) != len(emails):
+        raise ApiError("A student is listed more than once.", 422)
+    for member in data.members:
+        existing = db.scalar(select(User).where(User.email == member.email))
+        if existing is not None and db.get(Profile, existing.id) is not None:
+            continue  # already registered: create_team checks their team, ban and college
+        try:
+            profile = AdminStudentInput(
+                email=member.email,
+                full_name=member.full_name,
+                phone=member.phone,
+                participant_type=data.participant_type,
+                institution=data.institution or member.club,
+                city=data.city,
+                department=member.department,
+                course=member.course,
+                year=member.year,
+                roll_number=member.roll_number,
+                club=member.club,
+            )
+        except ValidationError as exc:
+            message = exc.errors()[0]["msg"].removeprefix("Value error, ")
+            raise ApiError(f"{member.full_name or member.email}: {message}", 422) from exc
+        if profile.participant_type not in rules.allowed_participant_types(profile.email):
+            raise ApiError(
+                f"{member.email}: a @kiet.edu email registers as a KIET student."
+                if rules.is_kiet_email(member.email)
+                else f"{member.email}: KIET students are registered with their official @kiet.edu email.",
+                422,
+            )
+        user = existing or User(email=profile.email, name=profile.full_name)
+        db.add(user)
+        db.flush()
+        db.add(
+            Profile(
+                user_id=user.id,
+                full_name=profile.full_name,
+                phone=profile.phone,
+                participant_type=profile.participant_type,
+                institution=profile.institution,
+                institution_key=rules.institution_key(profile.participant_type, profile.institution, profile.city),
+                city=profile.city,
+                department=profile.department,
+                course=profile.course,
+                year=profile.year,
+                roll_number=profile.roll_number,
+                club=profile.club,
+            )
+        )
+        audit.record(
+            db,
+            admin.email,
+            "student.created",
+            detail=f"{profile.email} ({profile.full_name}), registered by an organiser with their team",
+            department=profile.department,
+            participant_type=profile.participant_type,
+        )
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if "uq_profiles_kiet_roll_number" in violated_constraint(exc):
+            raise ApiError("One of these roll numbers is already registered to another student.", 409) from exc
+        raise
+    # Already validated by CompleteTeamInput (the abstract may be short here, unlike a student's own team).
+    team = AdminTeamInput.model_construct(
+        name=data.name,
+        category=data.category,
+        domain=data.domain,
+        project_title=data.project_title,
+        abstract=data.abstract,
+        leader_email=emails[0],
+        member_emails=emails[1:],
+        submit=True,
+    )
+    return create_team(db, admin, team, settings)
+
+
+DELETE_TEAM_NOTE = "The students keep their accounts and can be put in another team; the history stays in the activity log."
+
+
+def delete_team(db: Session, admin: Admin, team_id: uuid.UUID, data: DeleteTeamInput) -> None:
+    """
+    Super admin: removes any team from the database, whatever its state (finalist, stall, panel, scores, awards, coupons
+    go with it). The super admin types the team's code to confirm. The students keep their accounts.
+    """
+    _require_super(admin, "delete teams")
+    team = _visible_team(db, admin, team_id, lock=True)
+    if data.confirm.strip().upper() != team.code:
+        raise ApiError(f"Type the team's code, {team.code}, to confirm.", 422)
+    members = db.scalars(select(User.email).join(TeamMember, TeamMember.user_id == User.id).where(TeamMember.team_id == team.id)).all()
+    scores = db.scalar(select(func.count()).select_from(Score).where(Score.team_id == team.id)) or 0
+    tent = db.get(FinalTent, team.id)
+    audit.record(
+        db,
+        admin.email,
+        "team.deleted",
+        team,
+        f"{team.name} ({team.participant_type}, {team.status}, result {team.result}) deleted for good with {len(members)} members "
+        f"({', '.join(members)}), {scores} scores{f', stall {tent.tent}' if tent else ''}. Reason: {data.reason}",
     )
     db.delete(team)
     db.commit()

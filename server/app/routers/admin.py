@@ -38,6 +38,8 @@ from ..schemas import (
     CertFieldsInput,
     CertificateFontOut,
     CertificateTemplateOut,
+    CompleteTeamInput,
+    DeleteTeamInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
     FinalistBoardOut,
@@ -138,6 +140,19 @@ def export_teams(admin: CurrentAdmin, db: Db, filters: Annotated[TeamFilters, Qu
 def create_team(data: AdminTeamInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminTeamOut:
     """Creates a team for registered students, whether or not registration is open."""
     return service.create_team(db, admin, data, settings)
+
+
+@router.post("/teams/complete", status_code=status.HTTP_201_CREATED)
+def create_complete_team(data: CompleteTeamInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminTeamOut:
+    """Super admin: a whole team and its students in one go, submitted (and accepted for the Grand Finale where needed)."""
+    return service.create_complete_team(db, admin, data, settings)
+
+
+@router.post("/teams/{team_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_team(team_id: uuid.UUID, data: DeleteTeamInput, admin: CurrentAdmin, db: Db) -> Response:
+    """Super admin: removes any team from the database for good (typed team code). Students keep their accounts."""
+    service.delete_team(db, admin, team_id, data)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/teams/{team_id}/reopen")

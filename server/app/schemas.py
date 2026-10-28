@@ -469,6 +469,48 @@ class AdminStudentInput(ProfileInput):
         return _email(value)
 
 
+class CompleteTeamMember(Input):
+    """One student of a team a super admin adds in one go. The college or school, city and type come from the team."""
+
+    email: str = Field(max_length=320)
+    full_name: str = Field(max_length=120)
+    phone: str = Field(max_length=20)
+    department: str | None = Field(default=None, max_length=20)
+    course: str = Field(default="", max_length=40)
+    year: int = 0
+    roll_number: str = Field(default="", max_length=40)
+    club: str = Field(default="", max_length=80)
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, value: str) -> str:
+        return _email(value)
+
+
+class CompleteTeamInput(TeamInput):
+    """
+    Super admin: a whole team with its students in one go, e.g. a team the organisers selected that never registered.
+    Students who are already registered (same email) are used as they are; the others are registered now. The first
+    member leads. The abstract may be short.
+    """
+
+    participant_type: rules.ParticipantType
+    institution: str = Field(default="", max_length=200)
+    city: str = Field(default="", max_length=100)
+    members: list[CompleteTeamMember] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
+
+    @field_validator("abstract")
+    @classmethod
+    def check_abstract(cls, value: str) -> str:
+        return value or "Added by the organisers."
+
+
+class DeleteTeamInput(Input):
+    # The team's code, typed by the super admin, so a stray click cannot delete a team.
+    confirm: str = Field(max_length=20)
+    reason: str = Field(min_length=5, max_length=500)
+
+
 class RestoreInput(ReasonInput):
     # Also lift the ban on every banned member (e.g. after the team was banned together with its members).
     unban_members: bool = False
@@ -1035,6 +1077,8 @@ class TentAssignment(Input):
 
 class TentsInput(Input):
     tents: list[TentAssignment] = Field(max_length=500)
+    # Two teams may have the same stall number only when the organiser says so (two projects of one club).
+    allow_shared: bool = False
 
 
 class AttendanceMember(BaseModel):

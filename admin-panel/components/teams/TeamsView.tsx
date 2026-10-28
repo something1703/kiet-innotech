@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus, X } from "lucide-react";
+import { Download, Plus, UserPlus, X } from "lucide-react";
 import { api, errorMessage, MAX_SEARCH_LENGTH } from "@/lib/api";
 import type { AdminTeam, BulkAction, BulkResult, TeamQuery, TeamSort } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -28,6 +28,7 @@ import { Pill, ResultPill, StatusPill } from "@/components/ui/Pill";
 import { yearLabel } from "@/lib/rules";
 import { isOutsideAdmin, scopedTypes, scopeName } from "@/lib/scope";
 import { BulkActionDialog, BulkActionMenu, BulkResultNotice } from "./BulkTeamActions";
+import { AddCompleteTeamDialog } from "./AddCompleteTeamDialog";
 import { CreateTeamDialog } from "./CreateTeamDialog";
 import { YearChips } from "./YearChips";
 import { SearchBox } from "@/components/ui/SearchBox";
@@ -56,6 +57,7 @@ export function TeamsView() {
   const typeChoices = isSuper ? types : scoped.length > 1 ? types.filter((t) => scoped.includes(t)) : [];
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [addingComplete, setAddingComplete] = useState(false);
   const { params, update, reset } = useUrlParams();
   const [searchKey, setSearchKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
@@ -147,6 +149,12 @@ export function TeamsView() {
               <Download aria-hidden="true" className="size-4" />
               Export
             </Button>
+            {isSuper && (
+              <Button variant="secondary" onClick={() => setAddingComplete(true)}>
+                <UserPlus aria-hidden="true" className="size-4" />
+                Add team with new students
+              </Button>
+            )}
             <Button onClick={() => setCreating(true)}>
               <Plus aria-hidden="true" className="size-4" />
               Create team
@@ -428,6 +436,16 @@ export function TeamsView() {
           onClose={() => setCreating(false)}
           onCreated={(team) => {
             setCreating(false);
+            router.push(teamHref(team.id));
+          }}
+        />
+      )}
+
+      {addingComplete && (
+        <AddCompleteTeamDialog
+          onClose={() => setAddingComplete(false)}
+          onCreated={(team) => {
+            setAddingComplete(false);
             router.push(teamHref(team.id));
           }}
         />

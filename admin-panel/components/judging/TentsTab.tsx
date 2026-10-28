@@ -27,6 +27,11 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
   const changed = rows.filter((r) => clean(draft[r.team.id] ?? "") !== (r.tent ?? ""));
   const labels = Object.values(draft).map(clean).filter(Boolean);
   const duplicates = new Set(labels.filter((label, i) => labels.indexOf(label) !== i));
+  // A stall number used twice is a typo unless the organiser says it is shared (two projects of one club).
+  const [shared, setShared] = useState(() => {
+    const saved = rows.map((r) => r.tent).filter(Boolean);
+    return saved.some((label, i) => saved.indexOf(label) !== i);
+  });
 
   /** Numbers every team without a stall, in category order, after the highest number already used. */
   function autoNumber() {
@@ -44,11 +49,14 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
   }
 
   async function save() {
-    if (duplicates.size) return setError(`Stall ${[...duplicates][0]} is given to more than one team.`);
+    if (duplicates.size && !shared) return setError(`Stall ${[...duplicates][0]} is given to more than one team. Tick “Shared stalls” if that is on purpose.`);
     setPending(true);
     setError(null);
     try {
-      const data = await api.setTents(changed.map((r) => ({ teamId: r.team.id, tent: clean(draft[r.team.id] ?? "") || null })));
+      const data = await api.setTents(
+        changed.map((r) => ({ teamId: r.team.id, tent: clean(draft[r.team.id] ?? "") || null })),
+        shared,
+      );
       onSaved(data);
       setMessage(`${plural(changed.length, "stall")} saved.`);
     } catch (err) {
@@ -86,6 +94,10 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
             <Hash aria-hidden="true" className="size-4" />
             Number the rest
           </Button>
+          <label className="flex items-center gap-2 text-xs font-semibold text-navy-800">
+            <input type="checkbox" className="size-4 accent-navy-900" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+            Shared stalls (two teams at one number)
+          </label>
           <span className="flex-1" />
           <Button onClick={save} pending={pending} disabled={changed.length === 0}>
             {!pending && <Save aria-hidden="true" className="size-4" />}
@@ -108,7 +120,7 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
         <tbody>
           {rows.map(({ team }) => {
             const value = draft[team.id] ?? "";
-            const duplicate = duplicates.has(clean(value));
+            const duplicate = duplicates.has(clean(value)) && !shared;
             return (
               <tr key={team.id}>
                 <td className={tdClass}>
@@ -124,6 +136,7 @@ export function TentsTab({ judging, onSaved }: { judging: Judging; onSaved: (dat
                   ) : (
                     <span className="font-mono font-bold">{value || "—"}</span>
                   )}
+                  {shared && duplicates.has(clean(value)) && <span className="mt-0.5 block text-[11px] font-semibold text-accent-600">Shared stall</span>}
                 </td>
                 <td className={tdClass}>
                   <span className="font-semibold text-navy-900">{team.name}</span>

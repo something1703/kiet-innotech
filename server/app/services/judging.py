@@ -1102,12 +1102,15 @@ def _tent_label(value: str | None) -> str | None:
 
 
 def set_tents(db: Session, admin: Admin, settings: Settings, data: TentsInput) -> JudgingOut:
-    """Allots (or clears) Grand Finale tents for the listed teams; other teams keep theirs."""
+    """
+    Allots (or clears) Grand Finale tents for the listed teams; other teams keep theirs. A stall number used twice is
+    refused as a typo, unless the organiser says the stall is shared on purpose (two projects of one club).
+    """
     _require_super(admin)
     admin_service._lock_state(db, "tents_lock")
     wanted = {a.team_id: _tent_label(a.tent) for a in data.tents}
     labels = [t for t in wanted.values() if t]
-    if len(set(labels)) != len(labels):
+    if not data.allow_shared and len(set(labels)) != len(labels):
         duplicate = next(t for t in labels if labels.count(t) > 1)
         raise ApiError(f"Stall {duplicate} is given to more than one team.", 422)
     eligible = set(db.scalars(select(Team.id).where(Team.id.in_(list(wanted)), _eligible_condition("final"))))
@@ -1119,15 +1122,20 @@ def set_tents(db: Session, admin: Admin, settings: Settings, data: TentsInput) -
         .join(Team, Team.id == FinalTent.team_id)
         .where(FinalTent.tent.in_(labels), FinalTent.team_id.not_in(list(wanted)))
     ).first()
-    if clash:
-        raise ApiError(f"Stall {clash[0]} is already allotted to IT26-{clash[1]:04d}.", 409)
+    if clash and not data.allow_shared:
+        raise ApiError(
+            f"Stall {clash[0]} is already allotted to IT26-{clash[1]:04d}. Tick “shared stall” if both teams share it on purpose.", 409
+        )
 
     db.execute(delete(FinalTent).where(FinalTent.team_id.in_(list(wanted))))
     db.flush()
     for team_id, tent in wanted.items():
         if tent:
             db.add(FinalTent(team_id=team_id, tent=tent, assigned_by=admin.email))
-    audit.record(db, admin.email, "judging.tents_allotted", detail=f"{len(labels)} stalls allotted, {len(wanted) - len(labels)} cleared")
+    shared = " (shared stalls allowed)" if data.allow_shared else ""
+    audit.record(
+        db, admin.email, "judging.tents_allotted", detail=f"{len(labels)} stalls allotted, {len(wanted) - len(labels)} cleared{shared}"
+    )
     try:
         db.commit()
     except IntegrityError as exc:

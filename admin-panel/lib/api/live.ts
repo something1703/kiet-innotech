@@ -211,7 +211,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { CouponsResult, Desk, DeskTeam, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -433,7 +433,9 @@ export const liveApi: AdminApi = {
   leaderboard: (department) => request<Leaderboard>("GET", `/admin/leaderboard${queryString({ department })}`),
   rankings: (round, department) => request<Rankings>("GET", `/admin/judging/${round}/rankings${queryString({ department })}`),
   attendance: (round, scope = {}) => request<AttendanceSheet>("GET", `/admin/judging/${round}/attendance${queryString(scope)}`),
-  setTents: (tents) => request<Judging>("PUT", "/admin/judging/final/tents", { tents }),
+  setTents: (tents, allowShared = false) => request<Judging>("PUT", "/admin/judging/final/tents", { tents, allowShared }),
+  deleteTeam: (teamId, confirm, reason) => request<void>("POST", `/admin/teams/${id(teamId)}/delete`, { confirm, reason }),
+  createCompleteTeam: (input: CompleteTeamInput) => request<AdminTeam>("POST", "/admin/teams/complete", input),
   createPanel: (input) => request<Panel>("POST", "/admin/panels", input),
   updatePanel: (panelId, input) => request<Panel>("PATCH", `/admin/panels/${id(panelId)}`, input),
   extendRooms: (panelIds, until, reason, unlockJudges) => request("POST", "/admin/panels/extend", { panelIds, until, reason, unlockJudges }),
