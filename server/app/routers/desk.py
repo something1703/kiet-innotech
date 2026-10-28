@@ -63,7 +63,7 @@ def give_coupons(team_id: uuid.UUID, data: CouponsInput, admin: DeskAdmin, db: D
 
 @router.post("/teams/{team_id}/coupons/{meal}/{user_id}/take-back")
 def take_back_coupon(team_id: uuid.UUID, meal: MealKey, user_id: uuid.UUID, data: ReasonInput, admin: DeskAdmin, db: Db) -> DeskTeamOut:
-    """Super admin: takes a coupon back, e.g. given by mistake."""
+    """Marks a coupon as not given, e.g. ticked by mistake, so it can be given again."""
     return desk.take_back_coupon(db, admin, team_id, meal, user_id, data.reason)
 
 

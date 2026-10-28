@@ -1077,8 +1077,6 @@ class TentAssignment(Input):
 
 class TentsInput(Input):
     tents: list[TentAssignment] = Field(max_length=500)
-    # Two teams may have the same stall number only when the organiser says so (two projects of one club).
-    allow_shared: bool = False
 
 
 class AttendanceMember(BaseModel):

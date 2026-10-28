@@ -355,8 +355,7 @@ class FinalTent(Base):
     __tablename__ = "final_tents"
 
     team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
-    # Two teams can share a stall (e.g. two projects of one club), so the number is not unique.
-    tent: Mapped[str] = mapped_column(String(12), index=True)
+    tent: Mapped[str] = mapped_column(String(12), unique=True)
     assigned_by: Mapped[str] = mapped_column(String(320))
     assigned_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
 

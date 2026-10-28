@@ -253,19 +253,6 @@ def test_the_event_desk_checks_in_and_gives_food_coupons(judging, as_user, monke
     assert {t["code"] for t in export} == {school["code"], teams["college"]["code"]}
 
 
-# ---------- Shared stalls ----------
-
-
-def test_two_teams_share_a_stall_only_when_asked(judging):  # noqa: F811
-    root, teams = judging["root"], judging["teams"]
-    accept_direct(judging)
-    both = [{"team_id": teams["college"]["id"], "tent": "151"}, {"team_id": teams["school"]["id"], "tent": "151"}]
-    assert root.put("/admin/judging/final/tents", {"tents": both}).status_code == 422  # a typo, unless shared on purpose
-    saved = root.put("/admin/judging/final/tents", {"tents": both, "allow_shared": True})
-    assert saved.status_code == 200
-    assert {r["tent"] for r in saved.json()["tents"]} == {"151"}
-
-
 # ---------- Super admins add and delete teams ----------
 
 

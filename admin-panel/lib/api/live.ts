@@ -183,7 +183,7 @@
  *   GET    /desk → Desk;  GET /desk/teams?q= → DeskTeam[];  GET /desk/teams/export → DeskTeam[]   (super admins, desk volunteers)
  *   POST   /desk/teams/{id}/check-in { user_ids } | /check-out { user_id, reason } → DeskTeam
  *   POST   /desk/teams/{id}/coupons { meal, user_ids } → { team, given, already, not_checked_in }
- *   POST   /desk/teams/{id}/coupons/{meal}/{user_id}/take-back { reason } → DeskTeam   (super admin)
+ *   POST   /desk/teams/{id}/coupons/{meal}/{user_id}/take-back { reason } → DeskTeam   (marks a coupon not given)
  *   POST   /desk/extras { meal, quantity, recipient } → MealExtra;  DELETE /desk/extras/{id} (super admin)
  *   POST   /desk/meals { label } | PUT /desk/meals/{key} { label?, open? } | DELETE /desk/meals/{key} → Desk  (super admin)
  *   PUT    /admin/finalists/quotas  (super admin) body { quotas: [{ department, category, quota }] } → FinalistSummary
@@ -433,7 +433,7 @@ export const liveApi: AdminApi = {
   leaderboard: (department) => request<Leaderboard>("GET", `/admin/leaderboard${queryString({ department })}`),
   rankings: (round, department) => request<Rankings>("GET", `/admin/judging/${round}/rankings${queryString({ department })}`),
   attendance: (round, scope = {}) => request<AttendanceSheet>("GET", `/admin/judging/${round}/attendance${queryString(scope)}`),
-  setTents: (tents, allowShared = false) => request<Judging>("PUT", "/admin/judging/final/tents", { tents, allowShared }),
+  setTents: (tents) => request<Judging>("PUT", "/admin/judging/final/tents", { tents }),
   deleteTeam: (teamId, confirm, reason) => request<void>("POST", `/admin/teams/${id(teamId)}/delete`, { confirm, reason }),
   createCompleteTeam: (input: CompleteTeamInput) => request<AdminTeam>("POST", "/admin/teams/complete", input),
   createPanel: (input) => request<Panel>("POST", "/admin/panels", input),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { CircleCheck, Download, Lock, LockOpen, Plus, Printer, RefreshCw, Ticket, Trash2, UserCheck, Utensils } from "lucide-react";
+import { CircleCheck, Download, Lock, LockOpen, Plus, RefreshCw, Ticket, Trash2, UserCheck, Utensils } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Desk, DeskMember, DeskTeam, Meal } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -100,22 +100,13 @@ export function DeskView() {
       <PageHeader
         eyebrow="Grand Finale · 30 October"
         title="Event desk"
-        description="Registration and lunch coupons: one coupon for one person. Find a team by its code, stall, name, or a student's name, roll number or phone; tick who is here and press “Check in & give coupon”. Every coupon given is recorded."
+        description="Registration and lunch coupons: one printed coupon for one person. Find a team by its code, stall, name, or a student's name, roll number or phone; tick who is here, hand them their coupons and press “Check in & give coupon” to record it."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => desk.reload()}>
               <RefreshCw aria-hidden="true" className="size-3.5" />
               Refresh
             </Button>
-            <a
-              href="/coupons/"
-              target="_blank"
-              rel="noopener"
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-navy-900 ring-1 ring-inset ring-line hover:bg-surface"
-            >
-              <Printer aria-hidden="true" className="size-3.5" />
-              Print all coupons
-            </a>
             <Button variant="secondary" size="sm" onClick={exportAll} pending={exporting} disabled={!data}>
               {!exporting && <Download aria-hidden="true" className="size-3.5" />}
               Download (Excel)
@@ -277,20 +268,9 @@ function TeamCard({ team, meal, onUpdated }: { team: DeskTeam; meal: Meal | null
             {team.participantType !== "kiet" && <span>{team.institution}</span>}
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <p className="text-sm font-semibold text-navy-900">
-            {checkedIn.length} / {team.members.length} checked in
-          </p>
-          <a
-            href={`/coupons/?team=${encodeURIComponent(team.code)}`}
-            target="_blank"
-            rel="noopener"
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-navy-900 ring-1 ring-inset ring-line hover:bg-surface"
-          >
-            <Printer aria-hidden="true" className="size-3.5" />
-            Print coupons
-          </a>
-        </div>
+        <p className="text-sm font-semibold text-navy-900">
+          {checkedIn.length} / {team.members.length} checked in
+        </p>
       </header>
 
       <TableFrame label={`Members of ${team.name}`} minWidth="min-w-[680px]">

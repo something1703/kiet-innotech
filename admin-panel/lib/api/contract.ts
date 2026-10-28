@@ -111,8 +111,7 @@ export interface AdminApi {
   leaderboard(department?: string): Promise<Leaderboard>;
   /** A room's sheet (panelId), a department's (department round), or every finale team. */
   attendance(round: JudgingRound, scope?: { panelId?: string; department?: string }): Promise<AttendanceSheet>;
-  /** `allowShared`: two teams may get the same stall number on purpose (two projects of one club); otherwise that is refused as a typo. */
-  setTents(tents: { teamId: string; tent: string | null }[], allowShared?: boolean): Promise<Judging>;
+  setTents(tents: { teamId: string; tent: string | null }[]): Promise<Judging>;
   createPanel(input: PanelInput): Promise<Panel>;
   updatePanel(id: string, input: PanelPlace): Promise<Panel>;
   /** Sets a department room's buffer: the extra minutes after its slot in which its judges can still submit marks (0 to 60). */
