@@ -20,6 +20,8 @@ down_revision: str | None = "0022"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+SECTIONS = "section IS NULL OR section IN ('category', 'coe', 'club', 'school', 'college', 'startup')"
+
 
 def upgrade() -> None:
     op.create_table(
@@ -31,9 +33,7 @@ def upgrade() -> None:
         sa.Column("wildcard", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_by", sa.String(length=320), nullable=False),
-        sa.CheckConstraint(
-            "section IS NULL OR section IN ('category', 'coe', 'club', 'school', 'college', 'startup')", name=op.f("ck_finale_entries_section")
-        ),
+        sa.CheckConstraint(SECTIONS, name=op.f("ck_finale_entries_section")),
         sa.ForeignKeyConstraint(["team_id"], ["teams.id"], name=op.f("fk_finale_entries_team_id_teams"), ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("team_id", name=op.f("pk_finale_entries")),
     )
