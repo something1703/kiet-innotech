@@ -205,6 +205,10 @@ class Admin(Base):
     department: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     created_by: Mapped[str | None] = mapped_column(String(320))
+    # Registration desk volunteers sign in with their email and this password (scrypt, services/judge_accounts.py).
+    password_hash: Mapped[str | None] = mapped_column(String(200))
+    password_set_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    password_set_by: Mapped[str | None] = mapped_column(String(320))
 
 
 class FinalistNomination(Base):

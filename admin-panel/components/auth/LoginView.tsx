@@ -102,7 +102,7 @@ export function LoginView() {
           <h2 className="mt-8 font-display text-2xl font-bold text-navy-900">Sign in to the admin panel</h2>
           <p className="mt-2 text-sm text-muted">
             {method === "judge"
-              ? "Grand Finale judges: use the email and password the organisers gave you."
+              ? "Grand Finale judges and registration desk volunteers: use the email and password the organisers gave you."
               : "Use the Google account your coordinator registered as an admin. Student accounts cannot sign in here."}
           </p>
 
@@ -121,7 +121,7 @@ export function LoginView() {
                   {(
                     [
                       ["google", "Organisers & KIET faculty"],
-                      ["judge", "Grand Finale judges"],
+                      ["judge", "Judges & registration desk"],
                     ] as const
                   ).map(([value, label]) => (
                     <button
@@ -143,7 +143,7 @@ export function LoginView() {
 
               {API_MODE === "live" && method === "judge" ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted">Judges from outside KIET sign in with their email and the password the organisers gave them.</p>
+                  <p className="text-sm text-muted">Outside judges and registration desk volunteers sign in with their email and the password the organisers gave them.</p>
                   <JudgeSignIn onSignedIn={refresh} disabled={busy} />
                 </div>
               ) : API_MODE === "live" && !DEV_SIGN_IN ? (

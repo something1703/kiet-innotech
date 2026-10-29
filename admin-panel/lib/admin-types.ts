@@ -21,6 +21,9 @@ export type AdminUser = {
   department: string | null;
   /** True when this account is also an appointed judge. */
   judge?: boolean;
+  /** Registration desk volunteers: whether they have a sign-in password, and (only right after being added) the password. */
+  hasPassword?: boolean;
+  password?: string | null;
   /** Null for super admins set in the server configuration. */
   addedAt?: string | null;
   /** An admin's email, or CONFIGURED_BY_SERVER. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ShieldAlert, UserPlus } from "lucide-react";
+import { KeyRound, ShieldAlert, UserPlus } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import { CONFIGURED_BY_SERVER, type AdminRole, type AdminUser } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
@@ -15,6 +15,7 @@ import { Loading, Notice } from "@/components/ui/Notice";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { TableFrame, tdClass, Th } from "@/components/ui/Table";
+import { PasswordDialog, type Login } from "@/components/judging/JudgeLogins";
 
 type FormErrors = Partial<Record<"email" | "name" | "department", string>>;
 
@@ -142,6 +143,9 @@ export function AdminsView() {
   const admins = useQuery(isSuper ? "admins" : null, () => api.listAdmins());
   const [removing, setRemoving] = useState<AdminUser | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // Registration desk volunteers sign in with a password: shown once, when added or given a new one.
+  const [resetting, setResetting] = useState<AdminUser | null>(null);
+  const [login, setLogin] = useState<Login | null>(null);
 
   if (!isSuper) {
     return (
@@ -217,9 +221,18 @@ export function AdminsView() {
                       ) : configured ? (
                         <span className="text-xs text-muted" title="Set in the backend's SUPER_ADMIN_EMAILS">Change on the server</span>
                       ) : (
-                        <Button variant="ghost" size="sm" className="text-red-700" onClick={() => setRemoving(admin)}>
-                          Remove<span className="sr-only"> {admin.name}</span>
-                        </Button>
+                        <span className="inline-flex flex-wrap justify-end gap-1">
+                          {admin.role === "desk" && (
+                            <Button variant="ghost" size="sm" onClick={() => setResetting(admin)}>
+                              <KeyRound aria-hidden="true" className="size-3.5" />
+                              {admin.hasPassword ? "New password" : "Give a password"}
+                              <span className="sr-only"> for {admin.name}</span>
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-red-700" onClick={() => setRemoving(admin)}>
+                            Remove<span className="sr-only"> {admin.name}</span>
+                          </Button>
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -231,18 +244,39 @@ export function AdminsView() {
       </section>
 
       <section aria-labelledby="add-admin">
-        <SectionTitle id="add-admin" title="Add an admin" meta="They sign in with Google using this email" />
+        <SectionTitle id="add-admin" title="Add an admin" meta="They sign in with Google using this email; registration desk volunteers with a password" />
         <AddAdminForm
           onAdded={(admin) => {
             setMessage(
               `${admin.name} (${admin.email}) can now sign in as ${
-                admin.role === "super_admin" ? "a super admin" : admin.role === "outside_admin" ? "the admin for other colleges and schools" : admin.role === "startup_admin" ? "the startups admin" : admin.role === "desk" ? "a desk volunteer" : `the ${admin.department} admin`
+                admin.role === "super_admin" ? "a super admin" : admin.role === "outside_admin" ? "the admin for other colleges and schools" : admin.role === "startup_admin" ? "the startups admin" : admin.role === "desk" ? "a registration desk volunteer, with the password shown now" : `the ${admin.department} admin`
               }.`,
             );
+            if (admin.password) setLogin({ name: admin.name, email: admin.email, password: admin.password });
             admins.reload();
           }}
         />
       </section>
+
+      {resetting && (
+        <ConfirmDialog
+          title={resetting.hasPassword ? "Give a new password?" : "Give a sign-in password?"}
+          description={
+            <>
+              <strong className="text-navy-900">{resetting.name}</strong> will sign in with their email and a new password
+              {resetting.hasPassword ? "; the old password stops working" : ""}. It is shown once.
+            </>
+          }
+          confirmLabel="Make password"
+          onClose={() => setResetting(null)}
+          onConfirm={async () => {
+            setLogin(await api.setDeskPassword(resetting.email));
+            setResetting(null);
+            admins.reload();
+          }}
+        />
+      )}
+      {login && <PasswordDialog login={login} who="desk volunteer" onClose={() => setLogin(null)} />}
 
       {removing && (
         <ConfirmDialog

@@ -8,6 +8,8 @@ Signing in exchanges proof of an email address for our own session token:
 - Outside judges at the Grand Finale: email and password (POST /auth/judge, services/judge_accounts.py). Such a session
   is marked ("amr": "pwd") and opens the judge's own judging page only, never organiser endpoints, even when the same
   email is also an organiser (they sign in with Google for that).
+- Registration desk volunteers: email and password too (same endpoint). Their session is marked ("amr": "desk") and opens
+  the registration desk only, never judging or organiser endpoints.
 
 Every other request carries the session token (Authorization: Bearer <token>). It is an HS256 JWT whose audience
 is the app it was issued for ("portal" or "admin"), so a student token never opens the admin panel.
@@ -50,6 +52,8 @@ class Identity:
     name: str
     # Signed in with a judge's password rather than Google: the judging page only.
     password: bool = False
+    # Signed in with a registration desk volunteer's password: the registration desk only.
+    desk: bool = False
 
 
 PASSWORD_ONLY = "You signed in with a judge password, which opens your judging page only. Organisers sign in with Google."
@@ -110,6 +114,8 @@ def issue_session(identity: Identity, app: App, settings: Settings) -> dict[str,
     claims = {"iss": SESSION_ISSUER, "aud": app, "sub": identity.email, "name": identity.name, "iat": now, "exp": expires}
     if identity.password:
         claims["amr"] = "pwd"
+    elif identity.desk:
+        claims["amr"] = "desk"
     return {
         "token": jwt.encode(claims, settings.session_secret, algorithm="HS256"),
         "expires_at": datetime.fromtimestamp(expires, UTC).isoformat(),
@@ -175,7 +181,9 @@ def verify_session(token: str, app: App, settings: Settings) -> Identity:
     email = str(claims["sub"]).strip().lower()
     if "@" not in email:
         raise ApiError("Your session has expired. Please sign in again.", 401)
-    return Identity(email=email, name=str(claims.get("name") or "").strip()[:200], password=claims.get("amr") == "pwd")
+    return Identity(
+        email=email, name=str(claims.get("name") or "").strip()[:200], password=claims.get("amr") == "pwd", desk=claims.get("amr") == "desk"
+    )
 
 
 def _bearer(authorization: str | None) -> str:
@@ -239,6 +247,8 @@ def get_current_admin(
 ) -> Admin:
     if identity.password:
         raise ApiError(PASSWORD_ONLY, 403)
+    if identity.desk:
+        raise ApiError(DESK_ONLY, 403)
     admin = find_admin(db, identity.email, settings)
     if admin is None:
         raise ApiError("This account is not an InnoTech26 organiser.", 403)
@@ -287,6 +297,8 @@ def get_current_staff(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Staff:
     # A judge's password session, or a desk volunteer, acts as a judge (or nobody) here, never as an organiser.
+    if identity.desk:
+        raise ApiError(DESK_ONLY, 403)
     admin = None if identity.password else find_admin(db, identity.email, settings)
     if admin is not None and admin.role == "desk":
         admin = None
@@ -308,8 +320,8 @@ def get_desk_admin(
     if identity.password:
         raise ApiError(PASSWORD_ONLY, 403)
     admin = find_admin(db, identity.email, settings)
-    if admin is None or admin.role not in ("super_admin", "desk"):
-        raise ApiError("The event desk is for super admins and desk volunteers.", 403)
+    if admin is None or admin.role not in ("super_admin", "desk") or (identity.desk and admin.role != "desk"):
+        raise ApiError("The registration desk is for super admins and desk volunteers.", 403)
     return admin
 
 

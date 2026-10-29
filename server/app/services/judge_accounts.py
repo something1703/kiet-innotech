@@ -7,6 +7,8 @@ Outside judges at the Grand Finale sign in with their email and a password inste
 - Signing in (POST /auth/judge) issues the usual admin-panel session, marked as a password session, which opens the
   judge's own judging page only (auth.py). Wrong passwords are rate limited per email and per address.
 - Judges appointed for the department round keep signing in with Google; a password is optional for anyone.
+- Registration desk volunteers (admins with role "desk") sign in the same way; their session opens the registration desk
+  only. A super admin makes their password when adding them, or a new one later.
 """
 
 import base64
@@ -88,12 +90,15 @@ def sign_in(db: Session, email: str, password: str, settings: Settings, address:
     limits.hit(f"judge-login:{email}", 10, timedelta(minutes=10), "Too many attempts. Wait ten minutes and try again.")
     limits.hit(f"judge-login-ip:{address}", 40, timedelta(minutes=10), "Too many attempts. Wait ten minutes and try again.")
     juror = db.get(Juror, email)
-    if juror is None or not juror.password_hash:
+    if juror is not None and juror.password_hash and check_password(password, juror.password_hash):
+        return issue_session(Identity(email=juror.email, name=juror.name, password=True), "admin", settings)
+    desk = db.get(Admin, email)
+    if desk is not None and desk.role == "desk" and desk.password_hash and check_password(password, desk.password_hash):
+        return issue_session(Identity(email=desk.email, name=desk.name, desk=True), "admin", settings)
+    if not (juror is not None and juror.password_hash) and not (desk is not None and desk.password_hash):
+        # Unknown email: check a password anyway, so it takes as long as a wrong password.
         check_password(password, _dummy_hash())
-        raise ApiError(WRONG, 401)
-    if not check_password(password, juror.password_hash):
-        raise ApiError(WRONG, 401)
-    return issue_session(Identity(email=juror.email, name=juror.name, password=True), "admin", settings)
+    raise ApiError(WRONG, 401)
 
 
 # ---------- Super admins: passwords and the list of judges ----------
@@ -115,6 +120,19 @@ def set_password(db: Session, admin: Admin, email: str) -> JurorPasswordOut:
     audit.record(db, admin.email, "judging.judge_password_set", detail=f"New sign-in password for {juror.email}")
     db.commit()
     return JurorPasswordOut(email=juror.email, name=juror.name, password=password)
+
+
+def set_desk_password(db: Session, admin: Admin, email: str) -> JurorPasswordOut:
+    """A new sign-in password for a registration desk volunteer (the old one stops working), returned once."""
+    _require_super(admin)
+    desk = db.scalar(select(Admin).where(Admin.email == email.strip().lower()).with_for_update())
+    if desk is None or desk.role != "desk":
+        raise ApiError("No registration desk volunteer with this email exists.", 404)
+    password = new_password(desk.email)
+    desk.password_hash, desk.password_set_at, desk.password_set_by = hash_password(password), utcnow(), admin.email
+    audit.record(db, admin.email, "admin.desk_password_set", detail=f"New sign-in password for {desk.email}")
+    db.commit()
+    return JurorPasswordOut(email=desk.email, name=desk.name, password=password)
 
 
 def remove_password(db: Session, admin: Admin, email: str) -> None:

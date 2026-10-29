@@ -9,8 +9,8 @@ import { Field, Input } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
 
 /**
- * Outside judges at the Grand Finale: the email and password the organisers gave them, instead of Google. The session
- * opens their judging page only.
+ * Outside judges and registration desk volunteers at the Grand Finale: the email and password the organisers gave them,
+ * instead of Google. The session opens the judge's own judging page, or the registration desk, only.
  */
 export function JudgeSignIn({ onSignedIn, disabled }: { onSignedIn: () => void; disabled?: boolean }) {
   const [email, setEmail] = useState("");

@@ -178,7 +178,9 @@
  *   POST   /admin/jurors/import  body { judges: [{ name, email, organisation, phone }] } → { judges: JudgeImportRow[] }  (super admin;
  *          outside judges with a sign-in password each, shown once)
  *   POST   /admin/jurors/{email}/password → { email, name, password } (super admin; shown once);  DELETE … /password → 204
- *   POST   /auth/judge  body { email, password } → session (no bearer token). The session opens the judge's own page only.
+ *   POST   /auth/judge  body { email, password } → session (no bearer token). The session opens the judge's own page only,
+ *          or, for a registration desk volunteer, the registration desk only.
+ *   POST   /admin/admins/{email}/password → { email, name, password } (super admin; desk volunteers only; shown once)
  *   POST   /admin/finalists/lock  body { confirm: "LOCK" } → LockFinalistsResult  (super admin, once, after the release)
  *   GET    /desk → Desk;  GET /desk/teams?q= → DeskTeam[];  GET /desk/teams/export → DeskTeam[]   (super admins, desk volunteers)
  *   POST   /desk/teams/{id}/check-in { user_ids } | /check-out { user_id, reason } → DeskTeam
@@ -420,6 +422,7 @@ export const liveApi: AdminApi = {
 
   listAdmins: () => request<AdminUser[]>("GET", "/admin/admins"),
   addAdmin: (input: AdminInput) => request<AdminUser>("POST", "/admin/admins", input),
+  setDeskPassword: (email) => request<JurorPassword>("POST", `/admin/admins/${id(email)}/password`),
   removeAdmin: (email) => request<void>("DELETE", `/admin/admins/${id(email)}`),
 
   audit: (query = {}) => request<AuditEntry[]>("GET", `/admin/audit${queryString(query)}`),

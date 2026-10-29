@@ -402,6 +402,9 @@ class AdminOut(BaseModel):
     added_by: str | None = None
     # True when this account is also an appointed juror (it then has a "My judging" page).
     judge: bool = False
+    # Registration desk volunteers: whether they have a sign-in password, and (only right after adding one) the password.
+    has_password: bool = False
+    password: str | None = None
 
 
 class AdminMemberOut(MemberOut):

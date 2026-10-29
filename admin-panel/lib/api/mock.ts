@@ -1435,6 +1435,7 @@ export const mockApi: AdminApi = {
   removeJuror: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   importJurors: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   setJurorPassword: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
+  setDeskPassword: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   removeJurorPassword: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   lockFinalists: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),
   editScore: () => Promise.reject(new ApiError(501, NOT_IN_DEMO)),

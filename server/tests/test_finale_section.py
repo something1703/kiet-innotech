@@ -259,3 +259,43 @@ def test_level_teams_are_flagged_and_decided_by_hand_even_without_a_cash_prize(j
     assert [(w["team_code"], w["amount"]) for w in preview["Innovation at Other Colleges"]["winners"]] == [(college["code"], 0)]
     # The school had no hand-declared places, so publishing named its winner from the marks.
     assert [w["team_code"] for w in preview["Best School Project"]["winners"]] == [school["code"]]
+
+
+def test_registration_desk_volunteers_sign_in_with_email_and_password(world, client):  # noqa: F811
+    import re
+
+    from test_finale import bearer, judge_login
+
+    root, cse = world["root"], world["cse"]
+    added = root.post("/admin/admins", {"email": "Desk.Two@gmail.com", "name": "Desk Two", "role": "desk"})
+    assert added.status_code == 201, added.text
+    password = added.json()["password"]
+    assert re.fullmatch(r"Desk@\d{5}", password) and added.json()["has_password"] is True
+    listed = {a["email"]: a for a in root.get("/admin/admins").json()}
+    assert listed["desk.two@gmail.com"]["has_password"] is True and listed["desk.two@gmail.com"]["password"] is None
+    # Other organisers get no password: they sign in with Google.
+    assert (
+        root.post("/admin/admins", {"email": "x.admin@kiet.edu", "name": "X Admin", "role": "admin", "department": "IT"}).json()["password"]
+        is None
+    )
+
+    assert judge_login(client, "desk.two@gmail.com", "wrong").status_code == 401
+    session = judge_login(client, " DESK.two@gmail.com ", password)
+    assert session.status_code == 200, session.text
+    headers = bearer(session)
+    me = client.get("/admin/me", headers=headers).json()
+    assert (me["role"], me["judge"]) == ("desk", False)
+    # The registration desk only: no organiser, judging or Grand Finale pages.
+    assert client.get("/desk", headers=headers).status_code == 200
+    for path in ("/admin/teams", "/admin/stats", "/admin/finale", "/judge", "/admin/activity"):
+        assert client.get(path, headers=headers).status_code == 403, path
+
+    # A super admin gives a new password; the old one stops working. Only desk volunteers have one.
+    assert cse.post("/admin/admins/desk.two@gmail.com/password").status_code == 403
+    assert root.post("/admin/admins/cse.admin@kiet.edu/password").status_code == 404
+    fresh = root.post("/admin/admins/desk.two@gmail.com/password").json()["password"]
+    assert judge_login(client, "desk.two@gmail.com", password).status_code == 401
+    assert judge_login(client, "desk.two@gmail.com", fresh).status_code == 200
+    # Removed from the admins: the session no longer opens the desk.
+    assert root.delete("/admin/admins/desk.two@gmail.com").status_code == 204
+    assert client.get("/desk", headers=headers).status_code == 403

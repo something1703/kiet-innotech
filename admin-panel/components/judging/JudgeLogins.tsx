@@ -15,6 +15,9 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type Login = { name: string; email: string; password: string };
 
+/** The login page's tab for signing in with an email and password (outside judges and registration desk volunteers). */
+export const PASSWORD_TAB = "Judges & registration desk";
+
 /** The admin panel's own address, which judges open to sign in. */
 const signInUrl = () => (typeof window === "undefined" ? "" : `${window.location.origin}/login`);
 
@@ -26,7 +29,7 @@ export function downloadLogins(logins: Login[]) {
         { header: "Name", width: 32, value: (l: Login) => l.name },
         { header: "Email (login)", width: 38, value: (l: Login) => l.email, text: true },
         { header: "Password", width: 18, value: (l: Login) => l.password, text: true },
-        { header: "Sign in at", width: 44, value: () => `${signInUrl()} → Grand Finale judges`, text: true },
+        { header: "Sign in at", width: 44, value: () => `${signInUrl()} → ${PASSWORD_TAB}`, text: true },
       ],
       logins,
     ),
@@ -74,11 +77,11 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
 }
 
 /** A judge's new password, shown once with what to tell them. */
-export function PasswordDialog({ login, onClose }: { login: Login; onClose: () => void }) {
+export function PasswordDialog({ login, onClose, who = "judge" }: { login: Login; onClose: () => void; who?: string }) {
   return (
     <Dialog
       title={`Sign-in for ${login.name}`}
-      description="Shown only now: the panel keeps just a scrambled copy. Give it to the judge, or download it."
+      description={`Shown only now: the panel keeps just a scrambled copy. Give it to the ${who}, or download it.`}
       onClose={onClose}
       footer={
         <>
@@ -104,7 +107,7 @@ export function PasswordDialog({ login, onClose }: { login: Login; onClose: () =
         </div>
         <div>
           <dt className="text-xs font-semibold text-muted">Where</dt>
-          <dd className="text-navy-800">{signInUrl()}, then &ldquo;Grand Finale judges&rdquo;</dd>
+          <dd className="text-navy-800">{signInUrl()}, then &ldquo;{PASSWORD_TAB}&rdquo;</dd>
         </div>
       </dl>
     </Dialog>

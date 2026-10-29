@@ -119,6 +119,11 @@ def me(identity: Annotated[Identity, Depends(get_admin_identity)], db: Db, setti
     """The signed-in organiser, or a judge (role "judge") who is not an organiser or signed in with their judge password."""
     juror = db.get(Juror, identity.email)
     admin = None if identity.password else find_admin(db, identity.email, settings)
+    if identity.desk:
+        # A desk volunteer's password session: the registration desk only, whatever else this email is.
+        if admin is None or admin.role != "desk":
+            raise ApiError("This account is no longer a registration desk volunteer.", 403)
+        return service.admin_out(admin)
     if admin is not None:
         return service.admin_out(admin).model_copy(update={"judge": juror is not None})
     if juror is not None:
@@ -417,6 +422,12 @@ def list_admins(admin: CurrentAdmin, db: Db, settings: AppSettings) -> list[Admi
 @router.post("/admins", status_code=status.HTTP_201_CREATED)
 def add_admin(data: AdminInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminOut:
     return service.add_admin(db, admin, data, settings)
+
+
+@router.post("/admins/{email}/password")
+def set_desk_password(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> JurorPasswordOut:
+    """Super admin: a new sign-in password for a registration desk volunteer (the old one stops working), shown once."""
+    return judge_accounts.set_desk_password(db, admin, email)
 
 
 @router.delete("/admins/{email}", status_code=status.HTTP_204_NO_CONTENT)

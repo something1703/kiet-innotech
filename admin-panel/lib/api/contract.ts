@@ -88,6 +88,8 @@ export interface AdminApi {
 
   listAdmins(): Promise<AdminUser[]>;
   addAdmin(input: AdminInput): Promise<AdminUser>;
+  /** Super admin: a new sign-in password for a registration desk volunteer (the old one stops working), shown once. */
+  setDeskPassword(email: string): Promise<JurorPassword>;
   removeAdmin(email: string): Promise<void>;
 
   audit(query?: { teamId?: string; limit?: number }): Promise<AuditEntry[]>;
