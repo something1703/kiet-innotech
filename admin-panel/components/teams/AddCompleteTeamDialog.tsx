@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminTeam, CompleteTeamMember } from "@/lib/admin-types";
-import { categories, clubDepartment, departmentLabel, domains } from "@/lib/content";
+import { categories, clubDepartment, departmentLabel, departments, domains } from "@/lib/content";
 import { collegeCourses, collegeYears, kietCourses, schoolClasses, TEAM_MAX_SIZE, yearLabel } from "@/lib/rules";
 import type { ParticipantType } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -28,8 +28,22 @@ const typeChoices: { value: ParticipantType; label: string }[] = [
  * not registered yet are registered with these details (they can later sign in with Google using the same email); the
  * team is submitted, and accepted for the Grand Finale. If anything is wrong, nothing is saved.
  */
-export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (team: AdminTeam) => void }) {
+export function AddCompleteTeamDialog({
+  onClose,
+  onCreated,
+  wildcard = false,
+}: {
+  onClose: () => void;
+  onCreated: (team: AdminTeam) => void;
+  /** A Grand Finale wild card: takes part straight away, with its octonorm (or a building and room) given here. */
+  wildcard?: boolean;
+}) {
   const [type, setType] = useState<ParticipantType>("college");
+  const [octonorm, setOctonorm] = useState("");
+  const [building, setBuilding] = useState("");
+  const [room, setRoom] = useState("");
+  // A KIET wild card can come from any department; otherwise KIET teams added here are COE KIET / technical club teams.
+  const [kietDepartment, setKietDepartment] = useState(clubDepartment);
   const [institution, setInstitution] = useState("");
   const [city, setCity] = useState("");
   const [name, setName] = useState("");
@@ -89,10 +103,11 @@ export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => v
           ...m,
           email: m.email.trim().toLowerCase(),
           fullName: m.fullName.trim(),
-          department: kiet ? clubDepartment : null,
+          department: kiet ? (wildcard ? kietDepartment : clubDepartment) : null,
           course: type === "school" ? "School" : m.course,
           year: startup ? 0 : m.year,
         })),
+        ...(wildcard ? { wildcard: true, octonorm: octonorm.replace(/\s+/g, "").toUpperCase() || null, building: building.trim(), room: room.trim() } : {}),
       });
       onCreated(team);
     } catch (err) {
@@ -103,8 +118,12 @@ export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => v
 
   return (
     <Dialog
-      title="Add a complete team"
-      description="Register a selected team and its students in one go. Students already registered (same email) are used as they are. The team is submitted and accepted for the Grand Finale; allot its stall on the Judging page."
+      title={wildcard ? "Add a wild card team" : "Add a complete team"}
+      description={
+        wildcard
+          ? "A team that joins the Grand Finale now: its students are registered with it (students already registered are used as they are), it takes part straight away and gets the octonorm you give it here."
+          : "Register a selected team and its students in one go. Students already registered (same email) are used as they are. The team is submitted and accepted for the Grand Finale; allot its stall on the Judging page."
+      }
       size="xl"
       busy={pending}
       onClose={onClose}
@@ -121,6 +140,19 @@ export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => v
       }
     >
       <div className="space-y-5">
+        {wildcard && (
+          <div className="grid gap-4 rounded-2xl bg-accent-500/10 p-4 ring-1 ring-accent-500/30 md:grid-cols-3">
+            <Field label="Octonorm" htmlFor="ct-octonorm" hint="Its number, e.g. 186. Leave empty to give one later.">
+              <Input id="ct-octonorm" value={octonorm} onChange={(e) => setOctonorm(e.target.value)} maxLength={12} className="font-mono" />
+            </Field>
+            <Field label="Building (optional)" htmlFor="ct-building" hint="Only if it is not at an octonorm.">
+              <Input id="ct-building" value={building} onChange={(e) => setBuilding(e.target.value)} maxLength={60} />
+            </Field>
+            <Field label="Room (optional)" htmlFor="ct-room">
+              <Input id="ct-room" value={room} onChange={(e) => setRoom(e.target.value)} maxLength={60} />
+            </Field>
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Type" htmlFor="ct-type">
             <Select id="ct-type" value={type} onChange={(e) => setType(e.target.value as ParticipantType)}>
@@ -141,7 +173,18 @@ export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => v
               <Input id="ct-city" value={city} onChange={(e) => setCity(e.target.value)} maxLength={100} />
             </Field>
           )}
-          {kiet && (
+          {kiet && wildcard && (
+            <Field label="KIET department" htmlFor="ct-department" hint="A department team is ranked in its category with the department winners.">
+              <Select id="ct-department" value={kietDepartment} onChange={(e) => setKietDepartment(e.target.value)}>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {departmentLabel(d)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {kiet && !wildcard && (
             <p className="text-xs text-muted md:col-span-2 md:self-end">
               KIET teams are added as {departmentLabel(clubDepartment)} teams, which go straight to the Grand Finale. Department teams cannot be added
               now: the finalist list is locked.
@@ -231,7 +274,7 @@ export function AddCompleteTeamDialog({ onClose, onCreated }: { onClose: () => v
                       <Input id={`ct-roll-${i}`} value={m.rollNumber} onChange={(e) => change(i, { rollNumber: e.target.value })} />
                     </Field>
                   )}
-                  {kiet && (
+                  {kiet && (!wildcard || kietDepartment === clubDepartment) && (
                     <Field label="Club" htmlFor={`ct-club-${i}`} className="md:col-span-1">
                       <Input id={`ct-club-${i}`} value={m.club} onChange={(e) => change(i, { club: e.target.value })} />
                     </Field>

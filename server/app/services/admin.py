@@ -543,7 +543,7 @@ def _apply_status(
 # ---------- Creating a team for students ----------
 
 
-def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Settings) -> AdminTeamOut:
+def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Settings, *, wildcard: bool = False) -> AdminTeamOut:
     """
     An organiser builds a team from registered students, whether or not registration is open (e.g. for help-desk
     cases). The team rules still apply: same college or school, category eligibility, team size, unique name.
@@ -608,7 +608,8 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
         raise ApiError(error, 422)
     route = rules.route_for(leader.participant_type, leader.department)
     needs_approval = rules.needs_approval(leader.participant_type, leader.department)
-    if data.submit and route == "department" and _results_published(db):
+    # A Grand Finale wild card (create_complete_team) joins after the results, as a finalist.
+    if data.submit and route == "department" and _results_published(db) and not wildcard:
         raise ApiError("Results have been published, so new KIET teams can be created as drafts only.", 409)
 
     now = utcnow()
@@ -1201,6 +1202,12 @@ def create_complete_team(db: Session, admin: Admin, data: CompleteTeamInput, set
     for the Grand Finale where that applies), all in one transaction: if anything is wrong nothing is saved.
     """
     _require_super(admin, "add teams")
+    from . import finale, judging  # both build on this module
+
+    if data.wildcard and (label := judging._tent_label(data.octonorm)):
+        holder = db.scalar(select(Team.number).join(FinalTent, FinalTent.team_id == Team.id).where(FinalTent.tent == label))
+        if holder is not None:
+            raise ApiError(f"Octonorm {label} is already allotted to IT26-{holder:04d}.", 409)
     emails = [m.email for m in data.members]
     if len(set(emails)) != len(emails):
         raise ApiError("A student is listed more than once.", 422)
@@ -1277,7 +1284,25 @@ def create_complete_team(db: Session, admin: Admin, data: CompleteTeamInput, set
         member_emails=emails[1:],
         submit=True,
     )
-    return create_team(db, admin, team, settings)
+    created = create_team(db, admin, team, settings, wildcard=data.wildcard)
+    if not data.wildcard:
+        return created
+    # A wild card takes part in the Grand Finale at once: a KIET department team as a finalist, the others are accepted
+    # already (create_team accepts what needs accepting when a super admin adds it).
+    row = db.get(Team, created.id)
+    assert row is not None
+    if row.route == "department":
+        row.result = "finalist"
+    finale.entry_for_new_team(db, admin, row, data.octonorm, data.building, data.room)
+    audit.record(db, admin.email, "finale.wildcard_added", row, f"Wild card for the Grand Finale, octonorm {data.octonorm or 'none'}")
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ApiError(
+            "The team was added, but its octonorm was just given to another team. Give it one on the Grand Finale page.", 409
+        ) from exc
+    return admin_teams(db, [row])[0]
 
 
 DELETE_TEAM_NOTE = "The students keep their accounts and can be put in another team; the history stays in the activity log."
@@ -2209,7 +2234,11 @@ def _audit_out(entry: AuditEntry) -> AuditOut:
     )
 
 
+ACTIVITY_SUPER_ONLY = "the activity log"
+
+
 def audit_log(db: Session, admin: Admin, team_id: uuid.UUID | None, limit: int) -> list[AuditOut]:
+    _require_super(admin, f"see {ACTIVITY_SUPER_ONLY}")
     statement = select(AuditEntry).where(_audit_scope(admin)).order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit)
     if team_id:
         if db.get(Team, team_id) is not None:
@@ -2218,7 +2247,9 @@ def audit_log(db: Session, admin: Admin, team_id: uuid.UUID | None, limit: int) 
     return [_audit_out(entry) for entry in db.scalars(statement)]
 
 
-ActivityKind = Literal["team", "member", "invitation", "finalists", "results", "admin", "schedule", "judging", "attendance", "student"]
+ActivityKind = Literal[
+    "team", "member", "invitation", "finalists", "results", "admin", "schedule", "judging", "attendance", "student", "finale", "desk"
+]
 
 
 class ActivityFilters(Paging):
@@ -2228,7 +2259,8 @@ class ActivityFilters(Paging):
 
 
 def activity(db: Session, admin: Admin, f: ActivityFilters) -> tuple[list[AuditOut], int]:
-    """The full audit log, newest first, a page at a time."""
+    """The full audit log, newest first, a page at a time. Super admins only."""
+    _require_super(admin, f"see {ACTIVITY_SUPER_ONLY}")
     check_department(admin, f.department)
     conditions = [_audit_scope(admin)]
     if f.kind:

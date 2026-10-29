@@ -1,4 +1,4 @@
-import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -213,6 +213,18 @@ export interface AdminApi {
   deskAddMeal(label: string): Promise<Desk>;
   deskUpdateMeal(key: string, change: { label?: string; open?: boolean }): Promise<Desk>;
   deskDeleteMeal(key: string): Promise<Desk>;
+  /** Registration desk: who of the team is here (registered), and who got their ID card and lunch coupon. */
+  deskRegister(teamId: string, members: RegistrationInput[]): Promise<DeskTeam>;
+
+  /** Grand Finale section (super admins): every finale team with its octonorm, place, section, panel and registration. */
+  finale(): Promise<Finale>;
+  saveFinaleEntries(entries: FinaleEntryInput[]): Promise<Finale>;
+  /** Whether Grand Finale judges may change the marks they already saved. */
+  setFinaleJudgeEdits(judgesCanEdit: boolean): Promise<Finale>;
+  /** Who wins each section as the marks stand now, and whether that is published. */
+  finaleResults(): Promise<FinaleResults>;
+  publishFinale(): Promise<FinaleResults>;
+  unpublishFinale(reason: string): Promise<FinaleResults>;
 }
 
 export class ApiError extends Error {

@@ -64,6 +64,9 @@ function scoringFor(panel: JudgePanel, now: number): Scoring {
       locked: true,
     };
   }
+  if (panel.locked && panel.round === "final") {
+    return { can: false, label: "Your marks are locked", note: "Your marks here are locked (you locked them, or the results are out). Only a super admin can change them now.", live: false, clock, locked: true };
+  }
   if (panel.locked) {
     return { can: false, label: "You locked your marks", note: "Your marks in this room are locked. Only a super admin or your department's admin can change them now.", live: false, clock, locked: true };
   }
@@ -527,7 +530,8 @@ function TeamCard({ team, index, open, locked, onScore }: { team: JudgeTeam; ind
           <p className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-display text-base font-bold text-navy-900">{team.name}</span>
             <span className="font-mono text-xs text-muted">{team.code}</span>
-            {team.tent && <span className="font-mono text-xs font-bold text-accent-600">Stall {team.tent}</span>}
+            {team.tent && <span className="font-mono text-xs font-bold text-accent-600">{team.place ? `Octonorm ${team.tent} · ${team.place}` : `Octonorm ${team.tent}`}</span>}
+            {!team.tent && team.place && <span className="text-xs font-bold text-accent-600">{team.place}</span>}
           </p>
           <p className="mt-0.5 line-clamp-2 text-sm text-navy-800">{team.projectTitle}</p>
           <p className="mt-1.5 flex flex-wrap gap-1.5">
@@ -654,12 +658,13 @@ function ScoreSheet({
           {(scored.locked || !canScore) && " · locked"}
         </span>
       )}
-      {scored && savable && (
+      {scored && savable && panel.editsAllowed && (
         <Button variant="secondary" onClick={() => setEditing(true)}>
           <Pencil aria-hidden="true" className="size-4" />
           Change marks
         </Button>
       )}
+      {scored && savable && !panel.editsAllowed && <span className="text-xs font-semibold text-muted">The organisers have turned off changes to saved marks.</span>}
       <Button variant="secondary" onClick={onClose}>
         Close
       </Button>

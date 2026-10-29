@@ -82,7 +82,7 @@ export const roleLabels: Record<AdminRole | "judge", string> = {
   college_admin: "College admin",
   school_admin: "School admin",
   startup_admin: "Startup admin",
-  desk: "Event desk volunteer",
+  desk: "Registration desk",
   judge: "Judge",
 };
 

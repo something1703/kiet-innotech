@@ -478,12 +478,13 @@ def test_other_colleges_and_schools_are_accepted_before_they_get_stalls(judging,
     assert root.post("/admin/teams/accept", {"team_ids": ids, "accepted": True}).json()["changed"] == 0
     # Accepted, no stall yet.
     accepted = leader.get("/me/results").json()["cards"][0]
-    assert accepted["status"] == "qualified" and "accepted" in accepted["title"] and "No stall has been allotted yet" in accepted["message"]
+    assert accepted["status"] == "qualified" and "accepted" in accepted["title"] and "Registration Desk" in accepted["message"]
     assert cards(pupil) == [("final", "qualified")]
     assert {r["team"]["name"] for r in root.get("/admin/judging/final").json()["tents"]} == {"ABES Team", "DPS Team"}
-    # With a stall the team is told it.
+    # With an octonorm the team is still told to register first; the number shows once the desk registers them.
     assert root.put("/admin/judging/final/tents", {"tents": [{"team_id": college["id"], "tent": "S-1"}]}).status_code == 200
-    assert "S-1" in leader.get("/me/results").json()["cards"][0]["message"]
+    assert "S-1" not in leader.get("/me/results").json()["cards"][0]["message"]
+    assert leader.get("/me/results").json()["finale"]["octonorm"] is None
     # Taking acceptance back is blocked while the team has a stall; the rest go back in the queue.
     back = root.post("/admin/teams/accept", {"team_ids": [college["id"], school["id"]], "accepted": False}).json()
     assert back["changed"] == 1 and "stall" in back["skipped"][0]["reason"].lower()
@@ -512,8 +513,9 @@ def test_finale_rankings_group_schools_separately(judging, settings):
     assert root.post("/admin/judging/final/open").status_code == 200
     assert score(judging["external"], panel, college, FULL).status_code == 200
     groups = {g["label"]: g for g in root.get("/admin/judging/final/rankings").json()["groups"]}
-    assert set(groups) == {"Category 8: CyberShield", "Best School Project"}
-    assert groups["Category 8: CyberShield"]["teams"][0]["average"] == 50
+    # Other colleges are ranked in their own section, like schools.
+    assert set(groups) == {"Innovation at Other Colleges", "Best School Project"}
+    assert groups["Innovation at Other Colleges"]["teams"][0]["average"] == 50
     assert groups["Best School Project"]["teams"][0]["position"] is None
     # With the finale under way, results can no longer be withdrawn.
     assert root.post("/admin/results/unpublish", {"confirm": "UNPUBLISH", "reason": "Published by mistake"}).status_code == 409
@@ -994,12 +996,10 @@ def test_changed_marks_are_not_flagged_to_judges_or_on_the_room(judging):
     assert mine["total"] == 32 and mine["edit_count"] == 0 and mine["edited_by"] is None
 
     # The record is kept: the activity log has all three changes for super admins. Department admins do not see any of them.
-    def edits(who):
-        items = who.get("/admin/activity", params={"kind": "judging", "page_size": 100}).json()["items"]
-        return [e["actor_email"] for e in items if e["action"] == "judging.score_edited"]
-
-    assert sorted(edits(root)) == ["cse.admin@kiet.edu", "it.prof@kiet.edu", "root@kiet.edu"]
-    assert edits(cse) == []
+    items = root.get("/admin/activity", params={"kind": "judging", "page_size": 100}).json()["items"]
+    edits = [e["actor_email"] for e in items if e["action"] == "judging.score_edited"]
+    assert sorted(edits) == ["cse.admin@kiet.edu", "it.prof@kiet.edu", "root@kiet.edu"]
+    assert cse.get("/admin/activity", params={"kind": "judging"}).status_code == 403
 
 
 def test_the_leaderboard_ranks_each_problem_statement_against_the_finalist_quota(judging):

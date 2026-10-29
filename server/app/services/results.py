@@ -14,10 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import rules
-from ..models import AppState, Award, FinalTent, Team, TeamMember, User
+from ..models import AppState, Award, Team, TeamMember, User
 from ..schemas import ResultCard, ResultsOut
 from . import admin as admin_service
-from . import certificates, judging, release
+from . import certificates, finale, judging, release
 
 FINALE_SOON = "Your Grand Finale details will be shared with you soon: watch this page, and your email, for the stall and timings."
 
@@ -54,7 +54,7 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
                 round="final",
                 status="winner",
                 title=f"{_place(award.place)} place at the Grand Finale",
-                message=f"Congratulations! Your team wins {_rupees(award.amount)}. The organisers will share how the prize is handed over.",
+                message=_finale_win(award),
                 place=award.place,
                 amount=award.amount,
             )
@@ -80,27 +80,35 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
                 "Your status appears on this page.",
             )
         ]
-    tent = db.get(FinalTent, team.id)
     return [
         ResultCard(
             round="final",
             status="qualified",
             title="Your team is accepted for the Grand Finale",
-            message=f"Your stall is {tent.tent}. See you at KIET on 30 October."
-            if tent is not None
-            else "No stall has been allotted yet. Stalls are allotted soon; your stall appears on this page once it is.",
+            message=f"See you at KIET on 30 October. {REGISTER_FIRST}",
         )
     ]
 
 
+# The octonorm number shows on the dashboard once the registration desk has registered the student (services/finale.py).
+REGISTER_FIRST = (
+    "Register at the Registration Desk at the entrance of the ground: every member registers in person, and your octonorm "
+    "number appears on this page once you are registered."
+)
+
+
+def _finale_win(award: Award) -> str:
+    if award.amount:
+        return f"Congratulations! Your team wins {_rupees(award.amount)}. The organisers will share how the prize is handed over."
+    return "Congratulations on your win! The organisers will share the details."
+
+
 def _finalist_card(db: Session, team: Team) -> ResultCard:
-    tent = db.get(FinalTent, team.id)
-    where = f"Your stall is {tent.tent}." if tent is not None else "Watch this page for your stall number."
     return ResultCard(
         round="department",
         status="finalist",
         title="You are a finalist!",
-        message=f"Your team goes to the Grand Finale on 30 October at KIET. {where}",
+        message=f"Your team goes to the Grand Finale on 30 October at KIET. {REGISTER_FIRST}",
     )
 
 
@@ -122,8 +130,9 @@ def my_results(db: Session, user: User) -> ResultsOut:
         return ResultsOut(cards=[])
     awards = {a.round: a for a in db.scalars(select(Award).where(Award.team_id == team.id))}
     published = {r: db.get(AppState, f"awards_published:{r}") is not None for r in rules.JUDGING_ROUNDS}
+    card = finale.student_card(db, user, team)
     if other:
-        return ResultsOut(cards=_other_institution_cards(db, team, awards, published))
+        return ResultsOut(cards=_other_institution_cards(db, team, awards, published), finale=card)
     cards: list[ResultCard] = []
 
     in_final = db.scalar(select(Team.id).where(Team.id == team.id, judging._eligible_condition("final"))) is not None
@@ -135,8 +144,7 @@ def my_results(db: Session, user: User) -> ResultsOut:
                     round="final",
                     status="winner",
                     title=f"{_place(award.place)} place at the Grand Finale",
-                    message=f"Congratulations! Your team wins {_rupees(award.amount)}. "
-                    "The organisers will share how the prize is handed over.",
+                    message=_finale_win(award),
                     place=award.place,
                     amount=award.amount,
                 )
@@ -227,4 +235,4 @@ def my_results(db: Session, user: User) -> ResultsOut:
                         message="Better luck next time! Thank you for taking part in InnoTech'26.",
                     )
                 )
-    return ResultsOut(cards=cards)
+    return ResultsOut(cards=cards, finale=card)

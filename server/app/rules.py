@@ -285,6 +285,33 @@ def prize(round_: str, school: bool, category: int, place: int) -> int | None:
     return table.get(place)
 
 
+# Grand Finale sections (octonorm list, 30 October). Department winners compete in their category; every other section is
+# ranked on its own. A team's section follows from what it is (finale.default_section); a super admin can move it.
+FinaleSection = Literal["category", "coe", "club", "school", "college", "startup"]
+FINALE_SECTIONS: dict[str, str] = {
+    "category": "KIET departmental winners (by category)",
+    "coe": "Centres of Excellence",
+    "club": "Technical Clubs",
+    "school": "Innovation at School",
+    "college": "Innovation at Other Colleges",
+    "startup": "Innovation at Start-ups",
+}
+# The places named at the Grand Finale in every section: 1st and 2nd (the event document's prizes).
+FINALE_PLACES = 2
+
+
+def finale_prize(section: str, category: int, place: int) -> int | None:
+    """
+    A Grand Finale place's cash prize: the categories and the Best School Project have the event document's prizes; the
+    other sections name 1st and 2nd without a cash amount (0). None: that place is not given.
+    """
+    if place < 1 or place > FINALE_PLACES:
+        return None
+    if section in ("category", "school"):
+        return prize("final", section == "school", category, place)
+    return 0
+
+
 # Event passes: the QR code changes every minute and is accepted for two minutes after (one before, for clock drift).
 PASS_PERIOD_SECONDS = 60
 PASS_PAST_PERIODS = 2

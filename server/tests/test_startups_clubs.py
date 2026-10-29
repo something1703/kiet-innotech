@@ -192,7 +192,7 @@ def test_startup_admin_sees_only_startups(as_user, student, team_of):
     assert desk.get("/admin/judging/department").status_code == 403
     assert desk.get("/admin/judging/final").status_code == 200
     assert desk.get("/admin/judging/final/rankings").status_code == 403
-    assert desk.get("/admin/audit").status_code == 200
+    assert desk.get("/admin/audit").status_code == 403
 
 
 def test_outside_admin_no_longer_sees_startups(as_user):

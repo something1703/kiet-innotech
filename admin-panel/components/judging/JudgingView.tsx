@@ -155,7 +155,7 @@ export function JudgingView() {
   );
 }
 
-function RoundBar({ judging, canManage, onChange }: { judging: Judging; canManage: boolean; onChange: () => void }) {
+export function RoundBar({ judging, canManage, onChange }: { judging: Judging; canManage: boolean; onChange: () => void }) {
   const { round } = judging;
   const [confirming, setConfirming] = useState<"open" | "lock" | null>(null);
   const panels = judging.panels.length;
@@ -174,9 +174,13 @@ function RoundBar({ judging, canManage, onChange }: { judging: Judging; canManag
             <Pill tone={round.open ? "green" : "slate"}>{roundLabels[round.round]}</Pill>
           </p>
           <p className="mt-1 text-sm text-muted">
-            {round.open
-              ? "Judges save marks for the teams in their own rooms and lock them when done. Locked marks can be changed only by a super admin or, in the room's slot and buffer, by the department's admin."
-              : "Judges can already sign in and see their room and teams, but cannot submit marks until scoring is opened."}
+            {round.round === "final"
+              ? round.open
+                ? "Judges give marks to the teams of their panel, with no time limit, until you lock scoring. A super admin can change any mark at any time."
+                : "Judges can sign in any time and see their panel and teams, but give marks only while scoring is open."
+              : round.open
+                ? "Judges save marks for the teams in their own rooms and lock them when done. Locked marks can be changed only by a super admin or, in the room's slot and buffer, by the department's admin."
+                : "Judges can already sign in and see their room and teams, but cannot submit marks until scoring is opened."}
             {round.changedAt && ` Last ${round.open ? "opened" : "changed"} ${formatDateTime(round.changedAt)} by ${round.changedBy}.`}
           </p>
           {!round.open && round.openBlocked && canManage && <p className="mt-2 text-sm font-medium text-accent-600">{round.openBlocked}</p>}

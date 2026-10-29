@@ -109,6 +109,7 @@ def test_outside_admins_see_student_events_for_their_students(world, as_user):  
     root.post(f"/admin/students/{college_id}/ban", {"reason": "Fake identity"})
     root.post(f"/admin/students/{kiet_id}/ban", {"reason": "Fake identity"})
     root.post("/admin/students", {**college_profile(), "email": "walk.in@gmail.com"})
-    seen = [e["detail"] for e in outside.get("/admin/activity", params={"kind": "student", "page_size": 50}).json()["items"]]
-    assert any("r@gmail.com" in d for d in seen) and any("walk.in@gmail.com" in d for d in seen)
-    assert not any("a@kiet.edu" in d for d in seen)
+    # The activity log is for super admins only; they see every student event.
+    assert outside.get("/admin/activity", params={"kind": "student", "page_size": 50}).status_code == 403
+    seen = [e["detail"] for e in root.get("/admin/activity", params={"kind": "student", "page_size": 50}).json()["items"]]
+    assert any("r@gmail.com" in d for d in seen) and any("walk.in@gmail.com" in d for d in seen) and any("a@kiet.edu" in d for d in seen)

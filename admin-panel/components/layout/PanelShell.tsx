@@ -26,7 +26,7 @@ const nav: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/", label: "Overview", Icon: LayoutDashboard, roles: ORGANISERS },
       { href: "/submissions", label: "Submissions", Icon: Inbox, roles: ORGANISERS },
-      { href: "/activity", label: "Activity", Icon: Activity, roles: ORGANISERS },
+      { href: "/activity", label: "Activity", Icon: Activity, roles: ["super_admin"] },
     ],
   },
   {
@@ -45,7 +45,8 @@ const nav: { title: string; items: NavItem[] }[] = [
       { href: "/attendance-report", label: "Student attendance", Icon: UserCheck, roles: ["super_admin", "admin"] },
       { href: "/attendance", label: "Attendance", Icon: QrCode, roles: ORGANISERS },
       { href: "/judge", label: "My judging", Icon: ClipboardCheck, roles: ["judge"] },
-      { href: "/desk", label: "Event desk", Icon: Ticket, roles: ["super_admin", "desk"] },
+      { href: "/finale", label: "Grand Finale", Icon: Trophy, roles: ["super_admin"] },
+      { href: "/desk", label: "Registration desk", Icon: Ticket, roles: ["super_admin", "desk"] },
       { href: "/certificates", label: "Certificates", Icon: Award, roles: ["super_admin"] },
       { href: "/schedule", label: "Schedule", Icon: CalendarClock, roles: ["super_admin"] },
     ],
@@ -57,7 +58,6 @@ const nav: { title: string; items: NavItem[] }[] = [
 ];
 
 function visible(item: NavItem, admin: AdminUser) {
-  if (item.href === "/activity") return false;
   // Attendance by event pass is switched off for now.
   if (item.href === "/attendance" && !attendanceEnabled) return false;
   // COE KIET has no department round, so its admin has no attendance to report.
@@ -88,7 +88,7 @@ function scopeLabel(admin: AdminUser) {
     case "judge":
       return "Judge";
     case "desk":
-      return "Event desk volunteer";
+      return "Registration desk";
     default:
       return `Admin · ${admin.department}`;
   }

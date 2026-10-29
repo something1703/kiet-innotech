@@ -111,7 +111,7 @@ def test_withdraw_disqualify_restore(world):
     assert cse.post(f"/admin/teams/{team_id}/disqualify", {"reason": "Plagiarism found"}).status_code == 403
     assert root.post(f"/admin/teams/{team_id}/disqualify", {"reason": "Plagiarism found"}).json()["status"] == "disqualified"
 
-    actions = [e["action"] for e in cse.get("/admin/audit", params={"team_id": team_id}).json()]
+    actions = [e["action"] for e in root.get("/admin/audit", params={"team_id": team_id}).json()]
     assert actions[:3] == ["team.disqualified", "team.restored", "team.withdrawn"]
 
 
@@ -200,10 +200,11 @@ def test_chart_stats_add_up(world):
     assert world["cse"].get("/admin/stats").json()["top_institutions"] is None
 
 
-def test_audit_is_scoped(world):
-    it_actions = world["it"].get("/admin/audit", params={"limit": 200}).json()
-    assert it_actions and all(entry["department"] == "IT" for entry in it_actions)
+def test_the_activity_log_is_for_super_admins_only(world):
+    assert world["it"].get("/admin/audit", params={"limit": 200}).status_code == 403
     assert world["cse"].get("/admin/audit", params={"team_id": world["teams"]["it_a"]["id"]}).status_code == 403
+    assert world["cse"].get("/admin/activity").status_code == 403
+    assert world["root"].get("/admin/audit", params={"limit": 200}).status_code == 200
     assert world["root"].get("/admin/audit", params={"limit": 500}).status_code == 422
 
 

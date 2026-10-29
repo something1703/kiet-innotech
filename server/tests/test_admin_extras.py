@@ -43,10 +43,8 @@ def test_outside_admin_stats_and_activity(outside):
     assert stats["teams"]["total"] == 2 and stats["by_department"] is None
     assert {t["type"] for t in stats["by_type"]} == {"college", "school"}
     assert stats["top_institutions"]
-    entries = api.get("/admin/activity", params={"page_size": 100}).json()["items"]
-    assert entries and all(e["department"] is None for e in entries)
-    codes = {e["team_code"] for e in entries if e["team_code"]}
-    assert codes == {outside["teams"]["college"]["code"], outside["teams"]["school"]["code"]}
+    # The activity log is for super admins only.
+    assert api.get("/admin/activity", params={"page_size": 100}).status_code == 403
 
 
 def test_outside_admin_can_withdraw_their_teams_only(outside):
@@ -79,8 +77,9 @@ def test_admin_creates_a_team_while_registration_is_closed(world, student, setti
     team = response.json()
     assert (team["status"], team["department"], team["route"], len(team["members"])) == ("submitted", "CSE", "department", 3)
     assert team["members"][0]["email"] == "n1@kiet.edu" and team["members"][0]["role"] == "leader"
-    actions = [e["action"] for e in world["cse"].get("/admin/audit", params={"team_id": team["id"]}).json()]
+    actions = [e["action"] for e in world["root"].get("/admin/audit", params={"team_id": team["id"]}).json()]
     assert set(actions) == {"team.created", "team.submitted"}
+    assert world["cse"].get("/admin/audit", params={"team_id": team["id"]}).status_code == 403
 
 
 def test_admin_team_rules(world, student):  # noqa: F811
@@ -206,8 +205,8 @@ def test_activity_pages_filters_and_scope(world):  # noqa: F811
     assert {e["action"].split(".")[0] for e in root.get("/admin/activity", params={"kind": "admin"}).json()["items"]} == {"admin"}
     found = root.get("/admin/activity", params={"q": world["teams"]["it_a"]["code"]}).json()["items"]
     assert found and all(e["team_code"] == world["teams"]["it_a"]["code"] for e in found)
-    assert {e["department"] for e in cse.get("/admin/activity", params={"page_size": 100}).json()["items"]} == {"CSE"}
-    assert cse.get("/admin/activity", params={"department": "IT"}).status_code == 403
+    assert root.get("/admin/activity", params={"department": "IT"}).status_code == 200
+    assert cse.get("/admin/activity", params={"page_size": 100}).status_code == 403
     assert root.get("/admin/activity", params={"kind": "nope"}).status_code == 422
 
 

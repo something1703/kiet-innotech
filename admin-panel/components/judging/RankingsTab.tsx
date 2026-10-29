@@ -23,7 +23,7 @@ const placeTone = ["text-accent-500", "text-slate-400", "text-amber-700"];
 const rupees = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 
 /** The average of both judges' totals, ranked with the event's tie-breakers; organisers declare the prize winners here. */
-export function RankingsTab({ round }: { round: JudgingRound }) {
+export function RankingsTab({ round, inFinale = false }: { round: JudgingRound; inFinale?: boolean }) {
   const admin = useAdmin();
   const [department, setDepartment] = useState("");
   const rankings = useQuery(`rankings-${round}-${department}`, () => api.rankings(round, department || undefined));
@@ -64,7 +64,13 @@ export function RankingsTab({ round }: { round: JudgingRound }) {
         )}
       </div>
 
-      {data && <WinnersBar data={data} onPublish={(publish) => setPublishing(publish)} />}
+      {/* Grand Finale results are published from the Grand Finale page, which names the winners and locks judging. */}
+      {data && round === "department" && <WinnersBar data={data} onPublish={(publish) => setPublishing(publish)} />}
+      {data && round === "final" && !inFinale && admin.role === "super_admin" && (
+        <Notice tone="info">
+          Publish the Grand Finale results from the <Link href="/finale?tab=leaderboard" className="font-semibold underline">Grand Finale page</Link>.
+        </Notice>
+      )}
       {error && <Notice tone="error">{error}</Notice>}
       {rankings.error && <Notice tone="error">{rankings.error}</Notice>}
       {!data && !rankings.error && <Loading label="Loading rankings" />}
@@ -80,7 +86,8 @@ export function RankingsTab({ round }: { round: JudgingRound }) {
               {group.prizes.map((p) => (
                 <span key={p.place} className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 py-0.5 text-xs font-semibold text-accent-600 ring-1 ring-inset ring-accent-100">
                   <Trophy aria-hidden="true" className="size-3" />
-                  {ordinal(p.place)} {rupees(p.amount)}
+                  {ordinal(p.place)}
+                  {p.amount > 0 ? ` ${rupees(p.amount)}` : ""}
                 </span>
               ))}
             </div>

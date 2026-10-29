@@ -15,7 +15,8 @@
  *   GET    /me/team                             -> Team | null
  *   GET    /me/invitations                      -> Invitation[]  (pending, addressed to me)
  *   GET    /me/pass                             -> EventPass     (seed for the rotating QR, room and attendance)
- *   GET    /me/results                          -> { cards: ResultCard[] } (awaiting, finalist, winner and amount...)
+ *   GET    /me/results                          -> { cards: ResultCard[], finale: FinaleCard | null } (awaiting, finalist, winner and amount...;
+ *                                                 the Grand Finale octonorm once the registration desk has registered the student)
  *
  *   POST   /teams             TeamInput         -> Team          (caller becomes leader)
  *   PATCH  /teams/{id}        TeamInput         -> Team          (leader, draft only)
@@ -32,7 +33,7 @@
  *   POST   /invitations/{id}/decline            -> 204           (invitee)
  */
 import { endSession, getToken } from "../auth/session";
-import type { CertificateAvailability, CertificateType, EventPass, Invitation, Me, Profile, ResultCard, Team } from "../types";
+import type { CertificateAvailability, CertificateType, EventPass, Invitation, Me, MyResults, Profile, Team } from "../types";
 import { baseUrl, send, type Json } from "./http";
 import { ApiError, type StudentApi } from "./types";
 
@@ -87,7 +88,7 @@ export const liveApi: StudentApi = {
   respondToInvitation: (invitationId, accept) =>
     request<void>("POST", `/invitations/${invitationId}/${accept ? "accept" : "decline"}`),
   getMyPass: () => request<EventPass>("GET", "/me/pass"),
-  getMyResults: () => request<{ cards: ResultCard[] }>("GET", "/me/results"),
+  getMyResults: () => request<MyResults>("GET", "/me/results"),
   getMyCertificates: () => request<{ certificates: CertificateAvailability[]; message: string | null }>("GET", "/me/certificates"),
   downloadCertificate: (type: CertificateType) => download(`/me/certificates/${type}.pdf`),
 };

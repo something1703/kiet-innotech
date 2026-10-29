@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from ..errors import ApiError
-from ..models import Admin, Attendance, FinalTent, Meal, MealCoupon, MealExtra, Profile, Team, TeamMember, User, utcnow
+from ..models import Admin, Attendance, FinaleHandout, FinalTent, Meal, MealCoupon, MealExtra, Profile, Team, TeamMember, User, utcnow
 from ..schemas import (
     CheckInInput,
     CheckOutInput,
@@ -36,8 +36,9 @@ from ..schemas import (
     MealInput,
     MealOut,
     MealUpdateInput,
+    RegisterInput,
 )
-from . import audit, judging
+from . import audit, judging, sections
 
 ROUND = "final"
 DESK_NOTE = "Registration desk"
@@ -75,6 +76,9 @@ def _teams_out(db: Session, teams: list[Team]) -> list[DeskTeamOut]:
     coupons: dict[uuid.UUID, dict[str, MealCoupon]] = defaultdict(dict)
     for coupon in db.scalars(select(MealCoupon).where(MealCoupon.team_id.in_(ids))):
         coupons[coupon.user_id][coupon.meal] = coupon
+    handouts = {h.user_id: h for h in db.scalars(select(FinaleHandout).where(FinaleHandout.team_id.in_(ids)))}
+    places = judging.finale_places(db, ids)
+    section_of = sections.of_teams(db, teams)
     members: dict[uuid.UUID, list[DeskMemberOut]] = defaultdict(list)
     for member, profile, user in db.execute(
         select(TeamMember, Profile, User)
@@ -98,6 +102,8 @@ def _teams_out(db: Session, teams: list[Team]) -> list[DeskTeamOut]:
                 checked_in_at=mark.marked_at if mark else None,
                 checked_in_by=mark.marked_by if mark else None,
                 coupons={meal: c.issued_at for meal, c in coupons[member.user_id].items()},
+                id_card_at=handouts[member.user_id].id_card_at if member.user_id in handouts else None,
+                coupon_at=handouts[member.user_id].coupon_at if member.user_id in handouts else None,
             )
         )
     return [
@@ -112,6 +118,8 @@ def _teams_out(db: Session, teams: list[Team]) -> list[DeskTeamOut]:
             department=t.department,
             route=t.route,
             tent=tents.get(t.id),
+            place=places.get(t.id, ""),
+            section=section_of[t.id],
             members=members[t.id],
         )
         for t in teams
@@ -178,6 +186,7 @@ def overview(db: Session, admin: Admin) -> DeskOut:
         )
         or 0
     )
+    handouts = list(db.scalars(select(FinaleHandout).where(FinaleHandout.team_id.in_(team_ids))))
     given = dict(db.execute(select(MealCoupon.meal, func.count()).group_by(MealCoupon.meal)).tuples().all())
     extras = dict(db.execute(select(MealExtra.meal, func.sum(MealExtra.quantity)).group_by(MealExtra.meal)).tuples().all())
     recent = list(db.scalars(select(MealExtra).order_by(MealExtra.issued_at.desc()).limit(100)))
@@ -186,6 +195,8 @@ def overview(db: Session, admin: Admin) -> DeskOut:
         teams_checked_in=teams_in,
         students=students,
         students_checked_in=checked_in,
+        id_cards=sum(1 for h in handouts if h.id_card_at),
+        coupons=sum(1 for h in handouts if h.coupon_at),
         meals=[
             MealOut(key=m.key, label=m.label, open=m.open, given=given.get(m.key, 0), extras=int(extras.get(m.key) or 0))
             for m in _meals(db)
@@ -272,6 +283,84 @@ def check_in(db: Session, admin: Admin, team_id: uuid.UUID, data: CheckInInput) 
     return _teams_out(db, [team])[0]
 
 
+def register(db: Session, admin: Admin, team_id: uuid.UUID, data: RegisterInput) -> DeskTeamOut:
+    """
+    The registration desk sets, for each listed member, whether they are here (registered: their Grand Finale attendance)
+    and whether they got the paper ID card and lunch coupon. Only a registered student gets either; a student taken off
+    the register loses the record of both. No time limit: the desk can correct this whenever it needs to.
+    """
+    team = _team(db, team_id)
+    if len({m.user_id for m in data.members}) != len(data.members):
+        raise ApiError("A student is listed twice. Reload and try again.", 422)
+    rows = {member.user_id: (member, profile, user) for member, profile, user in _members(db, team, [m.user_id for m in data.members])}
+    for item in data.members:
+        _, profile, user = rows[item.user_id]
+        if item.present and user.banned_at is not None:
+            raise ApiError(
+                f"{profile.full_name}'s account is suspended by the organisers. Do not register them; send them to the help desk.", 409
+            )
+        if not item.present and (item.id_card or item.coupon):
+            raise ApiError(f"{profile.full_name} is not registered as present, so no ID card or lunch coupon can be recorded.", 422)
+    now = utcnow()
+    changes: list[str] = []
+    for item in data.members:
+        member, profile, _ = rows[item.user_id]
+        mark = db.get(Attendance, (member.user_id, ROUND), with_for_update=True)
+        here = mark is not None and mark.status == "present" and mark.team_id == team.id
+        handout = db.get(FinaleHandout, member.user_id, with_for_update=True)
+        done: list[str] = []
+        if item.present and not here:
+            if mark is None:
+                db.add(
+                    Attendance(
+                        user_id=member.user_id,
+                        round=ROUND,
+                        team_id=team.id,
+                        marked_at=now,
+                        marked_by=admin.email,
+                        method="manual",
+                        note=DESK_NOTE,
+                        status="present",
+                    )
+                )
+            else:
+                mark.team_id, mark.status, mark.marked_at, mark.marked_by, mark.method, mark.note = (
+                    team.id,
+                    "present",
+                    now,
+                    admin.email,
+                    "manual",
+                    DESK_NOTE,
+                )
+            done.append("registered")
+        elif not item.present and here:
+            db.delete(mark)
+            done.append("taken off the register")
+        if handout is None and (item.id_card or item.coupon):
+            handout = FinaleHandout(user_id=member.user_id, team_id=team.id)
+            db.add(handout)
+        if handout is not None:
+            handout.team_id = team.id
+            if item.id_card and handout.id_card_at is None:
+                handout.id_card_at, handout.id_card_by = now, admin.email
+                done.append("ID card given")
+            elif not item.id_card and handout.id_card_at is not None:
+                handout.id_card_at = handout.id_card_by = None
+                done.append("ID card marked not given")
+            if item.coupon and handout.coupon_at is None:
+                handout.coupon_at, handout.coupon_by = now, admin.email
+                done.append("lunch coupon given")
+            elif not item.coupon and handout.coupon_at is not None:
+                handout.coupon_at = handout.coupon_by = None
+                done.append("lunch coupon marked not given")
+        if done:
+            changes.append(f"{profile.full_name}: {', '.join(done)}")
+    if changes:
+        audit.record(db, admin.email, "desk.registration", team, "; ".join(changes))
+    db.commit()
+    return _teams_out(db, [team])[0]
+
+
 def check_out(db: Session, admin: Admin, team_id: uuid.UUID, data: CheckOutInput) -> DeskTeamOut:
     """Takes a check-in back (e.g. the wrong student was ticked). Coupons already given stay given."""
     team = _team(db, team_id)
@@ -280,6 +369,8 @@ def check_out(db: Session, admin: Admin, team_id: uuid.UUID, data: CheckOutInput
     if mark is None or mark.status != "present":
         raise ApiError(f"{profile.full_name} is not checked in.", 409)
     db.delete(mark)
+    # Off the register: no ID card or coupon on record either.
+    db.execute(delete(FinaleHandout).where(FinaleHandout.user_id == member.user_id))
     audit.record(
         db,
         admin.email,

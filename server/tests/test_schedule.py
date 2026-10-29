@@ -228,8 +228,8 @@ def test_every_change_is_in_the_audit_log_for_super_admins_only(root, dept_admin
     assert {"schedule.updated", "schedule.closed", "schedule.opened"} <= set(actions)
     entry = next(e for e in root.get("/admin/audit", params={"limit": 50}).json() if e["action"] == "schedule.updated")
     assert entry["actor_email"] == "root@kiet.edu" and "closes" in entry["detail"]
-    # Department admins see only their own department's history, and these entries belong to no department.
-    assert not any(e["action"].startswith("schedule.") for e in dept_admin.get("/admin/audit", params={"limit": 50}).json())
+    # Department admins do not see the activity log at all.
+    assert dept_admin.get("/admin/audit", params={"limit": 50}).status_code == 403
 
 
 # ---------- Nominations deadline ----------

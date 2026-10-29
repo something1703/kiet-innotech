@@ -119,6 +119,7 @@ def my_pass(db: Session, user: User, settings: Settings) -> PassOut:
     )
     marks = {a.round: a for a in db.scalars(select(Attendance).where(Attendance.user_id == user.id))}
     tent = db.get(FinalTent, team.id)
+    registered = "final" in marks and marks["final"].status == "present"
     planned = judging.timetable(db).slots.get(team.department or "")
     out = []
     for round_ in rounds:
@@ -135,7 +136,8 @@ def my_pass(db: Session, user: User, settings: Settings) -> PassOut:
                 slot_end=room.slot_end if room else None,
                 planned_start=planned[0] if planned and round_ == "department" and room is None else None,
                 planned_end=planned[1] if planned and round_ == "department" and room is None else None,
-                tent=tent.tent if tent and round_ == "final" else None,
+                # The octonorm shows once the registration desk has registered the student (services/finale.py).
+                tent=tent.tent if tent and round_ == "final" and registered else None,
                 present_at=marks[round_].marked_at if round_ in marks and marks[round_].status == "present" else None,
                 # Only KIET students in the department round are told whether they were marked present or absent.
                 attendance=(marks[round_].status if round_ in marks else "not_marked")  # type: ignore[arg-type]

@@ -159,6 +159,19 @@ export type ResultCard = {
   certificate?: CertificateType | null;
 };
 
+/** A Grand Finale student's own card: register at the desk first; the octonorm shows once they are registered. */
+export type FinaleCard = {
+  registered: boolean;
+  registeredAt: string | null;
+  octonorm: string | null;
+  /** Where the team exhibits when not at its octonorm, e.g. "B Block · Room 204". Shown once registered. */
+  place: string;
+  teamMembers: number;
+  teamRegistered: number;
+};
+
+export type MyResults = { cards: ResultCard[]; finale?: FinaleCard | null };
+
 export type CertificateType =
   | "dept_judge"
   | "dept_participation"

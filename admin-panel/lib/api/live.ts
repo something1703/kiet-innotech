@@ -186,6 +186,9 @@
  *   POST   /desk/teams/{id}/coupons/{meal}/{user_id}/take-back { reason } → DeskTeam   (marks a coupon not given)
  *   POST   /desk/extras { meal, quantity, recipient } → MealExtra;  DELETE /desk/extras/{id} (super admin)
  *   POST   /desk/meals { label } | PUT /desk/meals/{key} { label?, open? } | DELETE /desk/meals/{key} → Desk  (super admin)
+ *   PUT    /desk/teams/{id}/registration { members: [{ user_id, present, id_card, coupon }] } → DeskTeam   (registration desk)
+ *   GET    /admin/finale → Finale;  PUT /admin/finale/entries { entries } → Finale;  PUT /admin/finale/settings { judges_can_edit } → Finale
+ *   GET    /admin/finale/results → FinaleResults;  POST …/publish { confirm: "PUBLISH" } | …/unpublish { reason } → FinaleResults  (super admin)
  *   PUT    /admin/finalists/quotas  (super admin) body { quotas: [{ department, category, quota }] } → FinalistSummary
  *   PUT    /admin/teams/{team}/attendance/{user}  body { state: "present" | "absent" | "not_marked" } → TeamPresence   (super admin; the team's department admin; any time)
  *   PUT    /judge/panels/{panel}/teams/{team}/attendance/{user}  body { state: "present" | "absent" | "not_marked" } → TeamPresence   (either judge of the room, during its time)
@@ -211,7 +214,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -527,4 +530,11 @@ export const liveApi: AdminApi = {
   deskAddMeal: (label) => request<Desk>("POST", "/desk/meals", { label }),
   deskUpdateMeal: (key, change) => request<Desk>("PUT", `/desk/meals/${id(key)}`, change),
   deskDeleteMeal: (key) => request<Desk>("DELETE", `/desk/meals/${id(key)}`),
+  deskRegister: (teamId, members) => request<DeskTeam>("PUT", `/desk/teams/${id(teamId)}/registration`, { members }),
+  finale: () => request<Finale>("GET", "/admin/finale"),
+  saveFinaleEntries: (entries) => request<Finale>("PUT", "/admin/finale/entries", { entries }),
+  setFinaleJudgeEdits: (judgesCanEdit) => request<Finale>("PUT", "/admin/finale/settings", { judgesCanEdit }),
+  finaleResults: () => request<FinaleResults>("GET", "/admin/finale/results"),
+  publishFinale: () => request<FinaleResults>("POST", "/admin/finale/results/publish", { confirm: "PUBLISH" }),
+  unpublishFinale: (reason) => request<FinaleResults>("POST", "/admin/finale/results/unpublish", { reason }),
 };

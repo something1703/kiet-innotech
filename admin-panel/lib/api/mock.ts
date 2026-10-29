@@ -522,6 +522,7 @@ function writeSchedule(db: MockDb, admin: AdminUser, opens: string, closes: stri
 }
 
 const NOT_IN_DEMO = "Judging works with the real backend only; the demo data has no judges, rooms or scores.";
+const FINALE_LIVE_ONLY = "The Grand Finale section works with the real backend only; the demo has no Grand Finale teams.";
 const DESK_LIVE_ONLY = "The event desk works with the real backend only; the demo has no Grand Finale teams.";
 const CERTIFICATES_LIVE_ONLY = "Certificates work with the real backend only; the demo has no templates or attendance.";
 
@@ -1479,4 +1480,11 @@ export const mockApi: AdminApi = {
   deskAddMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
   deskUpdateMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
   deskDeleteMeal: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  deskRegister: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
+  finale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  saveFinaleEntries: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  setFinaleJudgeEdits: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  finaleResults: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  publishFinale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  unpublishFinale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
 };

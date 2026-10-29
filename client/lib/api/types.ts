@@ -1,4 +1,4 @@
-import type { CertificateAvailability, CertificateType, EventPass, Invitation, Me, ProfileInput, Profile, ResultCard, Team, TeamInput } from "../types";
+import type { CertificateAvailability, CertificateType, EventPass, Invitation, Me, MyResults, ProfileInput, Profile, Team, TeamInput } from "../types";
 
 /** An error the API reports to the student, e.g. "This student is already part of another team." */
 export class ApiError extends Error {
@@ -35,7 +35,7 @@ export interface StudentApi {
   /** The event pass shown at the venue (see lib/pass.ts). */
   getMyPass(): Promise<EventPass>;
   /** The team's results, once announced (awaiting until then). */
-  getMyResults(): Promise<{ cards: ResultCard[] }>;
+  getMyResults(): Promise<MyResults>;
   /** Certificates this student may download now (attendance and release gates applied), or why there is none. */
   getMyCertificates(): Promise<{ certificates: CertificateAvailability[]; message: string | null }>;
   /** Downloads one of the student's own certificates; the server derives the recipient from the session. */

@@ -40,6 +40,7 @@ from ..models import (
     AppState,
     Attendance,
     Award,
+    FinaleEntry,
     FinalistNomination,
     FinalTent,
     Juror,
@@ -102,7 +103,7 @@ from ..schemas import (
     UnlockInput,
 )
 from . import admin as admin_service
-from . import audit, judge_accounts, presence, schedule
+from . import audit, judge_accounts, presence, schedule, sections
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,10 @@ RELEASED_MESSAGE = (
     "The department results are released. Withdraw the release first if marks need to change, so the winners and certificates "
     "are worked out again from the new marks."
 )
+
+
+FINALE_PUBLISHED = "The Grand Finale results are published, so marks can no longer change. Only a super admin can change them now."
+FINALE_EDITS_OFF = "The organisers have turned off changes to saved marks. Ask a super admin if a mark is wrong."
 
 
 def results_released(db: Session) -> bool:
@@ -421,6 +426,22 @@ def _tents(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
     if not team_ids:
         return {}
     return dict(db.execute(select(FinalTent.team_id, FinalTent.tent).where(FinalTent.team_id.in_(team_ids))).tuples().all())
+
+
+def finale_places(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Where a Grand Finale team exhibits when it is not at its octonorm: "B Block · Room 204"."""
+    if not team_ids:
+        return {}
+    rows = db.execute(
+        select(FinaleEntry.team_id, FinaleEntry.building, FinaleEntry.room).where(
+            FinaleEntry.team_id.in_(team_ids), (FinaleEntry.building != "") | (FinaleEntry.room != "")
+        )
+    ).tuples()
+    return {team_id: place_label(building, room) for team_id, building, room in rows}
+
+
+def place_label(building: str, room: str) -> str:
+    return " · ".join(part for part in (building, f"Room {room}" if room else "") if part)
 
 
 def _panels_out(db: Session, panels: list[Panel], viewer: Admin | None = None) -> list[PanelOut]:
@@ -1281,11 +1302,11 @@ def _natural(label: str) -> tuple:
 # ---------- Rankings ----------
 
 
-def _group_key(round_: str, team: Team) -> str:
-    """The rankings group a team competes in: department and category (department round), or category / school (finale)."""
+def _group_key(round_: str, team: Team, section: str | None = None) -> str:
+    """The rankings group a team competes in: department and category (department round), or its finale section."""
     if round_ == "department":
         return f"{team.department}-{team.category}"
-    return "school-0" if team.participant_type == "school" else f"category-{team.category}"
+    return sections.group_key(section or sections.default_section(team), team.category)
 
 
 def _awards_key(round_: str) -> str:
@@ -1348,8 +1369,9 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
         awards = {a.team_id: a for a in db.scalars(select(Award).where(Award.round == round_, Award.team_id.in_([t.id for t in teams])))}
 
     groups: dict[str, list[Team]] = defaultdict(list)
+    section_of = sections.of_teams(db, teams) if round_ == "final" else {}
     for team in teams:
-        groups[_group_key(round_, team)].append(team)
+        groups[_group_key(round_, team, section_of.get(team.id))].append(team)
     # Teams whose members are all absent (department round) score 0 whatever the judges gave, and get no place.
     absent = presence.absent_teams(db, [t.id for t in teams]) if round_ == "department" else set()
 
@@ -1405,7 +1427,9 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
 
     def order(key: str) -> tuple:
         first, second = key.rsplit("-", 1)
-        return (first == "school", first, int(second))
+        if round_ == "department":
+            return (0, first, int(second))
+        return (sections.SECTION_ORDER.index(first) if first in sections.SECTION_ORDER else len(sections.SECTION_ORDER), first, int(second))
 
     result = []
     for key in sorted(groups, key=order):
@@ -1416,9 +1440,16 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
             label, dep, category = f"{first} · Category {number}: {rules.CATEGORIES[number].title}", first, number
         elif school:
             label, dep, category = "Best School Project", None, None
+        elif first != "category":
+            label, dep, category = rules.FINALE_SECTIONS.get(first, first), None, None
         else:
             label, dep, category = f"Category {number}: {rules.CATEGORIES[number].title}", None, number
-        prizes = [PrizeOut(place=p, amount=a) for p in (1, 2) if (a := rules.prize(round_, school, number, p))]
+        prizes = [
+            PrizeOut(place=p, amount=a)
+            for p in (1, 2)
+            # Grand Finale sections without a cash prize still name 1st and 2nd (amount 0).
+            if (a := rules.prize(round_, school, number, p) if round_ == "department" else rules.finale_prize(first, number, p)) is not None
+        ]
         result.append(RankingGroup(key=key, label=label, department=dep, category=category, teams=ranked(groups[key]), prizes=prizes))
     return RankingsOut(
         round=round_,
@@ -1527,8 +1558,12 @@ def declare_award(db: Session, admin: Admin, round_: str, data: AwardInput) -> N
     )
     if needed == 0 or (scored or 0) < needed:
         raise ApiError("Both judges must score this team before it can be declared a winner.", 409)
-    school = team.participant_type == "school"
-    amount = rules.prize(round_, school, team.category, data.place)
+    section = sections.of_teams(db, [team])[team.id] if round_ == "final" else None
+    amount = (
+        rules.prize(round_, False, team.category, data.place)
+        if round_ == "department"
+        else rules.finale_prize(section or "category", team.category, data.place)
+    )
     if amount is None:
         raise ApiError(
             "The department round has one prize per category: 1st place."
@@ -1536,7 +1571,7 @@ def declare_award(db: Session, admin: Admin, round_: str, data: AwardInput) -> N
             else "There is no prize for this place.",
             422,
         )
-    key = _group_key(round_, team)
+    key = _group_key(round_, team, section)
     holder = db.scalar(
         select(Award).where(Award.round == round_, Award.group_key == key, Award.place == data.place, Award.team_id != team.id)
     )
@@ -1635,6 +1670,7 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
     teams = [team for _, team in rows]
     team_ids = [t.id for t in teams]
     tents = _tents(db, team_ids)
+    places = finale_places(db, team_ids)
     members: dict[uuid.UUID, list[JudgeMemberOut]] = defaultdict(list)
     mine: dict[tuple[str, uuid.UUID], Score] = {}
     states = presence.member_states(db, team_ids)
@@ -1663,7 +1699,10 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
     now = utcnow()
     by_panel: dict[uuid.UUID, list[JudgeTeamOut]] = defaultdict(list)
     round_of = {panel.id: panel.round for _, panel in links}
-    locked_of = {panel.id: _locked(panel, link, open_rounds, now) for link, panel in links}
+    # Grand Finale: once its results are published nothing more can change from a judge's page.
+    finale_published = db.get(AppState, _awards_key("final")) is not None
+    finale_edits = sections.judges_can_edit(db)
+    locked_of = {panel.id: _locked(panel, link, open_rounds, now) or (panel.round == "final" and finale_published) for link, panel in links}
     for panel_id, team in rows:
         score = mine.get((round_of[panel_id], team.id))
         by_panel[panel_id].append(
@@ -1680,6 +1719,7 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
                 department=team.department,
                 status=team.status,
                 tent=tents.get(team.id),
+                place=places.get(team.id, ""),
                 members=members[team.id],
                 all_absent=round_of[panel_id] == "department" and presence.is_all_absent(states.get(team.id, [])),
                 my_score=_judge_score_out(score, locked_of[panel_id]) if score else None,
@@ -1706,6 +1746,7 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
                 open=panel.round in open_rounds,
                 scoring_from=scoring_window(panel)[0],
                 scoring_until=scoring_window(panel)[1],
+                edits_allowed=panel.round != "final" or finale_edits,
                 teams=by_panel[panel.id],
             )
             for link, panel in links
@@ -1784,6 +1825,8 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
         raise ApiError("This team is not allotted to your panel.", 403)
     if panel.round == "department" and results_released(db):
         raise ApiError(RELEASED_MESSAGE, 409)
+    if panel.round == "final" and db.get(AppState, _awards_key("final")) is not None:
+        raise ApiError(FINALE_PUBLISHED, 409)
     _require_scoring_time(db, panel)
     if link.locked_at is not None:
         raise ApiError(FINAL_SCORE, 409)
@@ -1807,6 +1850,8 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
     elif list(current.marks) == data.marks and current.remarks == data.remarks:
         return _judge_score_out(current)
     else:
+        if panel.round == "final" and not sections.judges_can_edit(db):
+            raise ApiError(FINALE_EDITS_OFF, 409)
         reason = _strong_reason(data.edit_reason)
         was = f"{current.total}/{rules.RUBRIC_TOTAL} {list(current.marks)}"
         current.marks, current.total, current.remarks = data.marks, total, data.remarks
@@ -1937,6 +1982,12 @@ def edit_score(db: Session, admin: Admin, panel_id: uuid.UUID, team_id: uuid.UUI
         f"{juror_email} in {room_label(panel)}: {total}/{rules.RUBRIC_TOTAL} {data.marks} (was: {was}). Reason: {reason}",
         department=panel.department,
     )
+    if panel.round == "final" and db.get(AppState, _awards_key("final")) is not None:
+        from . import finale  # finale builds on this module
+
+        # Published: the winners follow the super admin's change straight away.
+        db.flush()
+        finale.sync_awards(db, admin)
     try:
         db.commit()
     except IntegrityError as exc:

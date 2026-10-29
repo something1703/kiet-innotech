@@ -42,6 +42,12 @@ from ..schemas import (
     DeleteTeamInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
+    FinaleEntriesInput,
+    FinaleOut,
+    FinalePreviewOut,
+    FinalePublishInput,
+    FinaleSettingsInput,
+    FinaleUnpublishInput,
     FinalistBoardOut,
     FinalistSummaryOut,
     JudgeImportInput,
@@ -99,7 +105,7 @@ from ..schemas import (
     WithdrawReleaseInput,
 )
 from ..services import admin as service
-from ..services import attendance, audit, certificates, finalists, judge_accounts, judging, release, rollcall, schedule
+from ..services import attendance, audit, certificates, finale, finalists, judge_accounts, judging, release, rollcall, schedule
 from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -295,6 +301,43 @@ def export_students(admin: CurrentAdmin, db: Db, filters: Annotated[StudentFilte
 @router.get("/finalists/summary")
 def finalist_summary(admin: CurrentAdmin, db: Db, settings: AppSettings) -> FinalistSummaryOut:
     return service.finalist_summary(db, admin, settings)
+
+
+# ---------- Grand Finale section (super admins) ----------
+
+
+@router.get("/finale")
+def finale_overview(admin: CurrentAdmin, db: Db) -> FinaleOut:
+    """Every Grand Finale team with its octonorm, place, section, panel, scores and registration."""
+    return finale.overview(db, admin)
+
+
+@router.put("/finale/entries")
+def save_finale_entries(data: FinaleEntriesInput, admin: CurrentAdmin, db: Db) -> FinaleOut:
+    """Octonorm numbers, buildings and rooms, and sections for the listed teams."""
+    return finale.save_entries(db, admin, data)
+
+
+@router.put("/finale/settings")
+def finale_settings(data: FinaleSettingsInput, admin: CurrentAdmin, db: Db) -> FinaleOut:
+    """Whether Grand Finale judges may change the marks they already saved."""
+    return finale.set_settings(db, admin, data)
+
+
+@router.get("/finale/results")
+def finale_results(admin: CurrentAdmin, db: Db) -> FinalePreviewOut:
+    """Who wins each section as the marks stand, and whether that is published."""
+    return finale.preview(db, admin)
+
+
+@router.post("/finale/results/publish")
+def publish_finale(data: FinalePublishInput, admin: CurrentAdmin, db: Db) -> FinalePreviewOut:
+    return finale.publish(db, admin, data)
+
+
+@router.post("/finale/results/unpublish")
+def unpublish_finale(data: FinaleUnpublishInput, admin: CurrentAdmin, db: Db) -> FinalePreviewOut:
+    return finale.unpublish(db, admin, data)
 
 
 @router.get("/finalists")

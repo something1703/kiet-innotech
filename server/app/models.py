@@ -507,3 +507,40 @@ class MealExtra(Base):
     recipient: Mapped[str] = mapped_column(String(120))
     issued_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
     issued_by: Mapped[str] = mapped_column(String(320))
+
+
+# ---------- Grand Finale: where each team is, its section, and what the registration desk handed out ----------
+
+
+class FinaleEntry(Base):
+    """
+    A Grand Finale team's details beyond its octonorm number (final_tents): the section it is ranked in when a super admin
+    moved it (no row, or no section: the team's own, see services/finale.py), a building and room when it exhibits
+    somewhere else than its octonorm, and whether it came in as a wild card.
+    """
+
+    __tablename__ = "finale_entries"
+    __table_args__ = (
+        CheckConstraint("section IS NULL OR section IN ('category', 'coe', 'club', 'school', 'college', 'startup')", name="section"),
+    )
+
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
+    section: Mapped[str | None] = mapped_column(String(10))
+    building: Mapped[str] = mapped_column(String(60), default="", server_default=text("''"))
+    room: Mapped[str] = mapped_column(String(60), default="", server_default=text("''"))
+    wildcard: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow)
+    updated_by: Mapped[str] = mapped_column(String(320))
+
+
+class FinaleHandout(Base):
+    """The ID card and lunch coupon the registration desk handed to one registered student (paper ones; this is the record)."""
+
+    __tablename__ = "finale_handouts"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), index=True)
+    id_card_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    id_card_by: Mapped[str | None] = mapped_column(String(320))
+    coupon_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    coupon_by: Mapped[str | None] = mapped_column(String(320))

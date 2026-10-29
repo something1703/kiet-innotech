@@ -256,6 +256,7 @@ export function PanelsTab({ judging, reload }: { judging: Judging; reload: () =>
         <AllotTeamsDialog
           panel={allotting}
           candidates={[...allotting.teams, ...judging.unallotted.filter((t) => round === "final" || t.department === allotting.department)]}
+          octonorms={round === "final" ? new Map((judging.tents ?? []).map((r) => [r.team.id, r.tent])) : undefined}
           onClose={() => setAllotting(null)}
           onGone={roomGone}
           onSaved={() => {
@@ -975,16 +976,46 @@ function PanelFormDialog({
   );
 }
 
-function AllotTeamsDialog({ panel, candidates, onClose, onSaved, onGone }: { panel: Panel; candidates: TeamSummary[]; onClose: () => void; onSaved: () => void; onGone: () => void }) {
+function AllotTeamsDialog({
+  panel,
+  candidates,
+  octonorms,
+  onClose,
+  onSaved,
+  onGone,
+}: {
+  panel: Panel;
+  candidates: TeamSummary[];
+  /** Grand Finale: each team's octonorm, so a panel can be given a range of them. */
+  octonorms?: Map<string, string | null>;
+  onClose: () => void;
+  onSaved: () => void;
+  onGone: () => void;
+}) {
   const [chosen, setChosen] = useState(() => new Set(panel.teams.map((t) => t.id)));
   const [category, setCategory] = useState(0);
   const [text, setText] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const q = text.trim().toLowerCase();
-  const shown = candidates.filter(
-    (t) => (!category || t.category === category) && (!q || [t.name, t.code, t.institution, t.leaderName, t.projectTitle].some((v) => v.toLowerCase().includes(q))),
-  );
+  const octonormOf = (t: TeamSummary) => octonorms?.get(t.id) ?? null;
+  const numberOf = (t: TeamSummary) => {
+    const match = octonormOf(t)?.match(/\d+/);
+    return match ? Number(match[0]) : null;
+  };
+  const shown = candidates
+    .filter(
+      (t) =>
+        (!category || t.category === category) &&
+        (!q || [t.name, t.code, t.institution, t.leaderName, t.projectTitle, octonormOf(t) ?? ""].some((v) => v.toLowerCase().includes(q))),
+    )
+    .sort((a, b) => (octonorms ? (numberOf(a) ?? Infinity) - (numberOf(b) ?? Infinity) : 0));
+  const inRange = (t: TeamSummary) => {
+    const n = numberOf(t);
+    return n !== null && from !== "" && to !== "" && n >= Number(from) && n <= Number(to);
+  };
   const students = candidates.filter((t) => chosen.has(t.id)).reduce((sum, t) => sum + t.memberCount, 0);
   const toggle = (id: string, on: boolean) =>
     setChosen((current) => {
@@ -1048,6 +1079,20 @@ function AllotTeamsDialog({ panel, candidates, onClose, onSaved, onGone }: { pan
             </Select>
           </Field>
         </div>
+        {octonorms && (
+          <div className="flex flex-wrap items-end gap-2 rounded-xl bg-surface p-3 ring-1 ring-line">
+            <Field label="Octonorms from" htmlFor="allot-from" className="w-32">
+              <Input id="allot-from" inputMode="numeric" value={from} onChange={(e) => setFrom(e.target.value.replace(/\D/g, ""))} placeholder="3" />
+            </Field>
+            <Field label="to" htmlFor="allot-to" className="w-32">
+              <Input id="allot-to" inputMode="numeric" value={to} onChange={(e) => setTo(e.target.value.replace(/\D/g, ""))} placeholder="12" />
+            </Field>
+            <Button size="sm" onClick={() => candidates.filter(inRange).forEach((t) => toggle(t.id, true))} disabled={!candidates.some(inRange)}>
+              Add octonorms {from || "…"}–{to || "…"} ({candidates.filter(inRange).length})
+            </Button>
+            <p className="basis-full text-xs text-muted">Only teams not on another panel are listed. Teams without an octonorm get one on the Teams &amp; octonorms tab.</p>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 text-sm">
           <Button size="sm" variant="secondary" onClick={() => shown.forEach((t) => toggle(t.id, true))} disabled={shown.length === 0}>
             Select all shown ({shown.length})
@@ -1065,6 +1110,7 @@ function AllotTeamsDialog({ panel, candidates, onClose, onSaved, onGone }: { pan
                 <Th className="w-10">
                   <span className="sr-only">Allotted</span>
                 </Th>
+                {octonorms && <Th className="w-20">Octonorm</Th>}
                 <Th>Team</Th>
                 <Th>Project</Th>
                 <Th>Category</Th>
@@ -1078,6 +1124,7 @@ function AllotTeamsDialog({ panel, candidates, onClose, onSaved, onGone }: { pan
                   <td className={tdClass}>
                     <Checkbox label={`Allot ${t.name}`} checked={chosen.has(t.id)} onChange={(on) => toggle(t.id, on)} />
                   </td>
+                  {octonorms && <td className={`${tdClass} font-mono font-bold`}>{octonormOf(t) ?? "—"}</td>}
                   <td className={tdClass}>
                     <span className="font-semibold text-navy-900">{t.name}</span>
                     <span className="block text-xs text-muted">
@@ -1445,7 +1492,7 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
       title={`Marks for ${team.name}`}
       description={`${roomLabel(panel)} · Category ${team.category}: ${categoryTitle(team.category)}. ${
         isSuper
-          ? "You can change or enter marks at any time. The old marks stay in the activity log."
+          ? "You can change or enter marks at any time."
           : "You can change marks during this room's slot and buffer. Your reason is shown to the super admins with the old marks."
       }`}
       onClose={onClose}
@@ -1484,18 +1531,17 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
         <Field label="Remarks" htmlFor="change-remarks">
           <Textarea id="change-remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} maxLength={1000} />
         </Field>
-        <Field
-          label={isSuper ? "Reason (optional)" : "Reason for the change"}
-          htmlFor="change-reason"
-          hint={
-            isSuper
-              ? "Not needed for a super admin. The change is logged either way."
-              : `Required: say what was wrong, in a sentence (at least ${MIN_REASON_LENGTH} characters). Shown in the activity log with the old and new marks.`
-          }
-          error={reasonError ?? undefined}
-        >
-          <Textarea id="change-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="e.g. The judge wrote 3 instead of 5 for Ease of Use on the paper sheet" />
-        </Field>
+        {/* A super admin is not asked for a reason. */}
+        {!isSuper && (
+          <Field
+            label="Reason for the change"
+            htmlFor="change-reason"
+            hint={`Required: say what was wrong, in a sentence (at least ${MIN_REASON_LENGTH} characters). Shown in the activity log with the old and new marks.`}
+            error={reasonError ?? undefined}
+          >
+            <Textarea id="change-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="e.g. The judge wrote 3 instead of 5 for Ease of Use on the paper sheet" />
+          </Field>
+        )}
         {error && <Notice tone="error">{error}</Notice>}
       </div>
     </Dialog>

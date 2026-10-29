@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Award, Ban, CalendarClock, CircleCheck, CircleHelp, CircleX, Clock, Download, Frown, Hourglass, MapPin, PartyPopper, Play, QrCode, Trophy } from "lucide-react";
+import { ArrowRight, Award, Ban, BadgeCheck, CalendarClock, CircleCheck, CircleHelp, CircleX, Clock, Download, Frown, Hourglass, MapPin, PartyPopper, Play, QrCode, Trophy, UserCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { certificateFileNames } from "@/lib/certificate-defaults";
 import { saveCertificate } from "@/lib/certificate-download";
 import { categories } from "@/lib/content";
 import { attendanceEnabled } from "@/lib/features";
-import type { EventPass, ResultCard } from "@/lib/types";
+import type { EventPass, FinaleCard, ResultCard } from "@/lib/types";
 import { usePortal } from "./PortalProvider";
 import { ResultReveal, type RevealResult } from "./ResultReveal";
 
@@ -34,6 +34,7 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
   const { me, team } = usePortal();
   const [pass, setPass] = useState<EventPass | null>(null);
   const [results, setResults] = useState<ResultCard[]>([]);
+  const [finale, setFinale] = useState<FinaleCard | null>(null);
   const [manual, setManual] = useState<RevealResult | null>(null);
   const [closedKey, setClosedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,14 +84,22 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
   useEffect(() => {
     let cancelled = false;
     api.getMyPass().then((p) => !cancelled && setPass(p), () => undefined);
-    api.getMyResults().then((r) => !cancelled && setResults(r.cards), () => undefined);
+    api.getMyResults().then(
+      (r) => {
+        if (cancelled) return;
+        setResults(r.cards);
+        setFinale(r.finale ?? null);
+      },
+      () => undefined,
+    );
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const rounds = pass?.rounds ?? [];
-  if (rounds.length === 0 && results.length === 0) return null;
+  // The Grand Finale card below says where the team is (once registered), so the pass's finale line is not repeated.
+  const rounds = (pass?.rounds ?? []).filter((r) => !(finale && r.round === "final"));
+  if (rounds.length === 0 && results.length === 0 && !finale) return null;
 
   return (
     <div className="space-y-4">
@@ -102,6 +111,7 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
           downloadNote="Certificates are given to students who were marked present at the department round."
         />
       )}
+      {finale && <FinaleOctonorm card={finale} />}
       {results.map((card) => {
         const looked = looks[card.status];
         const box = looked.box;
@@ -224,6 +234,63 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
         </section>
       ))}
     </div>
+  );
+}
+
+/**
+ * The Grand Finale on the day: register at the desk at the entrance of the ground first (each member in person); once
+ * registered, the octonorm number shows here in big letters, with the building and room if the team was moved.
+ */
+function FinaleOctonorm({ card }: { card: FinaleCard }) {
+  if (!card.registered) {
+    return (
+      <section aria-label="Register at the Registration Desk" className="rounded-3xl bg-navy-900 p-5 text-white ring-1 ring-navy-900 sm:p-6">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Grand Finale · 30 October</p>
+        <div className="mt-2 flex items-start gap-4">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+            <UserCheck size={24} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-display text-2xl font-bold">Register at the Registration Desk</h2>
+            <p className="mt-1 text-sm text-white/85">
+              The Registration Desk is at the entrance of the ground. Every member of your team registers in person; you get your ID card and lunch
+              coupon there. Your octonorm number appears on this page as soon as you are registered.
+            </p>
+            {card.teamMembers > 1 && (
+              <p className="mt-3 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
+                {card.teamRegistered} of {card.teamMembers} of your team registered
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section aria-label="Your octonorm" className="overflow-hidden rounded-3xl bg-gradient-to-br from-accent-500 to-amber-400 p-5 text-white ring-1 ring-amber-300 sm:p-6">
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/85">
+        <BadgeCheck size={16} aria-hidden="true" />
+        Registered for the Grand Finale
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-2">
+        <div>
+          <p className="text-sm font-semibold text-white/85">Your octonorm</p>
+          <p className="font-display text-7xl font-bold leading-none tabular-nums sm:text-8xl">{card.octonorm ?? "—"}</p>
+        </div>
+        {card.place && (
+          <p className="flex items-center gap-2 pb-2 font-display text-2xl font-bold">
+            <MapPin size={22} aria-hidden="true" />
+            {card.place}
+          </p>
+        )}
+      </div>
+      <p className="mt-3 text-sm text-white/90">
+        {card.octonorm || card.place
+          ? `Set up your project ${card.place ? `at ${card.place}` : `at octonorm ${card.octonorm}`} and stay there: the judges come to you.`
+          : "Your octonorm is being allotted. Ask at the Registration Desk."}
+        {card.registeredAt && ` Registered at ${time.format(new Date(card.registeredAt))}.`}
+      </p>
+    </section>
   );
 }
 

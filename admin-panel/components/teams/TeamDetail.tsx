@@ -215,7 +215,8 @@ function TeamView({ id }: { id: string }) {
       throw error;
     }),
   );
-  const history = useQuery(team.data ? `team-audit:${id}` : null, () => api.audit({ teamId: id, limit: 100 }));
+  // The activity log is for super admins only.
+  const history = useQuery(team.data && isSuper ? `team-audit:${id}` : null, () => api.audit({ teamId: id, limit: 100 }));
   const [action, setAction] = useState<Action | null>(null);
   const [banMembers, setBanMembers] = useState(true);
   const [unbanMembers, setUnbanMembers] = useState(true);
@@ -449,7 +450,7 @@ function TeamView({ id }: { id: string }) {
             {t.rejectedReason ? `, with this reason: ${t.rejectedReason}` : ""}.
           </Notice>
         )}
-        {done && <Notice tone="success">{done} The change is recorded in the history below.</Notice>}
+        {done && <Notice tone="success">{done}{isSuper ? " The change is recorded in the history below." : ""}</Notice>}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -600,12 +601,14 @@ function TeamView({ id }: { id: string }) {
         )}
       </section>
 
-      <section aria-labelledby="team-history">
-        <SectionTitle id="team-history" title="History" meta="Audit log for this team" />
-        {history.error && <Notice tone="error">{history.error}</Notice>}
-        {!history.data && !history.error && <Loading label="Loading history" />}
-        {history.data && (history.data.length ? <AuditList entries={history.data} showTeam={false} /> : <EmptyState title="No history yet" />)}
-      </section>
+      {isSuper && (
+        <section aria-labelledby="team-history">
+          <SectionTitle id="team-history" title="History" meta="Audit log for this team" />
+          {history.error && <Notice tone="error">{history.error}</Notice>}
+          {!history.data && !history.error && <Loading label="Loading history" />}
+          {history.data && (history.data.length ? <AuditList entries={history.data} showTeam={false} /> : <EmptyState title="No history yet" />)}
+        </section>
+      )}
 
       <p>
         <ButtonLink href="/teams" size="sm">

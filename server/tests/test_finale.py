@@ -68,14 +68,16 @@ def test_the_department_winners_become_the_locked_finalists(judging, as_user, mo
     assert finale == {teams["cse_a"]["code"], teams["cse_b"]["code"]}
     a, e = as_user("a@kiet.edu"), as_user("e@kiet.edu")
     finalist = next(c for c in a.get("/me/results").json()["cards"] if c["status"] == "finalist")
-    assert "Watch this page for your stall number" in finalist["message"]
+    assert "Registration Desk" in finalist["message"]
     assert "finalist" not in [c["status"] for c in e.get("/me/results").json()["cards"]]
 
-    # With a stall, the finalist card and the pass name it.
+    # With an octonorm, the dashboard and the pass show it only once the student has registered at the desk.
     assert root.put("/admin/judging/final/tents", {"tents": [{"team_id": teams["cse_a"]["id"], "tent": "3"}]}).status_code == 200
     finalist = next(c for c in a.get("/me/results").json()["cards"] if c["status"] == "finalist")
-    assert "Your stall is 3." in finalist["message"]
-    assert [r["tent"] for r in a.get("/me/pass").json()["rounds"] if r["round"] == "final"] == ["3"]
+    assert "stall is" not in finalist["message"] and "Registration Desk" in finalist["message"]
+    card = a.get("/me/results").json()["finale"]
+    assert (card["registered"], card["octonorm"], card["team_registered"]) == (False, None, 0)
+    assert [r["tent"] for r in a.get("/me/pass").json()["rounds"] if r["round"] == "final"] == [None]
 
 
 def test_a_winner_disqualified_after_the_release_is_left_out(judging, monkeypatch):  # noqa: F811

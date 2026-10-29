@@ -498,6 +498,11 @@ class CompleteTeamInput(TeamInput):
     institution: str = Field(default="", max_length=200)
     city: str = Field(default="", max_length=100)
     members: list[CompleteTeamMember] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
+    # A wild card for the Grand Finale: it takes part straight away, at this octonorm (or building and room).
+    wildcard: bool = False
+    octonorm: str | None = Field(default=None, max_length=12)
+    building: str = Field(default="", max_length=60)
+    room: str = Field(default="", max_length=60)
 
     @field_validator("abstract")
     @classmethod
@@ -1444,6 +1449,8 @@ class ResultCard(BaseModel):
 
 class ResultsOut(BaseModel):
     cards: list[ResultCard]
+    # Grand Finale teams: the octonorm card (register at the desk, then the octonorm shows).
+    finale: "FinaleCardOut | None" = None
 
 
 class ScoreInput(Input):
@@ -1671,6 +1678,8 @@ class JudgeTeamOut(BaseModel):
     department: str | None
     status: str
     tent: str | None
+    # Grand Finale: the building and room when the team is not at its octonorm, e.g. "B Block · Room 204".
+    place: str = ""
     members: list[JudgeMemberOut]
     # Every member is absent: the team scores 0 and cannot be marked.
     all_absent: bool = False
@@ -1701,6 +1710,8 @@ class JudgePanelOut(BaseModel):
     # ...and, for a department room, from its slot's start until the slot's end plus the extra minutes.
     scoring_from: datetime | None = None
     scoring_until: datetime | None = None
+    # Grand Finale: the judge may change marks already saved (a super admin's switch). Always true in the department round.
+    edits_allowed: bool = True
     teams: list[JudgeTeamOut]
 
 
@@ -1832,6 +1843,9 @@ class DeskMemberOut(BaseModel):
     checked_in_by: str | None
     # Meal key -> when the coupon was given.
     coupons: dict[str, datetime]
+    # The paper ID card and lunch coupon the registration desk handed over (registered students only).
+    id_card_at: datetime | None = None
+    coupon_at: datetime | None = None
 
 
 class DeskTeamOut(BaseModel):
@@ -1845,6 +1859,9 @@ class DeskTeamOut(BaseModel):
     department: str | None
     route: str
     tent: str | None
+    # Where the team exhibits when it is not at its octonorm, e.g. "B Block · Room 204".
+    place: str = ""
+    section: str = ""
     members: list[DeskMemberOut]
 
 
@@ -1871,6 +1888,8 @@ class DeskOut(BaseModel):
     teams_checked_in: int
     students: int
     students_checked_in: int
+    id_cards: int = 0
+    coupons: int = 0
     meals: list[MealOut]
     extras: list[MealExtraOut]
     # Super admins set up meals and take coupons back; desk volunteers check in and give coupons.
@@ -1880,6 +1899,19 @@ class DeskOut(BaseModel):
 
 class CheckInInput(Input):
     user_ids: list[uuid.UUID] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
+
+
+class RegisterMemberInput(Input):
+    user_id: uuid.UUID
+    present: bool
+    id_card: bool = False
+    coupon: bool = False
+
+
+class RegisterInput(Input):
+    """The registration desk: who of the team is here, and who got their ID card and lunch coupon."""
+
+    members: list[RegisterMemberInput] = Field(min_length=1, max_length=rules.TEAM_MAX_SIZE)
 
 
 class CheckOutInput(Input):
@@ -1912,3 +1944,107 @@ class MealExtraInput(Input):
     meal: str = Field(min_length=1, max_length=40)
     quantity: int = Field(ge=1, le=500)
     recipient: str = Field(min_length=2, max_length=120)
+
+
+# ---------- Grand Finale section (super admins) ----------
+
+
+class FinaleTeamOut(BaseModel):
+    team: TeamSummaryOut
+    # The octonorm (stall) number, and the building and room when the team exhibits somewhere else.
+    octonorm: str | None
+    building: str
+    room: str
+    # The section the team is ranked in, and the one it has by itself (a super admin can move it).
+    section: str
+    default_section: str
+    wildcard: bool
+    panel_id: uuid.UUID | None
+    panel: str | None
+    judges: int
+    scores: int
+    members: int
+    # Members the registration desk registered (present), and the ID cards and lunch coupons it handed out.
+    registered: int
+    id_cards: int
+    coupons: int
+
+
+class FinaleOut(BaseModel):
+    teams: list[FinaleTeamOut]
+    sections: dict[str, str]
+    round_open: bool
+    # The super admin's switch: Grand Finale judges may change marks they already saved.
+    judges_can_edit: bool
+    published_at: datetime | None
+    published_by: str | None
+
+
+class FinaleEntryInput(Input):
+    team_id: uuid.UUID
+    # Null or empty clears the octonorm.
+    octonorm: str | None = Field(default=None, max_length=12)
+    building: str = Field(default="", max_length=60)
+    room: str = Field(default="", max_length=60)
+    # Null: the team's own section.
+    section: rules.FinaleSection | None = None
+
+
+class FinaleEntriesInput(Input):
+    entries: list[FinaleEntryInput] = Field(min_length=1, max_length=500)
+
+
+class FinaleSettingsInput(Input):
+    judges_can_edit: bool
+
+
+class FinaleWinnerOut(BaseModel):
+    place: int
+    team_id: uuid.UUID
+    team_name: str
+    team_code: str
+    octonorm: str | None
+    average: float | None
+    amount: int
+
+
+class FinaleGroupOut(BaseModel):
+    key: str
+    label: str
+    teams: int
+    # Teams not yet scored by every judge of their panel.
+    not_ranked: int
+    winners: list[FinaleWinnerOut]
+    declared_by_hand: bool
+    # Two of the named places, or the last one and the next team, are level (average, innovation, query addressing).
+    tie_at_cut: bool
+
+
+class FinalePreviewOut(BaseModel):
+    published_at: datetime | None
+    published_by: str | None
+    round_open: bool
+    groups: list[FinaleGroupOut]
+
+
+class FinalePublishInput(Input):
+    confirm: str = Field(max_length=20)
+
+
+class FinaleUnpublishInput(Input):
+    reason: str = Field(default="", max_length=500)
+
+
+class FinaleCardOut(BaseModel):
+    """A Grand Finale student's own card: register at the desk first; the octonorm shows once they are registered."""
+
+    registered: bool
+    registered_at: datetime | None = None
+    octonorm: str | None = None
+    # Where the team exhibits when not at its octonorm, e.g. "B Block · Room 204". Shown once registered, like the octonorm.
+    place: str = ""
+    team_members: int
+    team_registered: int
+
+
+ResultsOut.model_rebuild()

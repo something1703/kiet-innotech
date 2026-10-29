@@ -28,6 +28,8 @@ const kinds: { value: ActivityKind; label: string }[] = [
   { value: "finalists", label: "Finalist nominations" },
   { value: "results", label: "Results" },
   { value: "judging", label: "Judging" },
+  { value: "finale", label: "Grand Finale (octonorms, publishing)" },
+  { value: "desk", label: "Registration desk" },
   ...(attendanceEnabled ? [{ value: "attendance" as ActivityKind, label: "Attendance" }] : []),
   { value: "schedule", label: "Schedule" },
   { value: "admin", label: "Admins" },

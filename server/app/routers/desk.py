@@ -20,6 +20,7 @@ from ..schemas import (
     MealInput,
     MealUpdateInput,
     ReasonInput,
+    RegisterInput,
 )
 from ..services import desk
 
@@ -49,6 +50,12 @@ def export(admin: DeskAdmin, db: Db) -> list[DeskTeamOut]:
 @router.post("/teams/{team_id}/check-in")
 def check_in(team_id: uuid.UUID, data: CheckInInput, admin: DeskAdmin, db: Db) -> DeskTeamOut:
     return desk.check_in(db, admin, team_id, data)
+
+
+@router.put("/teams/{team_id}/registration")
+def register(team_id: uuid.UUID, data: RegisterInput, admin: DeskAdmin, db: Db) -> DeskTeamOut:
+    """Who of the team is here (registered), and who got their ID card and lunch coupon."""
+    return desk.register(db, admin, team_id, data)
 
 
 @router.post("/teams/{team_id}/check-out")

@@ -139,11 +139,8 @@ def test_marking_by_hand_and_undoing(judging, as_user):  # noqa: F811
     log = root.get("/admin/activity", params={"kind": "attendance", "page_size": 100}).json()["items"]
     assert [e["action"] for e in log][:3] == ["attendance.marked", "attendance.unmarked", "attendance.marked"]
     assert "Phone battery dead" in log[2]["detail"] and "Marked the wrong student" in log[1]["detail"]
-    # The CSE admin sees these entries; the IT admin does not.
-    assert {e["action"] for e in cse.get("/admin/activity", params={"kind": "attendance"}).json()["items"]} == {
-        "attendance.marked",
-        "attendance.unmarked",
-    }
+    # The activity log is for super admins only.
+    assert cse.get("/admin/activity", params={"kind": "attendance"}).status_code == 403
 
 
 # ---------- Finalist quotas ----------

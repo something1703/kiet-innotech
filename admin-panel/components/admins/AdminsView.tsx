@@ -85,7 +85,7 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
             <option value="school_admin">{roleLabels.school_admin} (schools only)</option>
             <option value="outside_admin">{roleLabels.outside_admin} (other colleges and schools)</option>
             <option value="startup_admin">{roleLabels.startup_admin} (startups only)</option>
-            <option value="desk">{roleLabels.desk} (Grand Finale check-in and food coupons only)</option>
+            <option value="desk">{roleLabels.desk} (Grand Finale registration, ID cards and lunch coupons only)</option>
             <option value="super_admin">{roleLabels.super_admin}</option>
           </Select>
         </Field>
@@ -105,7 +105,7 @@ function AddAdminForm({ onAdded }: { onAdded: (admin: AdminUser) => void }) {
                     : role === "startup_admin"
                       ? "Sees only startups."
                       : role === "desk"
-                        ? "Uses only the event desk: checks in Grand Finale teams and gives food coupons."
+                        ? "Uses only the registration desk: registers Grand Finale students and records their ID cards and lunch coupons."
                         : "Required for department admins. Choose COE KIET / Technical Club KIET for the technical clubs' admin."
           }
         >
@@ -209,7 +209,7 @@ export function AdminsView() {
                     <td className={tdClass}>
                       <Pill tone={admin.role === "super_admin" ? "navy" : admin.role === "outside_admin" || admin.role === "college_admin" || admin.role === "school_admin" ? "orange" : admin.role === "startup_admin" ? "violet" : "cyan"}>{roleLabels[admin.role]}</Pill>
                     </td>
-                    <td className={tdClass}>{admin.department ? departmentLabel(admin.department) : <span className="text-muted">{admin.role === "outside_admin" ? "Other colleges & schools" : admin.role === "startup_admin" ? "Startups" : admin.role === "desk" ? "Event desk" : "All"}</span>}</td>
+                    <td className={tdClass}>{admin.department ? departmentLabel(admin.department) : <span className="text-muted">{admin.role === "outside_admin" ? "Other colleges & schools" : admin.role === "startup_admin" ? "Startups" : admin.role === "desk" ? "Registration desk" : "All"}</span>}</td>
                     <td className={`${tdClass} whitespace-nowrap text-muted`}>{configured ? "Server configuration" : formatDate(admin.addedAt)}</td>
                     <td className={`${tdClass} text-right`}>
                       {self ? (

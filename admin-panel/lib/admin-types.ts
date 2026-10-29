@@ -99,7 +99,7 @@ export type AuditAction =
   | "team.rejected"
   | "team.rejection_revoked";
 
-export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging" | "attendance" | "student";
+export type ActivityKind = "team" | "member" | "invitation" | "finalists" | "results" | "admin" | "schedule" | "judging" | "attendance" | "student" | "finale" | "desk";
 
 export type ActivityQuery = {
   kind?: ActivityKind;
@@ -410,6 +410,11 @@ export type CompleteTeamInput = {
   institution: string;
   city: string;
   members: CompleteTeamMember[];
+  /** A Grand Finale wild card: takes part straight away, at this octonorm (or building and room). */
+  wildcard?: boolean;
+  octonorm?: string | null;
+  building?: string;
+  room?: string;
 };
 
 /** An organiser creates a team for registered students, whether or not registration is open. */
@@ -849,6 +854,8 @@ export type JudgeTeam = {
   department: string | null;
   status: TeamStatus;
   tent: string | null;
+  /** Grand Finale: the building and room when the team is not at its octonorm, e.g. "B Block · Room 204". */
+  place: string;
   members: { userId: string; attendance: AttendanceState; fullName: string; role: "leader" | "member"; year: number; course: string; department: string | null }[];
   /** Every student is absent: the team scores 0 and cannot be marked. */
   allAbsent: boolean;
@@ -879,6 +886,8 @@ export type JudgePanel = {
   canMarkAttendance: boolean;
   /** The judge locked all their marks here, or the room's time is over. */
   locked: boolean;
+  /** Grand Finale: the judge may change marks already saved (a super admin's switch). Always true in the department round. */
+  editsAllowed: boolean;
   teams: JudgeTeam[];
 };
 
@@ -1008,6 +1017,9 @@ export type DeskMember = {
   checkedInBy: string | null;
   /** Meal key -> when the coupon was given. */
   coupons: Record<string, string>;
+  /** The paper ID card and lunch coupon the registration desk handed over (registered students only). */
+  idCardAt: string | null;
+  couponAt: string | null;
 };
 
 export type DeskTeam = {
@@ -1021,6 +1033,9 @@ export type DeskTeam = {
   department: string | null;
   route: TeamRoute;
   tent: string | null;
+  /** Where the team exhibits when not at its octonorm, e.g. "B Block · Room 204". */
+  place: string;
+  section: FinaleSection;
   members: DeskMember[];
 };
 
@@ -1033,6 +1048,8 @@ export type Desk = {
   teamsCheckedIn: number;
   students: number;
   studentsCheckedIn: number;
+  idCards: number;
+  coupons: number;
   meals: Meal[];
   extras: MealExtra[];
   /** Super admins set up meals and take coupons back; desk volunteers check in and give coupons. */
@@ -1041,3 +1058,59 @@ export type Desk = {
 };
 
 export type CouponsResult = { team: DeskTeam; given: string[]; already: string[]; notCheckedIn: string[] };
+
+// ---------- Grand Finale section (super admins) ----------
+
+export type FinaleSection = "category" | "coe" | "club" | "school" | "college" | "startup";
+
+export type FinaleTeam = {
+  team: TeamSummary;
+  /** The octonorm (stall) number, and the building and room when the team exhibits somewhere else. */
+  octonorm: string | null;
+  building: string;
+  room: string;
+  /** The section the team is ranked in, and the one it has by itself. */
+  section: FinaleSection;
+  defaultSection: FinaleSection;
+  wildcard: boolean;
+  panelId: string | null;
+  panel: string | null;
+  judges: number;
+  scores: number;
+  members: number;
+  /** Members the registration desk registered, and the ID cards and lunch coupons it handed out. */
+  registered: number;
+  idCards: number;
+  coupons: number;
+};
+
+export type Finale = {
+  teams: FinaleTeam[];
+  sections: Record<FinaleSection, string>;
+  roundOpen: boolean;
+  /** Grand Finale judges may change the marks they already saved. */
+  judgesCanEdit: boolean;
+  publishedAt: string | null;
+  publishedBy: string | null;
+};
+
+export type FinaleEntryInput = { teamId: string; octonorm: string | null; building: string; room: string; section: FinaleSection | null };
+
+export type FinaleWinner = { place: number; teamId: string; teamName: string; teamCode: string; octonorm: string | null; average: number | null; amount: number };
+
+export type FinaleGroup = {
+  key: string;
+  label: string;
+  teams: number;
+  /** Teams not yet scored by every judge of their panel. */
+  notRanked: number;
+  winners: FinaleWinner[];
+  declaredByHand: boolean;
+  /** The first team after the named places is level with the last one. */
+  tieAtCut: boolean;
+};
+
+export type FinaleResults = { publishedAt: string | null; publishedBy: string | null; roundOpen: boolean; groups: FinaleGroup[] };
+
+/** The registration desk: who of the team is here, and who got their ID card and lunch coupon. */
+export type RegistrationInput = { userId: string; present: boolean; idCard: boolean; coupon: boolean };
