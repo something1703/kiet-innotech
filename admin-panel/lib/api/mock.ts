@@ -1484,6 +1484,7 @@ export const mockApi: AdminApi = {
   deskRegister: () => Promise.reject(new ApiError(501, DESK_LIVE_ONLY)),
   finale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   saveFinaleEntries: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  previewOctonormImport: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   setFinaleJudgeEdits: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   finaleResults: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   publishFinale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),

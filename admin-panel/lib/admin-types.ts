@@ -1117,3 +1117,26 @@ export type FinaleResults = { publishedAt: string | null; publishedBy: string | 
 
 /** The registration desk: who of the team is here, and who got their ID card and lunch coupon. */
 export type RegistrationInput = { userId: string; present: boolean; idCard: boolean; coupon: boolean };
+
+// ---------- Importing the octonorm list (super admins) ----------
+
+export type OctonormCandidate = { team: TeamSummary; octonorm: string | null; score: number };
+
+export type OctonormImportRow = {
+  octonorm: string;
+  /** The sheet's section: category (department winners), coe, club, school, college or startup. */
+  section: FinaleSection;
+  category: number | null;
+  label: string;
+  code: string | null;
+  /** same: already has this octonorm; change: would get it; unmatched: choose the team; not_in_finale: not taking part. */
+  status: "same" | "change" | "unmatched" | "not_in_finale";
+  team: TeamSummary | null;
+  current: string | null;
+  sectionNow: FinaleSection | null;
+  heldBy: string | null;
+  candidates: OctonormCandidate[];
+  note: string | null;
+};
+
+export type OctonormImport = { rows: OctonormImportRow[]; notInSheet: OctonormCandidate[] };

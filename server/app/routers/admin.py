@@ -63,6 +63,7 @@ from ..schemas import (
     MarkStudentsInput,
     MarkStudentsOut,
     NominationsInput,
+    OctonormImportOut,
     OpenNowInput,
     PanelInput,
     PanelJurorsInput,
@@ -105,7 +106,19 @@ from ..schemas import (
     WithdrawReleaseInput,
 )
 from ..services import admin as service
-from ..services import attendance, audit, certificates, finale, finalists, judge_accounts, judging, release, rollcall, schedule
+from ..services import (
+    attendance,
+    audit,
+    certificates,
+    finale,
+    finalists,
+    judge_accounts,
+    judging,
+    octonorm_import,
+    release,
+    rollcall,
+    schedule,
+)
 from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -321,6 +334,19 @@ def finale_overview(admin: CurrentAdmin, db: Db) -> FinaleOut:
 def save_finale_entries(data: FinaleEntriesInput, admin: CurrentAdmin, db: Db) -> FinaleOut:
     """Octonorm numbers, buildings and rooms, and sections for the listed teams."""
     return finale.save_entries(db, admin, data)
+
+
+# Caddy caps request bodies at 1 MB (deploy/Caddyfile); the octonorm list is a few tens of KB.
+MAX_IMPORT_BYTES = 900 * 1024
+
+
+@router.post("/finale/octonorm-import")
+async def preview_octonorm_import(admin: CurrentAdmin, db: Db, file: Annotated[UploadFile, File()]) -> OctonormImportOut:
+    """The organisers' octonorm list (Excel): every stall matched to a team, for the super admin to check. Saves nothing."""
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        raise ApiError("The file is larger than 900 KB. Upload the octonorm list only.", 413)
+    return octonorm_import.preview(db, admin, data)
 
 
 @router.put("/finale/settings")

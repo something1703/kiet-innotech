@@ -299,3 +299,92 @@ def test_registration_desk_volunteers_sign_in_with_email_and_password(world, cli
     # Removed from the admins: the session no longer opens the desk.
     assert root.delete("/admin/admins/desk.two@gmail.com").status_code == 204
     assert client.get("/desk", headers=headers).status_code == 403
+
+
+def octonorm_sheet(rows: list[list[str]]) -> bytes:
+    """A small .xlsx shaped like the organisers' octonorm list (sheet "List", inline text cells)."""
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    def cell(ref, value):
+        if value.isdigit():
+            return f'<c r="{ref}"><v>{value}</v></c>'
+        return f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+
+    body = "".join(
+        f'<row r="{i}">' + "".join(cell(f"{chr(66 + j)}{i}", v) for j, v in enumerate(row) if v) + "</row>" for i, row in enumerate(rows, 1)
+    )
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    rel = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("xl/workbook.xml", f'<workbook {ns} {rel}><sheets><sheet name="List" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        z.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Target="worksheets/sheet1.xml" Type="worksheet"/></Relationships>',
+        )
+        z.writestr("xl/worksheets/sheet1.xml", f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>")
+    return out.getvalue()
+
+
+def test_the_octonorm_list_is_imported_from_the_organisers_sheet(judging, settings):  # noqa: F811
+    teams = finale_teams(judging, settings)
+    root = judging["root"]
+    a, b, college, school = (teams[k] for k in ("cse_a", "cse_b", "college", "school"))
+    sheet = octonorm_sheet(
+        [
+            ["LIST OF OCTONORMS STALL – INNOTECH’26 GRAND FINALE (30 October 2026)"],
+            ["Number", "Organiser", "Desk"],
+            ["1", "Innotech 26", "Registration Desk"],
+            ["(KIET Departmental Winners)"],
+            ["Category 1: Smart Solutions, Smarter Society"],
+            ["Number", "University", "Team name & ID"],
+            ["3", "KIET - CSE", f"CSE Alpha ({a['code']})"],
+            ["4", "KIET - CSE", f"Not The Same Name ({b['code']})"],
+            ["5", "KIET - CSE", f"Gamma Squad ({teams['cse_c']['code']})"],
+            ["6", "KIET - CSE", f"Totally Different ({teams['school']['code']})"],
+            ["Innovation at School"],
+            ["Number", "School", "Team No."],
+            ["154", "School Teams", "DELHI PUBLIC SCHOOL, Ghaziabad"],
+            ["Innovation at Other Colleges"],
+            ["Number", "College", "Team No."],
+            ["164", "Outside College Teams", "ABES Engineering College"],
+            ["165", "Outside College Teams", "Somewhere Else Entirely"],
+            ["Reserve / Spare"],
+            ["186", "Innotech", "Reserve (KIET team)"],
+        ]
+    )
+
+    def upload(who, data, name="list.xlsx"):
+        return who.client.post(
+            "/admin/finale/octonorm-import", headers=who.headers("/admin/finale/octonorm-import"), files={"file": (name, data)}
+        )
+
+    assert upload(judging["cse"], sheet).status_code == 403
+    assert upload(root, b"not a spreadsheet").status_code == 422
+    entries(root, {"team_id": school["id"], "octonorm": "999"})
+    preview = upload(root, sheet)
+    assert preview.status_code == 200, preview.text
+    rows = {r["octonorm"]: r for r in preview.json()["rows"]}
+    assert list(rows) == ["3", "4", "5", "6", "154", "164", "165"]  # the desk and the reserve are not team stalls
+    assert (rows["3"]["status"], rows["3"]["team"]["id"], rows["3"]["note"]) == ("change", a["id"], None)
+    assert rows["4"]["team"]["id"] == b["id"] and "named 'CSE Beta'" in rows["4"]["note"]
+    # CSE Gamma was not a finalist: the sheet is wrong or the site is, and the page says so.
+    assert rows["5"]["status"] == "not_in_finale"
+    # A code whose team fits neither the name nor the category (a typo in the sheet) is offered, never chosen by itself.
+    assert (rows["6"]["status"], rows["6"]["team"]) == ("unmatched", None)
+    assert [c["team"]["id"] for c in rows["6"]["candidates"]] == [school["id"]] and "check the code" in rows["6"]["note"]
+    # Schools and colleges are matched by name; a name that matches nothing is left to choose.
+    assert (rows["154"]["status"], rows["154"]["team"]["id"], rows["154"]["current"]) == ("change", school["id"], "999")
+    assert rows["164"]["team"]["id"] == college["id"]
+    assert rows["165"]["status"] == "unmatched" and rows["165"]["team"] is None
+    assert preview.json()["not_in_sheet"] == []
+
+    # Saved through the usual save: afterwards the same sheet shows everything in place. Nothing was saved by the preview.
+    assert {t["team"]["id"]: t["octonorm"] for t in root.get("/admin/finale").json()["teams"]}[school["id"]] == "999"
+    chosen = [rows[n] for n in ("3", "4", "154", "164")]
+    assert entries(root, *({"team_id": r["team"]["id"], "octonorm": r["octonorm"]} for r in chosen)).status_code == 200
+    again = {r["octonorm"]: r for r in upload(root, sheet).json()["rows"]}
+    assert [again[n]["status"] for n in ("3", "4", "154", "164")] == ["same"] * 4

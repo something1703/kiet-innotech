@@ -2051,3 +2051,38 @@ class FinaleCardOut(BaseModel):
 
 
 ResultsOut.model_rebuild()
+
+
+# ---------- Importing the octonorm list (super admins) ----------
+
+
+class OctonormCandidateOut(BaseModel):
+    team: TeamSummaryOut
+    octonorm: str | None
+    # Words the sheet's name shares with the team's name, project or institution.
+    score: int
+
+
+class OctonormImportRowOut(BaseModel):
+    octonorm: str
+    # The sheet's section: category (department winners), coe, club, school, college or startup.
+    section: str
+    category: int | None
+    label: str
+    code: str | None
+    # same: the team already has this octonorm; change: it would get it; unmatched: choose the team;
+    # not_in_finale: the sheet names a team that is not taking part in the Grand Finale.
+    status: Literal["same", "change", "unmatched", "not_in_finale"]
+    team: TeamSummaryOut | None = None
+    # The team's octonorm now, its section now, and who holds this octonorm now.
+    current: str | None = None
+    section_now: str | None = None
+    held_by: str | None = None
+    candidates: list[OctonormCandidateOut] = []
+    note: str | None = None
+
+
+class OctonormImportOut(BaseModel):
+    rows: list[OctonormImportRowOut]
+    # Grand Finale teams the sheet does not name (with their octonorm now).
+    not_in_sheet: list[OctonormCandidateOut]

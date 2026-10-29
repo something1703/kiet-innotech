@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Download, Hash, MapPin, Pencil, Shapes, Sparkles, Undo2, X } from "lucide-react";
+import { Download, FileSpreadsheet, Hash, MapPin, Pencil, Shapes, Sparkles, Undo2, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Finale, FinaleEntryInput, FinaleSection, FinaleTeam } from "@/lib/admin-types";
 import { categories, departmentLabel, departments } from "@/lib/content";
@@ -10,6 +10,7 @@ import { downloadWorkbook, sheet } from "@/lib/excel";
 import { categoryTitle, plural, typeShortLabels, typeTones } from "@/lib/format";
 import { teamHref } from "@/lib/routes";
 import { AddCompleteTeamDialog } from "@/components/teams/AddCompleteTeamDialog";
+import { OctonormImportDialog } from "./OctonormImportDialog";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
@@ -93,6 +94,7 @@ export function FinaleTeamsTab({ finale, onSaved, reload }: { finale: Finale; on
   const [editing, setEditing] = useState<FinaleTeam | null>(null);
   const [bulk, setBulk] = useState<"place" | "section" | "number" | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -165,6 +167,10 @@ export function FinaleTeamsTab({ finale, onSaved, reload }: { finale: Finale; on
           <Button variant="secondary" size="sm" onClick={exportShown} disabled={shown.length === 0}>
             <Download aria-hidden="true" className="size-3.5" />
             Download {filtered ? "shown" : "all"} (Excel)
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setImporting(true)}>
+            <FileSpreadsheet aria-hidden="true" className="size-3.5" />
+            Import octonorm list
           </Button>
           <Button size="sm" onClick={() => setAdding(true)}>
             <Sparkles aria-hidden="true" className="size-3.5" />
@@ -448,6 +454,18 @@ export function FinaleTeamsTab({ finale, onSaved, reload }: { finale: Finale; on
           error={error}
           onClose={() => (setBulk(null), setError(null))}
           onSave={(entries) => save(entries, `${plural(entries.length, "octonorm")} given.`)}
+        />
+      )}
+      {importing && (
+        <OctonormImportDialog
+          finale={finale}
+          onClose={() => setImporting(false)}
+          onSaved={(data, done) => {
+            onSaved(data);
+            setImporting(false);
+            setError(null);
+            setMessage(done);
+          }}
         />
       )}
       {adding && (
