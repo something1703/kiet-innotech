@@ -147,7 +147,7 @@ export function JurorsTab({ onChange, canManage }: { onChange: () => void; canMa
           description={
             <>
               <strong className="text-navy-900">{resetting.name}</strong> will sign in with their email and a new password
-              {resetting.hasPassword ? "; the old password stops working" : ""}. It is shown once.
+              {resetting.hasPassword ? "; the old password stops working" : ""}. It can be looked up later on Logins &amp; passwords.
             </>
           }
           confirmLabel="Make password"

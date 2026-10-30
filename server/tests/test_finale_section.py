@@ -418,3 +418,65 @@ def test_a_club_team_is_matched_by_its_clubs_name_and_the_project(student, team_
         )
         assert octonorm_import._score("MythX – MythX Nexus and CyCom", by_name["Nexus Crew"], "MythX") >= 50
         assert octonorm_import._score("Nothing alike", by_name["Nexus Crew"], "MythX") == 0
+
+
+def test_a_super_admin_looks_up_downloads_and_resets_every_login_they_made(world, client):  # noqa: F811
+    from test_finale import judge_login
+
+    from app.db import get_sessionmaker
+    from app.models import Juror
+    from app.services import judge_accounts
+
+    root, cse = world["root"], world["cse"]
+    desk = root.post("/admin/admins", {"email": "desk.three@gmail.com", "name": "Desk Three", "role": "desk"}).json()["password"]
+    imported = root.post(
+        "/admin/jurors/import", {"judges": [{"name": "Arun Mishra", "email": "arun@gmail.com", "organisation": "Adnolgy", "phone": ""}]}
+    ).json()["judges"][0]["password"]
+
+    # Only super admins see the list; each login is there with the password it was given.
+    assert cse.get("/admin/credentials").status_code == 403
+    listed = {c["email"]: c for c in root.get("/admin/credentials").json()}
+    assert (listed["desk.three@gmail.com"]["kind"], listed["desk.three@gmail.com"]["password"]) == ("desk", desk)
+    assert (listed["arun@gmail.com"]["kind"], listed["arun@gmail.com"]["password"], listed["arun@gmail.com"]["detail"]) == (
+        "judge",
+        imported,
+        "Adnolgy",
+    )
+    # The database holds the password only sealed, never as it is typed.
+    with get_sessionmaker()() as db:
+        sealed = db.get(Juror, "arun@gmail.com").password_sealed
+        assert sealed and imported not in sealed and judge_accounts.unseal(sealed) == imported
+
+    # A password made before it could be looked up has only its hash: it works, but is not shown until a new one is made.
+    with get_sessionmaker()() as db:
+        db.get(Juror, "arun@gmail.com").password_sealed = None
+        db.commit()
+    old = {c["email"]: c for c in root.get("/admin/credentials").json()}["arun@gmail.com"]
+    assert (old["password"], old["has_password"]) == (None, True)
+    assert judge_login(client, "arun@gmail.com", imported).status_code == 200
+
+    # New passwords in bulk: the old ones stop working, the new ones are listed, unknown accounts are reported.
+    bulk = root.post(
+        "/admin/credentials/reset",
+        {
+            "accounts": [
+                {"email": "arun@gmail.com", "kind": "judge"},
+                {"email": "desk.three@gmail.com", "kind": "desk"},
+                {"email": "no@x.in", "kind": "desk"},
+            ]
+        },
+    )
+    assert bulk.status_code == 200, bulk.text
+    fresh = {c["email"]: c["password"] for c in bulk.json()["credentials"]}
+    assert bulk.json()["skipped"] == ["no@x.in"] and all(fresh.values())
+    assert judge_login(client, "arun@gmail.com", imported).status_code == 401
+    assert judge_login(client, "arun@gmail.com", fresh["arun@gmail.com"]).status_code == 200
+    assert judge_login(client, "desk.three@gmail.com", fresh["desk.three@gmail.com"]).status_code == 200
+    assert {c["email"]: c["password"] for c in root.get("/admin/credentials").json()}["arun@gmail.com"] == fresh["arun@gmail.com"]
+    assert cse.post("/admin/credentials/reset", {"accounts": [{"email": "arun@gmail.com", "kind": "judge"}]}).status_code == 403
+    assert "credentials.reset" in {e["action"] for e in root.get("/admin/activity").json()["items"]}
+
+    # Turning a judge's password off removes the sealed copy too.
+    assert root.delete("/admin/jurors/arun@gmail.com/password").status_code == 204
+    gone = {c["email"]: c for c in root.get("/admin/credentials").json()}["arun@gmail.com"]
+    assert (gone["password"], gone["has_password"]) == (None, False)

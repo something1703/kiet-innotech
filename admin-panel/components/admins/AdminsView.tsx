@@ -143,7 +143,7 @@ export function AdminsView() {
   const admins = useQuery(isSuper ? "admins" : null, () => api.listAdmins());
   const [removing, setRemoving] = useState<AdminUser | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // Registration desk volunteers sign in with a password: shown once, when added or given a new one.
+  // Registration desk volunteers sign in with a password, made when they are added or given a new one.
   const [resetting, setResetting] = useState<AdminUser | null>(null);
   const [login, setLogin] = useState<Login | null>(null);
 
@@ -264,7 +264,7 @@ export function AdminsView() {
           description={
             <>
               <strong className="text-navy-900">{resetting.name}</strong> will sign in with their email and a new password
-              {resetting.hasPassword ? "; the old password stops working" : ""}. It is shown once.
+              {resetting.hasPassword ? "; the old password stops working" : ""}. It can be looked up later on Logins &amp; passwords.
             </>
           }
           confirmLabel="Make password"

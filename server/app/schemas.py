@@ -801,7 +801,7 @@ class JurorOut(BaseModel):
     # Whether the judge can sign in with a password (outside judges at the Grand Finale), and when it was last set.
     has_password: bool = False
     password_set_at: datetime | None = None
-    # Only when the judge was just appointed with a new password: shown once, to hand to the judge.
+    # Only when the judge was just appointed with a new password, to hand to the judge (also on the Logins page).
     password: str | None = None
 
 
@@ -813,8 +813,39 @@ class JudgeLoginInput(Input):
 class JurorPasswordOut(BaseModel):
     email: str
     name: str
-    # Shown once: only its hash is stored.
+    # Also kept sealed, for the super admins' Logins page.
     password: str
+
+
+class CredentialOut(BaseModel):
+    """One sign-in account a super admin made: a judge or a registration desk volunteer."""
+
+    email: str
+    name: str
+    kind: Literal["judge", "desk"]
+    # The judge's organisation or department, or "Registration desk".
+    detail: str
+    phone: str = ""
+    # None when no password is kept: the account has none, or its password was made before passwords could be looked up.
+    password: str | None
+    has_password: bool
+    password_set_at: datetime | None
+    password_set_by: str | None
+
+
+class CredentialRef(Input):
+    email: str = Field(max_length=320)
+    kind: Literal["judge", "desk"]
+
+
+class CredentialResetInput(Input):
+    accounts: list[CredentialRef] = Field(min_length=1, max_length=300)
+
+
+class CredentialResetOut(BaseModel):
+    credentials: list[CredentialOut]
+    # Accounts that no longer exist.
+    skipped: list[str]
 
 
 class JudgeImportItem(Input):

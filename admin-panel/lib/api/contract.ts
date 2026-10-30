@@ -1,4 +1,4 @@
-import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, Credential, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -88,7 +88,11 @@ export interface AdminApi {
 
   listAdmins(): Promise<AdminUser[]>;
   addAdmin(input: AdminInput): Promise<AdminUser>;
-  /** Super admin: a new sign-in password for a registration desk volunteer (the old one stops working), shown once. */
+  /** Super admin: every judge and registration desk login, with the password when it is kept. */
+  credentials(): Promise<Credential[]>;
+  /** Super admin: new sign-in passwords for the chosen accounts (the old ones stop working). */
+  resetCredentials(accounts: CredentialRef[]): Promise<CredentialReset>;
+  /** Super admin: a new sign-in password for a registration desk volunteer (the old one stops working). */
   setDeskPassword(email: string): Promise<JurorPassword>;
   removeAdmin(email: string): Promise<void>;
 
@@ -126,12 +130,12 @@ export interface AdminApi {
   /** Marks a judge present in their room, or takes the mark back. Super admins, and a department's admin for their own rooms. */
   setJudgePresent(panelId: string, jurorEmail: string, present: boolean): Promise<Panel>;
   listJurors(): Promise<Juror[]>;
-  /** An outside judge comes back with their new sign-in password (`password`), shown once. */
+  /** An outside judge comes back with their new sign-in password (`password`). */
   addJuror(input: JurorInput): Promise<Juror>;
   removeJuror(email: string): Promise<void>;
-  /** Super admin: appoints outside judges in one go, each with a sign-in password (shown once). */
+  /** Super admin: appoints outside judges in one go, each with a sign-in password. */
   importJurors(judges: JudgeImportItem[]): Promise<JudgeImportRow[]>;
-  /** Super admin: a new sign-in password for a judge (the old one stops working), shown once. */
+  /** Super admin: a new sign-in password for a judge (the old one stops working). */
   setJurorPassword(email: string): Promise<JurorPassword>;
   /** Super admin: the judge can no longer sign in with a password. */
   removeJurorPassword(email: string): Promise<void>;

@@ -783,10 +783,10 @@ def add_juror(db: Session, admin: Admin, data: JurorInput) -> JurorOut:
         phone=data.phone,
         created_by=admin.email,
     )
-    # An outside judge signs in with a password, made now and shown once; KIET faculty sign in with Google.
+    # An outside judge signs in with a password, made now (super admins can look it up later); KIET faculty sign in with Google.
     password = judge_accounts.new_password(data.email) if data.kind == "external" else None
     if password:
-        juror.password_hash, juror.password_set_at, juror.password_set_by = judge_accounts.hash_password(password), utcnow(), admin.email
+        judge_accounts.store_password(juror, password, admin.email)
     db.add(juror)
     where = data.department if data.kind == "faculty" else data.organisation
     audit.record(db, admin.email, "judging.judge_added", detail=f"{data.email} ({data.name}, {where})")

@@ -19,7 +19,7 @@ export type Login = { name: string; email: string; password: string };
 export const PASSWORD_TAB = "Judges & registration desk";
 
 /** The admin panel's own address, which judges open to sign in. */
-const signInUrl = () => (typeof window === "undefined" ? "" : `${window.location.origin}/login`);
+export const signInUrl = () => (typeof window === "undefined" ? "" : `${window.location.origin}/login`);
 
 export function downloadLogins(logins: Login[]) {
   return downloadWorkbook("judge-logins", [
@@ -76,12 +76,12 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-/** A judge's new password, shown once with what to tell them. */
+/** A judge's new password, with what to tell them. It can be looked up again on Logins & passwords. */
 export function PasswordDialog({ login, onClose, who = "judge" }: { login: Login; onClose: () => void; who?: string }) {
   return (
     <Dialog
       title={`Sign-in for ${login.name}`}
-      description={`Shown only now: the panel keeps just a scrambled copy. Give it to the ${who}, or download it.`}
+      description={`Give it to the ${who}, or download it. You can look it up again any time on Logins & passwords.`}
       onClose={onClose}
       footer={
         <>
@@ -171,7 +171,7 @@ export function ImportJudges({ onDone }: { onDone: () => void }) {
       {result && (
         <div className="space-y-3">
           <Notice tone="success" title="Judges appointed">
-            Passwords are shown only now. Download them and share each one with its judge.
+            Download them and share each one with its judge. They stay on Logins &amp; passwords to look up again.
           </Notice>
           {logins.length > 0 && (
             <Button variant="secondary" onClick={() => downloadLogins(logins)}>

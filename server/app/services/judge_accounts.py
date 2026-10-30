@@ -1,7 +1,9 @@
 """
 Outside judges at the Grand Finale sign in with their email and a password instead of Google.
 
-- Passwords are made here, shown to the super admin once (to hand to the judge) and stored only as a scrypt hash.
+- Passwords are made here and checked against a scrypt hash. They are also kept sealed (encrypted with a key derived
+  from the server's session secret), so a super admin can look them up again on the Logins page, and the database alone
+  does not reveal them. An account whose password was made before this existed has only the hash: give it a new one.
   A password starts with a word from the judge's email, so it is easy to tell whose it is, then has random digits:
   "cool.arunesh@gmail.com" gets e.g. "Arunesh@48217".
 - Signing in (POST /auth/judge) issues the usual admin-panel session, marked as a password session, which opens the
@@ -16,17 +18,26 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import Identity, issue_session
-from ..config import Settings
+from ..config import Settings, get_settings
 from ..errors import ApiError
 from ..models import Admin, Juror, utcnow
-from ..schemas import JudgeImportInput, JudgeImportOut, JudgeImportRow, JurorPasswordOut
+from ..schemas import (
+    CredentialOut,
+    CredentialResetInput,
+    CredentialResetOut,
+    JudgeImportInput,
+    JudgeImportOut,
+    JudgeImportRow,
+    JurorPasswordOut,
+)
 from . import audit, limits
 
 # scrypt: 16 MiB of memory per hash, a few tens of milliseconds. Stored as "scrypt$n$r$p$salt$hash" (base64).
@@ -59,6 +70,35 @@ def check_password(password: str, stored: str | None) -> bool:
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(actual, expected)
+
+
+def _fernet() -> Fernet:
+    secret = get_settings().session_secret.encode()
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(b"innotech-sealed-passwords-v1:" + secret).digest()))
+
+
+def seal(password: str) -> str:
+    return _fernet().encrypt(password.encode()).decode()
+
+
+def unseal(sealed: str | None) -> str | None:
+    """The password, or None when there is none kept (or the session secret has changed since it was sealed)."""
+    if not sealed:
+        return None
+    try:
+        return _fernet().decrypt(sealed.encode()).decode()
+    except (InvalidToken, ValueError):
+        return None
+
+
+def store_password(account: Admin | Juror, password: str, by: str, at: datetime | None = None) -> None:
+    """Makes `password` the account's sign-in password: the hash that is checked, and the sealed copy for super admins."""
+    account.password_hash, account.password_sealed = hash_password(password), seal(password)
+    account.password_set_at, account.password_set_by = at or utcnow(), by
+
+
+def clear_password(account: Admin | Juror) -> None:
+    account.password_hash = account.password_sealed = account.password_set_at = account.password_set_by = None
 
 
 def _dummy_hash() -> str:
@@ -116,7 +156,7 @@ def set_password(db: Session, admin: Admin, email: str) -> JurorPasswordOut:
     if juror is None:
         raise ApiError("No judge with this email exists.", 404)
     password = new_password(juror.email)
-    juror.password_hash, juror.password_set_at, juror.password_set_by = hash_password(password), utcnow(), admin.email
+    store_password(juror, password, admin.email)
     audit.record(db, admin.email, "judging.judge_password_set", detail=f"New sign-in password for {juror.email}")
     db.commit()
     return JurorPasswordOut(email=juror.email, name=juror.name, password=password)
@@ -129,7 +169,7 @@ def set_desk_password(db: Session, admin: Admin, email: str) -> JurorPasswordOut
     if desk is None or desk.role != "desk":
         raise ApiError("No registration desk volunteer with this email exists.", 404)
     password = new_password(desk.email)
-    desk.password_hash, desk.password_set_at, desk.password_set_by = hash_password(password), utcnow(), admin.email
+    store_password(desk, password, admin.email)
     audit.record(db, admin.email, "admin.desk_password_set", detail=f"New sign-in password for {desk.email}")
     db.commit()
     return JurorPasswordOut(email=desk.email, name=desk.name, password=password)
@@ -142,7 +182,7 @@ def remove_password(db: Session, admin: Admin, email: str) -> None:
     if juror is None:
         raise ApiError("No judge with this email exists.", 404)
     if juror.password_hash:
-        juror.password_hash = juror.password_set_at = juror.password_set_by = None
+        clear_password(juror)
         audit.record(db, admin.email, "judging.judge_password_removed", detail=f"Password sign-in turned off for {juror.email}")
         db.commit()
 
@@ -182,7 +222,7 @@ def import_judges(db: Session, admin: Admin, data: JudgeImportInput) -> JudgeImp
             status = "created"
         else:
             status = "password_added"
-        juror.password_hash, juror.password_set_at, juror.password_set_by = hash_password(password), now, admin.email
+        store_password(juror, password, admin.email, now)
         out.append(JudgeImportRow(email=row.email, name=juror.name, status=status, password=password))
     created = sum(1 for r in out if r.status == "created")
     audit.record(
@@ -198,3 +238,63 @@ def import_judges(db: Session, admin: Admin, data: JudgeImportInput) -> JudgeImp
         db.rollback()
         raise ApiError("A judge was just added by someone else. Reload and import again.", 409) from exc
     return JudgeImportOut(judges=out)
+
+
+# ---------- Super admins: every login they made, with its password ----------
+
+
+def _credential(account: Admin | Juror) -> CredentialOut:
+    juror = isinstance(account, Juror)
+    return CredentialOut(
+        email=account.email,
+        name=account.name,
+        kind="judge" if juror else "desk",
+        detail=(account.organisation or account.department or "") if juror else "Registration desk",
+        phone=account.phone if juror else "",
+        password=unseal(account.password_sealed),
+        has_password=account.password_hash is not None,
+        password_set_at=account.password_set_at,
+        password_set_by=account.password_set_by,
+    )
+
+
+def credentials(db: Session, admin: Admin) -> list[CredentialOut]:
+    """
+    Every outside judge, every judge with a password and every registration desk volunteer, with the password when it is
+    kept. Super admins only; reading is not logged (the page is for looking things up at any time), but handing out new
+    passwords is.
+    """
+    _require_super(admin)
+    judges = db.scalars(
+        select(Juror).where((Juror.kind == "external") | (Juror.password_hash.is_not(None))).order_by(Juror.name, Juror.email)
+    )
+    desk = db.scalars(select(Admin).where(Admin.role == "desk").order_by(Admin.name, Admin.email))
+    return [_credential(a) for a in [*judges, *desk]]
+
+
+def reset_passwords(db: Session, admin: Admin, data: CredentialResetInput) -> CredentialResetOut:
+    """New passwords for many accounts at once (the old ones stop working), returned with the accounts' details."""
+    _require_super(admin)
+    refs = sorted({(r.email.strip().lower(), r.kind) for r in data.accounts})
+    done: list[Juror | Admin] = []
+    skipped: list[str] = []
+    now = utcnow()
+    for email, kind in refs:  # sorted, so two super admins resetting overlapping lists lock rows in the same order
+        if kind == "judge":
+            account: Juror | Admin | None = db.scalar(select(Juror).where(Juror.email == email).with_for_update())
+        else:
+            account = db.scalar(select(Admin).where(Admin.email == email, Admin.role == "desk").with_for_update())
+        if account is None:
+            skipped.append(email)
+            continue
+        store_password(account, new_password(account.email), admin.email, now)
+        done.append(account)
+    if done:
+        audit.record(
+            db,
+            admin.email,
+            "credentials.reset",
+            detail=f"New sign-in passwords for {len(done)} accounts: {', '.join(a.email for a in done[:20])}",
+        )
+    db.commit()
+    return CredentialResetOut(credentials=[_credential(a) for a in done], skipped=skipped)

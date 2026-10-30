@@ -209,6 +209,8 @@ class Admin(Base):
     password_hash: Mapped[str | None] = mapped_column(String(200))
     password_set_at: Mapped[datetime | None] = mapped_column(Timestamp)
     password_set_by: Mapped[str | None] = mapped_column(String(320))
+    # The password sealed (encrypted) so a super admin can look it up again; see judge_accounts.seal.
+    password_sealed: Mapped[str | None] = mapped_column(Text)
 
 
 class FinalistNomination(Base):
@@ -285,6 +287,8 @@ class Juror(Base):
     password_hash: Mapped[str | None] = mapped_column(String(200))
     password_set_at: Mapped[datetime | None] = mapped_column(Timestamp)
     password_set_by: Mapped[str | None] = mapped_column(String(320))
+    # The password sealed (encrypted) so a super admin can look it up again; see judge_accounts.seal.
+    password_sealed: Mapped[str | None] = mapped_column(Text)
 
 
 class Panel(Base):

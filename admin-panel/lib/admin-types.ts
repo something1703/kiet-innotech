@@ -458,6 +458,23 @@ export type Juror = {
 /** A judge's new sign-in password, shown once (only its hash is stored). */
 export type JurorPassword = { email: string; name: string; password: string };
 
+/** A sign-in account a super admin made (an outside judge or a registration desk volunteer), with its password when it is kept. */
+export type Credential = {
+  email: string;
+  name: string;
+  kind: "judge" | "desk";
+  /** The judge's organisation or department, or "Registration desk". */
+  detail: string;
+  phone: string;
+  /** Null when there is none to show: the account has no password, or it was made before passwords could be looked up. */
+  password: string | null;
+  hasPassword: boolean;
+  passwordSetAt: string | null;
+  passwordSetBy: string | null;
+};
+export type CredentialRef = { email: string; kind: Credential["kind"] };
+export type CredentialReset = { credentials: Credential[]; skipped: string[] };
+
 export type JudgeImportItem = { name: string; email: string; organisation: string; phone: string };
 
 export type JudgeImportRow = {

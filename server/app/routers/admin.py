@@ -39,6 +39,9 @@ from ..schemas import (
     CertificateFontOut,
     CertificateTemplateOut,
     CompleteTeamInput,
+    CredentialOut,
+    CredentialResetInput,
+    CredentialResetOut,
     DeleteTeamInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
@@ -450,9 +453,21 @@ def add_admin(data: AdminInput, admin: CurrentAdmin, db: Db, settings: AppSettin
     return service.add_admin(db, admin, data, settings)
 
 
+@router.get("/credentials")
+def credentials(admin: CurrentAdmin, db: Db) -> list[CredentialOut]:
+    """Super admin: every judge and registration desk login with its password, to look up or download at any time."""
+    return judge_accounts.credentials(db, admin)
+
+
+@router.post("/credentials/reset")
+def reset_credentials(data: CredentialResetInput, admin: CurrentAdmin, db: Db) -> CredentialResetOut:
+    """Super admin: new sign-in passwords for the chosen accounts (the old ones stop working)."""
+    return judge_accounts.reset_passwords(db, admin, data)
+
+
 @router.post("/admins/{email}/password")
 def set_desk_password(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> JurorPasswordOut:
-    """Super admin: a new sign-in password for a registration desk volunteer (the old one stops working), shown once."""
+    """Super admin: a new sign-in password for a registration desk volunteer (the old one stops working)."""
     return judge_accounts.set_desk_password(db, admin, email)
 
 
@@ -752,13 +767,13 @@ def remove_juror(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmi
 
 @router.post("/jurors/import")
 def import_jurors(data: JudgeImportInput, admin: CurrentAdmin, db: Db) -> JudgeImportOut:
-    """Super admin: appoints outside judges in one go, each with a password (shown once)."""
+    """Super admin: appoints outside judges in one go, each with a password."""
     return judge_accounts.import_judges(db, admin, data)
 
 
 @router.post("/jurors/{email}/password")
 def set_juror_password(email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db) -> JurorPasswordOut:
-    """Super admin: a new sign-in password for a judge (the old one stops working), shown once."""
+    """Super admin: a new sign-in password for a judge (the old one stops working)."""
     return judge_accounts.set_password(db, admin, email)
 
 

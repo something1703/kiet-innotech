@@ -180,7 +180,9 @@
  *   POST   /admin/jurors/{email}/password → { email, name, password } (super admin; shown once);  DELETE … /password → 204
  *   POST   /auth/judge  body { email, password } → session (no bearer token). The session opens the judge's own page only,
  *          or, for a registration desk volunteer, the registration desk only.
- *   POST   /admin/admins/{email}/password → { email, name, password } (super admin; desk volunteers only; shown once)
+ *   POST   /admin/admins/{email}/password → { email, name, password } (super admin; desk volunteers only)
+ *   GET    /admin/credentials → Credential[]  (super admin; every judge and desk login with its password when kept)
+ *   POST   /admin/credentials/reset  body { accounts: [{ email, kind: "judge" | "desk" }] } → { credentials, skipped }  (super admin)
  *   POST   /admin/finalists/lock  body { confirm: "LOCK" } → LockFinalistsResult  (super admin, once, after the release)
  *   GET    /desk → Desk;  GET /desk/teams?q= → DeskTeam[];  GET /desk/teams/export → DeskTeam[]   (super admins, desk volunteers)
  *   POST   /desk/teams/{id}/check-in { user_ids } | /check-out { user_id, reason } → DeskTeam
@@ -217,7 +219,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { CompleteTeamInput, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, Credential, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -423,6 +425,8 @@ export const liveApi: AdminApi = {
 
   listAdmins: () => request<AdminUser[]>("GET", "/admin/admins"),
   addAdmin: (input: AdminInput) => request<AdminUser>("POST", "/admin/admins", input),
+  credentials: () => request<Credential[]>("GET", "/admin/credentials"),
+  resetCredentials: (accounts) => request<CredentialReset>("POST", "/admin/credentials/reset", { accounts }),
   setDeskPassword: (email) => request<JurorPassword>("POST", `/admin/admins/${id(email)}/password`),
   removeAdmin: (email) => request<void>("DELETE", `/admin/admins/${id(email)}`),
 

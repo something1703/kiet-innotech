@@ -2171,13 +2171,13 @@ def add_admin(db: Session, admin: Admin, data: AdminInput, settings: Settings) -
     if db.get(Admin, data.email) or data.email in settings.super_admin_emails:
         raise ApiError("This email is already an admin.", 409)
     new = Admin(email=data.email, name=data.name, role=data.role, department=data.department, created_by=admin.email)
-    # A registration desk volunteer signs in with their email and a password, made now and shown once.
+    # A registration desk volunteer signs in with their email and a password, made now (super admins can look it up later).
     password = None
     if data.role == "desk":
         from . import judge_accounts  # judge_accounts builds on auth, which builds on this module's models
 
         password = judge_accounts.new_password(data.email)
-        new.password_hash, new.password_set_at, new.password_set_by = judge_accounts.hash_password(password), utcnow(), admin.email
+        judge_accounts.store_password(new, password, admin.email)
     db.add(new)
     audit.record(
         db,
