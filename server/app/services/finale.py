@@ -83,6 +83,7 @@ def overview(db: Session, admin: Admin) -> FinaleOut:
     tents = dict(db.execute(select(FinalTent.team_id, FinalTent.tent)).tuples().all())
     entries = {e.team_id: e for e in db.scalars(select(FinaleEntry).where(FinaleEntry.team_id.in_(ids)))} if ids else {}
     section_of = sections.of_teams(db, teams)
+    clubs = sections.clubs_of(db, teams)
     panel_of = dict(
         db.execute(select(PanelTeam.team_id, PanelTeam.panel_id).where(PanelTeam.round == ROUND, PanelTeam.team_id.in_(ids))).tuples().all()
     )
@@ -121,6 +122,7 @@ def overview(db: Session, admin: Admin) -> FinaleOut:
                 octonorm=tents.get(team.id),
                 building=entry.building if entry else "",
                 room=entry.room if entry else "",
+                club=clubs.get(team.id, ""),
                 section=section_of[team.id],
                 default_section=sections.default_section(team),
                 wildcard=bool(entry and entry.wildcard),

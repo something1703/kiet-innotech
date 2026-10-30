@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import rules
-from ..models import AppState, FinaleEntry, Team
+from ..models import AppState, FinaleEntry, Profile, Team, TeamMember
 
 # Present while a super admin has turned off judges' changes to marks they already saved (Grand Finale only).
 JUDGE_EDITS_OFF_KEY = "finale_judge_edits_off"
@@ -47,3 +47,21 @@ def group_key(section: str, category: int) -> str:
 
 def judges_can_edit(db: Session) -> bool:
     return db.get(AppState, JUDGE_EDITS_OFF_KEY) is None
+
+
+def clubs_of(db: Session, teams: list[Team]) -> dict[uuid.UUID, str]:
+    """
+    The club a COE KIET / technical-club team belongs to: the name its students gave (the most common one, the leader's
+    on a tie). Other teams have none. The team's own institution is just "KIET", so this is what tells the clubs apart.
+    """
+    ids = [t.id for t in teams if t.department == rules.CLUB_DEPARTMENT]
+    found: dict[uuid.UUID, list[str]] = {}
+    if ids:
+        for team_id, club in db.execute(
+            select(TeamMember.team_id, Profile.club)
+            .join(Profile, Profile.user_id == TeamMember.user_id)
+            .where(TeamMember.team_id.in_(ids), Profile.club != "")
+            .order_by(TeamMember.role != "leader", TeamMember.joined_at)
+        ).tuples():
+            found.setdefault(team_id, []).append(club)
+    return {team_id: max(names, key=lambda n: names.count(n)) for team_id, names in found.items()}

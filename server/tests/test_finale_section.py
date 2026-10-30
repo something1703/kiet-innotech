@@ -147,6 +147,10 @@ def test_the_registration_desk_registers_students_and_records_id_cards_and_coupo
     team = desk.get("/desk/teams", params={"q": "154"}).json()[0]
     leader, member = (m["user_id"] for m in team["members"])
     url = f"/desk/teams/{school['id']}/registration"
+    # The desk sees where each student is from, to tell the teams apart at a glance.
+    assert {(m["participant_type"], m["institution"], m["year"], m["club"]) for m in team["members"]} == {
+        ("school", "Delhi Public School", 11, "")
+    }
 
     # Before registering, the student is told to register at the desk and sees no octonorm.
     student = as_user("k@gmail.com")
@@ -388,3 +392,29 @@ def test_the_octonorm_list_is_imported_from_the_organisers_sheet(judging, settin
     assert entries(root, *({"team_id": r["team"]["id"], "octonorm": r["octonorm"]} for r in chosen)).status_code == 200
     again = {r["octonorm"]: r for r in upload(root, sheet).json()["rows"]}
     assert [again[n]["status"] for n in ("3", "4", "154", "164")] == ["same"] * 4
+
+
+def test_a_club_team_is_matched_by_its_clubs_name_and_the_project(student, team_of):
+    from sqlalchemy import select
+    from test_startups_clubs import club_profile
+
+    from app.db import get_sessionmaker
+    from app.models import Team
+    from app.services import octonorm_import, sections
+
+    gdg = team_of(
+        student("gdg1@kiet.edu", club_profile(club="Google Developer Group KIET")), [], name="Trust Vault", project_title="TrustVault"
+    )
+    mythx = team_of(student("myx1@kiet.edu", club_profile(club="MythX")), [], name="Nexus Crew", project_title="MythX Nexus and CyCom")
+    with get_sessionmaker()() as db:
+        teams = list(db.scalars(select(Team).where(Team.id.in_([gdg["id"], mythx["id"]]))))
+        clubs = sections.clubs_of(db, teams)
+        by_name = {t.name: t for t in teams}
+        assert {str(k): v for k, v in clubs.items()} == {gdg["id"]: "Google Developer Group KIET", mythx["id"]: "MythX"}
+        # The team's own institution is just KIET: the club in the sheet's line is what points to the team.
+        label = "Google Developer Group KIET – Jeevan – Offline Mesh Network (Team Horizon)"
+        assert octonorm_import._score(label, by_name["Trust Vault"], clubs[by_name["Trust Vault"].id]) > octonorm_import._score(
+            label, by_name["Nexus Crew"], clubs[by_name["Nexus Crew"].id]
+        )
+        assert octonorm_import._score("MythX – MythX Nexus and CyCom", by_name["Nexus Crew"], "MythX") >= 50
+        assert octonorm_import._score("Nothing alike", by_name["Nexus Crew"], "MythX") == 0

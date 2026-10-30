@@ -7,6 +7,7 @@ import type { DeskMember, DeskTeam, RegistrationInput } from "@/lib/admin-types"
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { downloadWorkbook, sheet } from "@/lib/excel";
 import { categoryTitle, formatDateTime, formatTime, plural, typeShortLabels, typeTones } from "@/lib/format";
+import { yearLabel } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -188,6 +189,12 @@ export function DeskView({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
+/** The student's year (class at a school), and branch (department; a COE KIET student gives the club instead). */
+const memberYear = (m: DeskMember) => (m.participantType === "startup" ? "" : yearLabel(m.year, m.participantType));
+const memberBranch = (m: DeskMember) => (m.participantType === "kiet" && m.department && m.department !== "COE" ? m.department : "");
+/** Where the student is from: KIET (and the club), or their college, school or startup. */
+const memberFrom = (m: DeskMember) => (m.club ? `${m.institution || "KIET"} · ${m.club}` : m.institution || (m.participantType === "kiet" ? "KIET" : "—"));
+
 function Stat({ Icon, label, value, of }: { Icon: typeof UserCheck; label: string; value: number; of: number }) {
   return (
     <div className="rounded-2xl bg-white p-4 ring-1 ring-line">
@@ -284,10 +291,8 @@ function TeamCard({ team, onUpdated, onChange }: { team: DeskTeam; onUpdated: (t
                 <tr key={m.userId} className={row.present ? "bg-emerald-50/60" : ""}>
                   <td className={tdClass}>
                     <span className="font-semibold text-navy-900">{m.fullName}</span>
-                    <span className="block text-xs text-muted">
-                      {m.role === "leader" ? "Leader · " : ""}
-                      {m.course ? `${m.course} · ` : ""}Year {m.year}
-                    </span>
+                    <span className="block text-xs text-muted">{[m.role === "leader" ? "Leader" : "", memberYear(m), m.course, memberBranch(m)].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-xs font-medium text-navy-800">{memberFrom(m)}</span>
                     {m.banned && <span className="mt-0.5 block text-xs font-semibold text-red-700">Suspended: send to the help desk</span>}
                   </td>
                   <td className={`${tdClass} font-mono text-xs`}>

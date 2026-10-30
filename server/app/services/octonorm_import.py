@@ -143,10 +143,11 @@ def _words(text: str, *, common: bool = False) -> set[str]:
     return {w for w in _norm(text).split() if len(w) > 2 and (common or w not in COMMON)}
 
 
-def _score(label: str, team: Team) -> int:
+def _score(label: str, team: Team, club: str = "") -> int:
     """
     How well a name in the sheet fits a team: the team's institution or name found whole in it (or it in them) counts most,
-    then words only they share, then common words ("public", "school") to break ties. 0: nothing in common.
+    then the club of a COE KIET / technical-club team, then words only they share, then common words ("public", "school")
+    to break ties. 0: nothing in common.
     """
     wanted = _norm(label)
     score = 0
@@ -154,7 +155,11 @@ def _score(label: str, team: Team) -> int:
         have = _norm(value)
         if len(have) > 3 and (have in wanted or wanted in have):
             score += 100
-    fields = f"{team.name} {team.project_title} {team.institution}"
+    # The sheet writes "Club – project": the club found whole in it counts, the project's words then tell two teams of one club apart.
+    have_club = _norm(club)
+    if len(have_club) > 3 and (have_club in wanted or wanted in have_club):
+        score += 50
+    fields = f"{team.name} {team.project_title} {team.institution} {club}"
     score += 10 * len(_words(label) & _words(fields))
     if score:
         score += len(_words(label, common=True) & _words(fields, common=True))
@@ -178,11 +183,12 @@ def preview(db: Session, admin: Admin, data: bytes) -> OctonormImportOut:
     tents = dict(db.execute(select(FinalTent.team_id, FinalTent.tent)).tuples().all())
     holder = {tent: team_id for team_id, tent in tents.items()}
     section_of = sections.of_teams(db, finale_teams)
+    clubs = sections.clubs_of(db, finale_teams)
     summaries = {s.id: s for s in admin_service.summaries(db, finale_teams + [t for t in by_code.values() if t.id not in in_finale])}
     used: set[uuid.UUID] = {t.id for s in stalls if s["code"] and (t := by_code.get(s["code"])) is not None}
 
     def candidate(team: Team, score: int) -> OctonormCandidateOut:
-        return OctonormCandidateOut(team=summaries[team.id], octonorm=tents.get(team.id), score=score)
+        return OctonormCandidateOut(team=summaries[team.id], octonorm=tents.get(team.id), club=clubs.get(team.id, ""), score=score)
 
     out: list[OctonormImportRowOut] = []
     for stall in stalls:
@@ -228,7 +234,9 @@ def preview(db: Session, admin: Admin, data: bytes) -> OctonormImportOut:
                 and t.participant_type == KIND[stall["section"]]
                 and (stall["section"] not in ("coe", "club") or t.department == rules.CLUB_DEPARTMENT)
             ]
-            scored = sorted(((_score(stall["label"], t), t) for t in pool), key=lambda pair: (-pair[0], pair[1].number))
+            scored = sorted(
+                ((_score(stall["label"], t, clubs.get(t.id, "")), t) for t in pool), key=lambda pair: (-pair[0], pair[1].number)
+            )
             row.candidates = [candidate(t, s) for s, t in scored[:6] if s > 0]
             best = [pair for pair in scored if pair[0] > 0]
             # A clear match: the best has more words in common than the next one.
@@ -249,5 +257,5 @@ def preview(db: Session, admin: Admin, data: bytes) -> OctonormImportOut:
     left = [summaries[t.id] for t in finale_teams if t.id not in named]
     return OctonormImportOut(
         rows=out,
-        not_in_sheet=[OctonormCandidateOut(team=s, octonorm=tents.get(s.id), score=0) for s in left],
+        not_in_sheet=[OctonormCandidateOut(team=s, octonorm=tents.get(s.id), club=clubs.get(s.id, ""), score=0) for s in left],
     )

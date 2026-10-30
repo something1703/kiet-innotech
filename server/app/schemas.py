@@ -1839,6 +1839,11 @@ class DeskMemberOut(BaseModel):
     year: int
     department: str | None
     roll_number: str
+    # Where the student is from: "kiet", "college", "school" or "startup"; the college, school or startup name; and for
+    # COE KIET / technical-club students the club.
+    participant_type: str = "kiet"
+    institution: str = ""
+    club: str = ""
     # The last four digits only, to confirm with the student.
     phone: str
     banned: bool = False
@@ -1958,6 +1963,8 @@ class FinaleTeamOut(BaseModel):
     octonorm: str | None
     building: str
     room: str
+    # COE KIET / technical clubs: the club's name.
+    club: str = ""
     # The section the team is ranked in, and the one it has by itself (a super admin can move it).
     section: str
     default_section: str
@@ -2059,6 +2066,8 @@ ResultsOut.model_rebuild()
 class OctonormCandidateOut(BaseModel):
     team: TeamSummaryOut
     octonorm: str | None
+    # COE KIET / technical clubs: the club's name.
+    club: str = ""
     # Words the sheet's name shares with the team's name, project or institution.
     score: int
 

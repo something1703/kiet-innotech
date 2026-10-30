@@ -30,7 +30,8 @@ export const octonormNumber = (value: string | null) => {
   return match ? Number(match[0]) : null;
 };
 export const placeLabel = (t: { building: string; room: string }) => [t.building, t.room ? `Room ${t.room}` : ""].filter(Boolean).join(" · ");
-const fromLabel = (t: FinaleTeam) => (t.team.participantType === "kiet" ? `KIET ${t.team.department ?? ""}`.trim() : t.team.institution);
+const fromLabel = (t: FinaleTeam) =>
+  t.team.participantType === "kiet" ? (t.club ? `KIET ${t.club}` : `KIET ${t.team.department ?? ""}`.trim()) : t.team.institution;
 
 /** A team's full entry, with a change applied: what the server saves. */
 function entry(t: FinaleTeam, patch: Partial<FinaleEntryInput> = {}): FinaleEntryInput {
@@ -62,7 +63,7 @@ const noFilters: Filters = { q: "", section: "", category: "", type: "", departm
 
 function matches(t: FinaleTeam, f: Filters) {
   const q = f.q.trim().toLowerCase();
-  if (q && ![t.octonorm ?? "", t.team.code, t.team.name, t.team.leaderName, t.team.institution, t.team.projectTitle, placeLabel(t)].some((v) => v.toLowerCase().includes(q))) return false;
+  if (q && ![t.octonorm ?? "", t.team.code, t.team.name, t.team.leaderName, t.team.institution, t.club, t.team.projectTitle, placeLabel(t)].some((v) => v.toLowerCase().includes(q))) return false;
   if (f.section && t.section !== f.section) return false;
   if (f.category && t.team.category !== Number(f.category)) return false;
   if (f.type && t.team.participantType !== f.type) return false;

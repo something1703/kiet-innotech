@@ -1013,6 +1013,10 @@ export type DeskMember = {
   year: number;
   department: string | null;
   rollNumber: string;
+  /** Where the student is from, the college, school or startup name, and the club of a COE KIET / technical-club student. */
+  participantType: ParticipantType;
+  institution: string;
+  club: string;
   /** The last four digits only, to confirm with the student. */
   phone: string;
   banned: boolean;
@@ -1072,6 +1076,8 @@ export type FinaleTeam = {
   octonorm: string | null;
   building: string;
   room: string;
+  /** COE KIET / technical clubs: the club's name. */
+  club: string;
   /** The section the team is ranked in, and the one it has by itself. */
   section: FinaleSection;
   defaultSection: FinaleSection;
@@ -1120,7 +1126,7 @@ export type RegistrationInput = { userId: string; present: boolean; idCard: bool
 
 // ---------- Importing the octonorm list (super admins) ----------
 
-export type OctonormCandidate = { team: TeamSummary; octonorm: string | null; score: number };
+export type OctonormCandidate = { team: TeamSummary; octonorm: string | null; club: string; score: number };
 
 export type OctonormImportRow = {
   octonorm: string;

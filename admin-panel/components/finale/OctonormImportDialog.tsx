@@ -192,7 +192,7 @@ export function OctonormImportDialog({ finale, onClose, onSaved }: { finale: Fin
                               <optgroup label="Best matches">
                                 {r.candidates.map((c) => (
                                   <option key={c.team.id} value={c.team.id}>
-                                    {c.team.code} {c.team.name} · {c.team.institution}
+                                    {c.team.code} {c.team.name} · {c.club || c.team.institution}
                                   </option>
                                 ))}
                               </optgroup>
@@ -202,7 +202,7 @@ export function OctonormImportDialog({ finale, onClose, onSaved }: { finale: Fin
                                 .filter((t) => !top.has(t.team.id))
                                 .map((t) => (
                                   <option key={t.team.id} value={t.team.id}>
-                                    {t.team.code} {t.team.name} · {t.team.participantType === "kiet" ? t.team.department : t.team.institution}
+                                    {t.team.code} {t.team.name} · {t.club || (t.team.participantType === "kiet" ? t.team.department : t.team.institution)}
                                   </option>
                                 ))}
                             </optgroup>
