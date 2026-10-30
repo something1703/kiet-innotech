@@ -275,13 +275,14 @@ def credentials(db: Session, admin: Admin) -> list[CredentialOut]:
 
 def _finale_panels(db: Session) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
-    for email, name in db.execute(
-        select(PanelJuror.juror_email, Panel.name)
+    for email, building, name in db.execute(
+        select(PanelJuror.juror_email, Panel.building, Panel.name)
         .join(Panel, Panel.id == PanelJuror.panel_id)
         .where(Panel.round == "final")
         .order_by(Panel.name)
     ):
-        out.setdefault(email, []).append(name)
+        # The panel with its venue: "G Block · Floor 3 · Panel 9 · F3-01 to F3-12".
+        out.setdefault(email, []).append(f"{building} · {name}" if building else name)
     return out
 
 
