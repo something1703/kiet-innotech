@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from ..auth import Identity, issue_session
 from ..config import Settings, get_settings
 from ..errors import ApiError
-from ..models import Admin, Juror, utcnow
+from ..models import Admin, Juror, Panel, PanelJuror, utcnow
 from ..schemas import (
     CredentialOut,
     CredentialResetInput,
@@ -243,7 +243,7 @@ def import_judges(db: Session, admin: Admin, data: JudgeImportInput) -> JudgeImp
 # ---------- Super admins: every login they made, with its password ----------
 
 
-def _credential(account: Admin | Juror) -> CredentialOut:
+def _credential(account: Admin | Juror, panels: dict[str, list[str]] | None = None) -> CredentialOut:
     juror = isinstance(account, Juror)
     return CredentialOut(
         email=account.email,
@@ -255,6 +255,7 @@ def _credential(account: Admin | Juror) -> CredentialOut:
         has_password=account.password_hash is not None,
         password_set_at=account.password_set_at,
         password_set_by=account.password_set_by,
+        panels=(panels or {}).get(account.email, []) if juror else [],
     )
 
 
@@ -269,7 +270,19 @@ def credentials(db: Session, admin: Admin) -> list[CredentialOut]:
         select(Juror).where((Juror.kind == "external") | (Juror.password_hash.is_not(None))).order_by(Juror.name, Juror.email)
     )
     desk = db.scalars(select(Admin).where(Admin.role == "desk").order_by(Admin.name, Admin.email))
-    return [_credential(a) for a in [*judges, *desk]]
+    return [_credential(a, _finale_panels(db)) for a in [*judges, *desk]]
+
+
+def _finale_panels(db: Session) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for email, name in db.execute(
+        select(PanelJuror.juror_email, Panel.name)
+        .join(Panel, Panel.id == PanelJuror.panel_id)
+        .where(Panel.round == "final")
+        .order_by(Panel.name)
+    ):
+        out.setdefault(email, []).append(name)
+    return out
 
 
 def reset_passwords(db: Session, admin: Admin, data: CredentialResetInput) -> CredentialResetOut:
@@ -297,4 +310,5 @@ def reset_passwords(db: Session, admin: Admin, data: CredentialResetInput) -> Cr
             detail=f"New sign-in passwords for {len(done)} accounts: {', '.join(a.email for a in done[:20])}",
         )
     db.commit()
-    return CredentialResetOut(credentials=[_credential(a) for a in done], skipped=skipped)
+    panels = _finale_panels(db)
+    return CredentialResetOut(credentials=[_credential(a, panels) for a in done], skipped=skipped)

@@ -831,6 +831,8 @@ class CredentialOut(BaseModel):
     has_password: bool
     password_set_at: datetime | None
     password_set_by: str | None
+    # A judge's Grand Finale panel(s), e.g. "Panel 3 · Octonorms 23-32".
+    panels: list[str] = []
 
 
 class CredentialRef(Input):
@@ -2039,6 +2041,32 @@ class FinaleEntriesInput(Input):
 
 class FinaleSettingsInput(Input):
     judges_can_edit: bool
+
+
+class FinaleAllotInput(Input):
+    """Panels of one judge each, over consecutive octonorms: the first judge gets the lowest numbers, and so on."""
+
+    judges: list[str] = Field(min_length=1, max_length=60)
+    sections: list[rules.FinaleSection] = Field(min_length=1)
+    # False: only the plan is returned; nothing is saved.
+    apply: bool = False
+
+
+class FinaleAllotPanelOut(BaseModel):
+    name: str
+    juror_email: str
+    juror_name: str
+    first: str
+    last: str
+    teams: int
+
+
+class FinaleAllotOut(BaseModel):
+    panels: list[FinaleAllotPanelOut]
+    applied: bool
+    # Teams of the chosen sections left out: already on a Grand Finale panel, or without an octonorm.
+    on_a_panel: list[str]
+    no_octonorm: list[str]
 
 
 class FinaleWinnerOut(BaseModel):

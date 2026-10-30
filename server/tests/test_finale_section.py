@@ -516,3 +516,56 @@ def test_try_out_marks_are_removed_by_a_super_admin(judging, settings):  # noqa:
     assert score(judge, panel, a, LOWER).status_code == 200
     removed = [e for e in root.get("/admin/activity").json()["items"] if e["action"] == "judging.score_removed"]
     assert len(removed) == 2
+
+
+def test_judges_are_allotted_one_panel_each_over_consecutive_octonorms(judging, settings):  # noqa: F811
+    teams = finale_teams(judging, settings)
+    root = judging["root"]
+    a, b, college, school = (teams[k] for k in ("cse_a", "cse_b", "college", "school"))
+    entries(
+        root, {"team_id": a["id"], "octonorm": "4"}, {"team_id": b["id"], "octonorm": "3"}, {"team_id": college["id"], "octonorm": "164"}
+    )
+    judges = [{"name": f"Judge {n}", "email": f"judge{n}@gmail.com", "organisation": "", "phone": ""} for n in (1, 2, 3)]
+    assert root.post("/admin/jurors/import", {"judges": judges}).status_code == 200
+    emails = [j["email"] for j in judges]
+    body = {"judges": emails[:2], "sections": ["category", "school", "college"]}
+
+    # Super admins only; the plan saves nothing. Lowest octonorms to the first judge; a team without an octonorm is listed.
+    assert judging["cse"].post("/admin/finale/allot", body).status_code == 403
+    plan = root.post("/admin/finale/allot", body)
+    assert plan.status_code == 200, plan.text
+    assert [(p["name"], p["juror_email"], p["teams"]) for p in plan.json()["panels"]] == [
+        ("Panel 1 · Octonorms 3-4", "judge1@gmail.com", 2),
+        ("Panel 2 · Octonorm 164", "judge2@gmail.com", 1),
+    ]
+    assert plan.json()["no_octonorm"] == [school["code"]] and plan.json()["applied"] is False
+    assert {t["panel"] for t in root.get("/admin/finale").json()["teams"]} == {None}
+
+    # Too many judges for the teams, unknown judges, a judge listed twice: refused.
+    assert root.post("/admin/finale/allot", {**body, "judges": emails, "sections": ["college"]}).status_code == 422
+    assert root.post("/admin/finale/allot", {**body, "judges": ["nobody@x.in"]}).status_code == 422
+    assert root.post("/admin/finale/allot", {**body, "judges": [emails[0], emails[0]]}).status_code == 422
+
+    done = root.post("/admin/finale/allot", {**body, "apply": True})
+    assert done.status_code == 200 and done.json()["applied"] is True
+    listed = {t["team"]["id"]: t["panel"] for t in root.get("/admin/finale").json()["teams"]}
+    assert listed[a["id"]] == listed[b["id"]] == "Panel 1 · Octonorms 3-4" and listed[college["id"]] == "Panel 2 · Octonorm 164"
+    logins = {c["email"]: c["panels"] for c in root.get("/admin/credentials").json()}
+    assert logins["judge1@gmail.com"] == ["Panel 1 · Octonorms 3-4"] and logins["judge3@gmail.com"] == []
+    # Allotting again: those judges already sit on a panel, and those teams are already on one.
+    again = root.post("/admin/finale/allot", {**body, "apply": True})
+    assert again.status_code == 409 and "one panel only" in again.json()["detail"]
+    left = root.post("/admin/finale/allot", {"judges": [emails[2]], "sections": ["category", "college"]})
+    assert left.status_code == 422 and "Only 0 teams" in left.json()["detail"]
+
+
+def test_octonorms_are_shared_out_in_order_and_evenly():
+    from app.services.finale import split_evenly
+
+    # The real Grand Finale: 134 department winners (3-136), 10 schools, 10 colleges, among 16 judges.
+    numbers = [*range(3, 137), *range(154, 174)]
+    runs = split_evenly(numbers, 16)
+    assert [len(r) for r in runs] == [10] * 10 + [9] * 6
+    assert [n for r in runs for n in r] == numbers  # every team once, in order
+    assert (runs[0][0], runs[0][-1], runs[-1][0], runs[-1][-1]) == (3, 12, 165, 173)
+    assert split_evenly([1, 2, 3], 3) == [[1], [2], [3]]

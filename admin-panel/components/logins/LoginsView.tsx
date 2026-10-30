@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Copy, Download, Eye, EyeOff, FileSpreadsheet, KeyRound, RefreshCw } from "lucide-react";
+import { Check, Copy, Download, Eye, EyeOff, FileSpreadsheet, FileText, KeyRound, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Credential, CredentialRef } from "@/lib/admin-types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { downloadWorkbook, sheet } from "@/lib/excel";
 import { formatDateTime, plural } from "@/lib/format";
+import { downloadLoginsPdf } from "@/lib/logins-pdf";
 import { useQuery } from "@/lib/use-query";
 import { CopyButton, PASSWORD_TAB, signInUrl } from "@/components/judging/JudgeLogins";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ const columns = [
   { header: "Organisation", width: 30, value: (c: Credential) => c.detail },
   { header: "Username (email)", width: 38, value: (c: Credential) => c.email, text: true },
   { header: "Password", width: 18, value: (c: Credential) => c.password ?? "", text: true },
+  { header: "Grand Finale panel", width: 30, value: (c: Credential) => c.panels.join(", ") },
   { header: "Sign in at", width: 44, value: () => `${signInUrl()} → ${PASSWORD_TAB}`, text: true },
 ];
 
@@ -187,6 +189,10 @@ export function LoginsView() {
                 {chosen.length ? `${chosen.length} ticked` : `${plural(rows.length, "login")} in the list`}
                 <span className="font-normal text-muted"> · the buttons act on {chosen.length ? "the ticked ones" : "all of them"}</span>
               </p>
+              <Button size="sm" variant="secondary" disabled={withPassword.length === 0} onClick={() => downloadLoginsPdf(withPassword, `${signInUrl()}, tab "${PASSWORD_TAB}"`)}>
+                <FileText aria-hidden="true" className="size-4" />
+                PDF
+              </Button>
               <Button size="sm" variant="secondary" disabled={withPassword.length === 0} onClick={() => downloadWorkbook("logins", [sheet("Logins", columns, withPassword)])}>
                 <FileSpreadsheet aria-hidden="true" className="size-4" />
                 Excel
@@ -253,6 +259,7 @@ export function LoginsView() {
                             <Pill tone={c.kind === "judge" ? "navy" : "cyan"}>{kindLabel[c.kind]}</Pill>
                             {c.kind === "judge" && c.detail && <span>{c.detail}</span>}
                           </span>
+                          {c.panels.length > 0 && <span className="mt-1 block text-xs font-semibold text-accent-600">{c.panels.join(", ")}</span>}
                         </td>
                         <td className={tdClass}>
                           <span className="flex items-center gap-2">

@@ -471,6 +471,8 @@ export type Credential = {
   hasPassword: boolean;
   passwordSetAt: string | null;
   passwordSetBy: string | null;
+  /** A judge's Grand Finale panel(s), e.g. "Panel 3 · Octonorms 23-32". */
+  panels: string[];
 };
 export type CredentialRef = { email: string; kind: Credential["kind"] };
 export type CredentialReset = { credentials: Credential[]; skipped: string[] };
@@ -1084,6 +1086,10 @@ export type Desk = {
 export type CouponsResult = { team: DeskTeam; given: string[]; already: string[]; notCheckedIn: string[] };
 
 // ---------- Grand Finale section (super admins) ----------
+
+/** One planned (or made) Grand Finale panel: one judge over a run of consecutive octonorms. */
+export type FinaleAllotPanel = { name: string; jurorEmail: string; jurorName: string; first: string; last: string; teams: number };
+export type FinaleAllot = { panels: FinaleAllotPanel[]; applied: boolean; onAPanel: string[]; noOctonorm: string[] };
 
 export type FinaleSection = "category" | "coe" | "club" | "school" | "college" | "startup";
 

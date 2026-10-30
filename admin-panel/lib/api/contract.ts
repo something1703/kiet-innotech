@@ -1,4 +1,4 @@
-import type { CompleteTeamInput, Credential, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, Credential, FinaleAllot, FinaleSection, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -229,6 +229,8 @@ export interface AdminApi {
   saveFinaleEntries(entries: FinaleEntryInput[]): Promise<Finale>;
   /** Super admin: removes every Grand Finale mark saved for the team, so it is judged afresh. */
   clearFinaleMarks(teamId: string): Promise<Finale>;
+  /** Super admin: one-judge panels over consecutive octonorms, in the judges' order. Only a plan unless `apply`. */
+  allotFinale(judges: string[], sections: FinaleSection[], apply: boolean): Promise<FinaleAllot>;
   /** The organisers' octonorm list (Excel), every stall matched to a team, for checking. Saves nothing. */
   previewOctonormImport(file: File): Promise<OctonormImport>;
   /** Whether Grand Finale judges may change the marks they already saved. */

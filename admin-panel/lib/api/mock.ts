@@ -1488,6 +1488,7 @@ export const mockApi: AdminApi = {
   finale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   saveFinaleEntries: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   clearFinaleMarks: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
+  allotFinale: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   previewOctonormImport: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   setFinaleJudgeEdits: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),
   finaleResults: () => Promise.reject(new ApiError(501, FINALE_LIVE_ONLY)),

@@ -183,6 +183,7 @@
  *   POST   /admin/admins/{email}/password → { email, name, password } (super admin; desk volunteers only)
  *   GET    /admin/credentials → Credential[]  (super admin; every judge and desk login with its password when kept)
  *   DELETE /admin/panels/{id}/teams/{team}/scores/{juror_email} → 204  (super admin; removes a judge's marks for the team)
+ *   POST   /admin/finale/allot  body { judges, sections, apply } → FinaleAllot  (super admin; one judge per panel, consecutive octonorms)
  *   POST   /admin/finale/teams/{team}/clear-marks → Finale  (super admin; every Grand Finale mark of the team)
  *   POST   /admin/credentials/reset  body { accounts: [{ email, kind: "judge" | "desk" }] } → { credentials, skipped }  (super admin)
  *   POST   /admin/finalists/lock  body { confirm: "LOCK" } → LockFinalistsResult  (super admin, once, after the release)
@@ -221,7 +222,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { CompleteTeamInput, Credential, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { CompleteTeamInput, Credential, FinaleAllot, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -544,6 +545,7 @@ export const liveApi: AdminApi = {
   deskRegister: (teamId, members) => request<DeskTeam>("PUT", `/desk/teams/${id(teamId)}/registration`, { members }),
   finale: () => request<Finale>("GET", "/admin/finale"),
   saveFinaleEntries: (entries) => request<Finale>("PUT", "/admin/finale/entries", { entries }),
+  allotFinale: (judges, sections, apply) => request<FinaleAllot>("POST", "/admin/finale/allot", { judges, sections, apply }),
   clearFinaleMarks: (teamId) => request<Finale>("POST", `/admin/finale/teams/${id(teamId)}/clear-marks`),
   previewOctonormImport: (file) => {
     const form = new FormData();

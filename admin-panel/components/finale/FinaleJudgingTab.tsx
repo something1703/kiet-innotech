@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Users } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Finale } from "@/lib/admin-types";
 import { useQuery } from "@/lib/use-query";
 import { JurorsTab } from "@/components/judging/JurorsTab";
 import { RoundBar } from "@/components/judging/JudgingView";
 import { PanelsTab } from "@/components/judging/PanelsTab";
+import { Button } from "@/components/ui/Button";
+import { AllotJudgesDialog } from "./AllotJudgesDialog";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { SectionTitle } from "@/components/ui/PageHeader";
 import { Switch } from "@/components/ui/Switch";
@@ -21,6 +24,8 @@ export function FinaleJudgingTab({ finale, onFinale }: { finale: Finale; onFinal
   const [view, setView] = useState<"panels" | "judges">("panels");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allotting, setAllotting] = useState(false);
+  const [allotted, setAllotted] = useState<string | null>(null);
 
   async function setEdits(on: boolean) {
     setPending(true);
@@ -78,10 +83,34 @@ export function FinaleJudgingTab({ finale, onFinale }: { finale: Finale; onFinal
       {view === "panels" && judging.data && (
         <section aria-label="Panels">
           <SectionTitle title="Panels" meta="Make a panel, pick its judges, then give it a range of octonorms (about 10 teams)" />
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <Button variant="secondary" onClick={() => (setAllotting(true), setAllotted(null))}>
+              <Users aria-hidden="true" className="size-4" />
+              Allot judges by octonorm
+            </Button>
+            <span className="text-xs text-muted">One judge per panel, octonorms shared out in order.</span>
+          </div>
+          {allotted && (
+            <div className="mb-4">
+              <Notice tone="success">{allotted}</Notice>
+            </div>
+          )}
           <PanelsTab judging={judging.data} reload={judging.reload} />
         </section>
       )}
       {view === "judges" && <JurorsTab canManage onChange={judging.reload} />}
+      {allotting && (
+        <AllotJudgesDialog
+          finale={finale}
+          onClose={() => setAllotting(false)}
+          onDone={(message) => {
+            setAllotting(false);
+            setAllotted(message);
+            judging.reload();
+            api.finale().then(onFinale, () => undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

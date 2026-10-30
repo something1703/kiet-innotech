@@ -30,6 +30,7 @@ from ..models import (
     FinaleEntry,
     FinaleHandout,
     FinalTent,
+    Juror,
     Panel,
     PanelJuror,
     PanelTeam,
@@ -40,6 +41,9 @@ from ..models import (
     utcnow,
 )
 from ..schemas import (
+    FinaleAllotInput,
+    FinaleAllotOut,
+    FinaleAllotPanelOut,
     FinaleCardOut,
     FinaleEntriesInput,
     FinaleGroupOut,
@@ -427,6 +431,89 @@ def clear_marks(db: Session, admin: Admin, team_id: uuid.UUID) -> FinaleOut:
         sync_awards(db, admin)
         db.commit()
     return overview(db, admin)
+
+
+def split_evenly[T](items: list[T], parts: int) -> list[list[T]]:
+    """Consecutive runs, in order, whose sizes differ by one at most (the first runs take the extra ones)."""
+    size, extra = divmod(len(items), parts)
+    runs, start = [], 0
+    for index in range(parts):
+        end = start + size + (1 if index < extra else 0)
+        runs.append(items[start:end])
+        start = end
+    return runs
+
+
+def allot(db: Session, admin: Admin, data: FinaleAllotInput) -> FinaleAllotOut:
+    """
+    Splits the chosen sections' teams, in octonorm order, into one consecutive run per judge (as even as possible: sizes
+    differ by one at most), in the order the judges are given: "Panel 1 · Octonorms 3-12" to the first, and so on. Teams
+    already on a Grand Finale panel and teams without an octonorm are left out (and listed). With `apply`, the panels are
+    made, each with its teams and its judge, all at once or not at all.
+    """
+    _require_super(admin)
+    emails = [e.strip().lower() for e in data.judges]
+    if len(set(emails)) != len(emails):
+        raise ApiError("A judge is listed twice.", 422)
+    if data.apply:
+        admin_service._lock_state(db, "panels_lock")
+    jurors = {j.email: j for j in db.scalars(select(Juror).where(Juror.email.in_(emails)).order_by(Juror.email).with_for_update())}
+    missing = [e for e in emails if e not in jurors]
+    if missing:
+        raise ApiError(f"Not appointed as judges yet: {', '.join(missing)}. Add them under Judging, Judges first.", 422)
+    seated = dict(
+        db.execute(
+            select(PanelJuror.juror_email, Panel.name)
+            .join(Panel, Panel.id == PanelJuror.panel_id)
+            .where(Panel.round == ROUND, PanelJuror.juror_email.in_(emails))
+        ).all()
+    )
+    if seated:
+        taken = ", ".join(f"{jurors[e].name} ({name})" for e, name in seated.items())
+        raise ApiError(f"Already on a Grand Finale panel: {taken}. A judge sits on one panel only.", 409)
+
+    teams = _finale_teams(db)
+    section_of = sections.of_teams(db, teams)
+    tents = dict(db.execute(select(FinalTent.team_id, FinalTent.tent)).tuples().all())
+    on_panel = set(db.scalars(select(PanelTeam.team_id).where(PanelTeam.round == ROUND)))
+    chosen = [t for t in teams if section_of[t.id] in data.sections]
+    left_on_panel = [t.code for t in chosen if t.id in on_panel]
+    no_octonorm = [t.code for t in chosen if t.id not in on_panel and not tents.get(t.id)]
+    pool = sorted((t for t in chosen if t.id not in on_panel and tents.get(t.id)), key=lambda t: judging._natural(tents[t.id]))
+    if len(pool) < len(emails):
+        raise ApiError(f"Only {len(pool)} teams to share among {len(emails)} judges. Choose fewer judges or more sections.", 422)
+
+    runs = list(zip(emails, split_evenly(pool, len(emails)), strict=True))
+    names = {name.lower() for name in db.scalars(select(Panel.name).where(Panel.round == ROUND))}
+    planned = []
+    for number, (email, run) in enumerate(runs, 1):
+        first, last = tents[run[0].id], tents[run[-1].id]
+        name = f"Panel {number} · Octonorms {first}-{last}" if first != last else f"Panel {number} · Octonorm {first}"
+        if name.lower() in names:
+            raise ApiError(f"A Grand Finale panel called {name!r} exists already. Rename or remove it first.", 409)
+        planned.append(
+            FinaleAllotPanelOut(name=name, juror_email=email, juror_name=jurors[email].name, first=first, last=last, teams=len(run))
+        )
+
+    if data.apply:
+        for plan, (email, run) in zip(planned, runs, strict=True):
+            panel = Panel(round=ROUND, building="", name=plan.name, name_key=plan.name.lower(), created_by=admin.email)
+            db.add(panel)
+            db.flush()
+            db.add_all(PanelTeam(panel_id=panel.id, team_id=t.id, round=ROUND) for t in run)
+            db.add(PanelJuror(panel_id=panel.id, juror_email=email))
+        audit.record(
+            db,
+            admin.email,
+            "judging.panels_allotted",
+            detail=f"{len(planned)} Grand Finale panels by octonorm: " + "; ".join(f"{p.name} to {p.juror_email}" for p in planned),
+        )
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise ApiError("Panels changed while allotting. Reload and try again.", 409) from exc
+    return FinaleAllotOut(panels=planned, applied=data.apply, on_a_panel=left_on_panel, no_octonorm=no_octonorm)
 
 
 def sync_awards(db: Session, admin: Admin) -> None:

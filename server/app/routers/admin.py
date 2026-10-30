@@ -45,6 +45,8 @@ from ..schemas import (
     DeleteTeamInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
+    FinaleAllotInput,
+    FinaleAllotOut,
     FinaleEntriesInput,
     FinaleOut,
     FinalePreviewOut,
@@ -356,6 +358,12 @@ async def preview_octonorm_import(admin: CurrentAdmin, db: Db, file: Annotated[U
 def finale_settings(data: FinaleSettingsInput, admin: CurrentAdmin, db: Db) -> FinaleOut:
     """Whether Grand Finale judges may change the marks they already saved."""
     return finale.set_settings(db, admin, data)
+
+
+@router.post("/finale/allot")
+def finale_allot(data: FinaleAllotInput, admin: CurrentAdmin, db: Db) -> FinaleAllotOut:
+    """Super admin: one-judge panels over consecutive octonorms, in the judges' order (a plan first, then `apply`)."""
+    return finale.allot(db, admin, data)
 
 
 @router.post("/finale/teams/{team_id}/clear-marks")
