@@ -783,6 +783,7 @@ function JudgeScoreChip({ score, team }: { score: PanelScore; team: string }) {
           {formatDateTime(score.updatedAt)}
           {score.editedBy && ` · changed by ${score.editedBy}`}
         </span>
+        {score.fromOutside && <span className="block text-[11px] font-semibold text-brand-700">Scored from outside this room</span>}
         {changed && (
           <span className="mt-0.5 block text-[11px] font-semibold text-accent-600">
             <TriangleAlert aria-hidden="true" className="mr-1 inline size-3 align-[-1px]" />
@@ -1453,7 +1454,12 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
   const admin = useAdmin();
   const isSuper = admin.role === "super_admin";
   const scores = team.judgeScores ?? [];
-  const [juror, setJuror] = useState(panel.jurors[0]?.email ?? "");
+  // The room's judges, and any judge who scored this team from outside the room (Grand Finale).
+  const judges = [
+    ...panel.jurors.map((j) => ({ email: j.email, name: j.name })),
+    ...scores.filter((x) => !panel.jurors.some((j) => j.email === x.jurorEmail)).map((x) => ({ email: x.jurorEmail, name: `${x.jurorName} (from outside the room)` })),
+  ];
+  const [juror, setJuror] = useState(scores.find((x) => x.fromOutside)?.jurorEmail ?? panel.jurors[0]?.email ?? "");
   const current = scores.find((s) => s.jurorEmail === juror);
   const [marks, setMarks] = useState<(number | null)[]>(() => current?.marks ?? PARTS.map(() => null));
   const [remarks, setRemarks] = useState(current?.remarks ?? "");
@@ -1534,12 +1540,12 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
       }
     >
       <div className="space-y-4">
-        {panel.jurors.length === 0 ? (
+        {judges.length === 0 ? (
           <Notice tone="warning">This room has no judges.</Notice>
         ) : (
           <Field label="Judge" htmlFor="change-judge">
             <Select id="change-judge" value={juror} onChange={(e) => pick(e.target.value)}>
-              {panel.jurors.map((j) => (
+              {judges.map((j) => (
                 <option key={j.email} value={j.email}>
                   {j.name} · {scores.some((s) => s.jurorEmail === j.email) ? "marks saved" : "no marks yet"}
                 </option>

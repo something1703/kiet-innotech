@@ -497,17 +497,39 @@ def _panels_out(db: Session, panels: list[Panel], viewer: Admin | None = None) -
         return viewer is not None and (viewer.role == "super_admin" or (viewer.role == "admin" and panel.department == viewer.department))
 
     link_of = {(link.panel_id, link.juror_email): link for link in db.scalars(select(PanelJuror).where(PanelJuror.panel_id.in_(ids)))}
-    # Scores by the panel's own judges only.
+    # Department rooms: scores by the room's own judges only. Grand Finale: every judge's, also one from outside the
+    # team's room (scored from "Not in your room?"), as the rankings count them.
     scores: dict[tuple[uuid.UUID, uuid.UUID], list[Score]] = defaultdict(list)
     for panel_id, score in db.execute(
         select(PanelTeam.panel_id, Score)
         .join(Panel, Panel.id == PanelTeam.panel_id)
         .join(Score, (Score.team_id == PanelTeam.team_id) & (Score.round == Panel.round))
-        .join(PanelJuror, (PanelJuror.panel_id == PanelTeam.panel_id) & (PanelJuror.juror_email == Score.juror_email))
-        .where(PanelTeam.panel_id.in_(ids))
+        .outerjoin(PanelJuror, (PanelJuror.panel_id == PanelTeam.panel_id) & (PanelJuror.juror_email == Score.juror_email))
+        .where(PanelTeam.panel_id.in_(ids), or_(Panel.round == "final", PanelJuror.juror_email.is_not(None)))
         .order_by(Score.created_at)
     ).tuples():
         scores[(panel_id, score.team_id)].append(score)
+    outside = {s.juror_email for (panel_id, _), marks in scores.items() for s in marks if (panel_id, s.juror_email) not in link_of}
+    if outside:
+        names |= dict(db.execute(select(Juror.email, Juror.name).where(Juror.email.in_(outside))).tuples().all())
+    # A judge from outside the room: locked as their own Grand Finale marks are (their own panel's lock, the round, publishing).
+    own_final: dict[str, tuple[PanelJuror, Panel]] = {}
+    if outside:
+        for link, panel in db.execute(
+            select(PanelJuror, Panel)
+            .join(Panel, Panel.id == PanelJuror.panel_id)
+            .where(PanelJuror.juror_email.in_(outside), Panel.round == "final")
+        ).tuples():
+            own_final.setdefault(link.juror_email, (link, panel))
+    finale_published = db.get(AppState, _awards_key("final")) is not None
+
+    def score_locked(panel_id: uuid.UUID, email: str) -> bool:
+        link = link_of.get((panel_id, email))
+        if link is not None:
+            return _locked(panel_of[panel_id], link, open_rounds, now)
+        own = own_final.get(email)
+        return finale_published or own is None or _locked(own[1], own[0], open_rounds, now)
+
     round_of = {p.id: p.round for p in panels}
     present: dict[tuple[str, uuid.UUID], int] = {}
     if teams:
@@ -548,7 +570,8 @@ def _panels_out(db: Session, panels: list[Panel], viewer: Admin | None = None) -
                         edited_by=None,
                         edit_count=0,
                         edit_reason=None,
-                        locked=_locked(panel_of[panel_id], link_of[(panel_id, s.juror_email)], open_rounds, now),
+                        locked=score_locked(panel_id, s.juror_email),
+                        from_outside=(panel_id, s.juror_email) not in link_of,
                     )
                     for s in mine
                 ]
@@ -2136,7 +2159,11 @@ def edit_score(db: Session, admin: Admin, panel_id: uuid.UUID, team_id: uuid.UUI
         raise ApiError(RELEASED_MESSAGE, 409)
     reason = _strong_reason(data.reason) if admin.role != "super_admin" else " ".join(data.reason.split()) or "no reason given"
     juror_email = juror_email.strip().lower()
-    if db.get(PanelJuror, (panel.id, juror_email)) is None:
+    outside_mark = panel.round == "final" and db.scalar(
+        select(Score.id).where(Score.round == "final", Score.team_id == team_id, Score.juror_email == juror_email)
+    )
+    # Grand Finale: also the mark of a judge who scored the team from outside its room.
+    if db.get(PanelJuror, (panel.id, juror_email)) is None and not outside_mark:
         raise ApiError("This judge is not in this room.", 422)
     if db.get(PanelTeam, (panel.id, team_id)) is None:
         raise ApiError("This team is not allotted to this room.", 422)

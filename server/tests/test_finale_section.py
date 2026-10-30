@@ -652,6 +652,26 @@ def test_a_judge_scores_a_team_that_is_not_in_their_room(judging, settings):  # 
     groups = {g["label"]: g for g in root.get("/admin/finale/results").json()["groups"]}
     assert [(w["team_code"]) for w in groups["Innovation at Other Colleges"]["winners"]] == [college["code"]]
     assert [w["team_code"] for w in groups["Best School Project"]["winners"]] == [school["code"]]
+    # The organisers see the outside mark on the team's own panel, flagged, and a super admin can change it there.
+    rooms = {p["id"]: p for p in root.get("/admin/judging/final").json()["panels"]}
+    on_b = next(t for t in rooms[room_b["id"]]["teams"] if t["id"] == college["id"])
+    assert on_b["scores"] == 1 and [(x["juror_email"], x["total"], x["from_outside"]) for x in on_b["judge_scores"]] == [
+        ("expert@kiet.edu", 50, True)
+    ]
+    fixed = root.put(
+        f"/admin/panels/{room_b['id']}/teams/{college['id']}/scores/expert@kiet.edu", {"marks": FULL, "remarks": "checked", "reason": ""}
+    )
+    assert fixed.status_code == 200, fixed.text
+    # The organisers see the outside mark on the team's own panel, flagged, and a super admin can change it there.
+    rooms = {p["id"]: p for p in root.get("/admin/judging/final").json()["panels"]}
+    on_b = next(t for t in rooms[room_b["id"]]["teams"] if t["id"] == college["id"])
+    assert on_b["scores"] == 1 and [(x["juror_email"], x["total"], x["from_outside"]) for x in on_b["judge_scores"]] == [
+        ("expert@kiet.edu", 50, True)
+    ]
+    fixed = root.put(
+        f"/admin/panels/{room_b['id']}/teams/{college['id']}/scores/expert@kiet.edu", {"marks": FULL, "remarks": "checked", "reason": ""}
+    )
+    assert fixed.status_code == 200, fixed.text
     # One judge marks a Grand Finale team: the room's own judge is now refused, from the room or from the search.
     refused = other.put(f"/judge/panels/{room_b['id']}/teams/{college['id']}/score", {"marks": LOWER, "remarks": ""})
     assert refused.status_code == 409 and "already scored by Industry Judge" in refused.json()["detail"]

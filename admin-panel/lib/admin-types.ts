@@ -512,6 +512,8 @@ export type PanelScore = {
   /** How often the saved marks were changed afterwards, and why (the last time). Shown highlighted. */
   editCount: number;
   editReason: string | null;
+  /** Grand Finale: a judge who is not on this panel scored the team (from "Not in your room?"). */
+  fromOutside?: boolean;
   locked: boolean;
 };
 

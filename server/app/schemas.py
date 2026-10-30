@@ -1026,6 +1026,8 @@ class PanelScoreOut(BaseModel):
     edit_count: int = 0
     edit_reason: str | None = None
     locked: bool = False
+    # Grand Finale: a judge who is not on this panel scored the team (from "Not in your room?").
+    from_outside: bool = False
 
 
 AttendanceState = Literal["present", "absent", "not_marked"]
