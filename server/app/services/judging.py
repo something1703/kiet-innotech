@@ -1997,6 +1997,34 @@ def edit_score(db: Session, admin: Admin, panel_id: uuid.UUID, team_id: uuid.UUI
     return _score_out(current, True)
 
 
+def delete_score(db: Session, admin: Admin, panel_id: uuid.UUID, team_id: uuid.UUID, juror_email: str) -> None:
+    """
+    A super admin removes a judge's saved marks for a team, e.g. marks given while trying the panel out. The team then
+    counts as not marked by that judge. Department-round marks are kept once the results are released. Recorded.
+    """
+    if admin.role != "super_admin":
+        raise ApiError("Only a super admin can remove marks.", 403)
+    panel = _lock_panel(db, panel_id)
+    if panel.round == "department" and results_released(db):
+        raise ApiError(RELEASED_MESSAGE, 409)
+    juror_email = juror_email.strip().lower()
+    score = db.scalar(
+        select(Score).where(Score.round == panel.round, Score.team_id == team_id, Score.juror_email == juror_email).with_for_update()
+    )
+    if score is None:
+        raise ApiError("This judge has no marks for this team.", 404)
+    team = db.get(Team, team_id)
+    detail = f"{juror_email} in {room_label(panel)}: {score.total}/{rules.RUBRIC_TOTAL} {list(score.marks)} removed"
+    db.delete(score)
+    audit.record(db, admin.email, "judging.score_removed", team, detail, department=panel.department)
+    if panel.round == "final" and db.get(AppState, _awards_key("final")) is not None:
+        from . import finale  # finale builds on this module
+
+        db.flush()
+        finale.sync_awards(db, admin)
+    db.commit()
+
+
 # ---------- Readiness board ----------
 
 

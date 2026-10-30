@@ -144,6 +144,8 @@ export interface AdminApi {
    * a reason; the department's own admin during the room's slot and buffer, with a clear reason.
    */
   editScore(panelId: string, teamId: string, jurorEmail: string, marks: number[], remarks: string, reason: string): Promise<Score>;
+  /** Super admin: removes a judge's saved marks for a team (e.g. marks given while trying the panel out). */
+  deleteScore(panelId: string, teamId: string, jurorEmail: string): Promise<void>;
   /** Lets a judge change their marks again after locking them. A super admin, or the department's admin during the slot and buffer. */
   unlockJudge(panelId: string, jurorEmail: string, reason: string): Promise<Panel>;
 
@@ -225,6 +227,8 @@ export interface AdminApi {
   /** Grand Finale section (super admins): every finale team with its octonorm, place, section, panel and registration. */
   finale(): Promise<Finale>;
   saveFinaleEntries(entries: FinaleEntryInput[]): Promise<Finale>;
+  /** Super admin: removes every Grand Finale mark saved for the team, so it is judged afresh. */
+  clearFinaleMarks(teamId: string): Promise<Finale>;
   /** The organisers' octonorm list (Excel), every stall matched to a team, for checking. Saves nothing. */
   previewOctonormImport(file: File): Promise<OctonormImport>;
   /** Whether Grand Finale judges may change the marks they already saved. */

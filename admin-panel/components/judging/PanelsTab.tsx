@@ -1460,11 +1460,13 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const total = marks.reduce<number>((sum, m) => sum + (m ?? 0), 0);
   const reasonError = !isSuper && reason.trim() ? reasonProblem(reason) : null;
 
   function pick(email: string) {
     const existing = scores.find((s) => s.jurorEmail === email);
+    setRemoving(false);
     setJuror(email);
     setMarks(existing?.marks ?? PARTS.map(() => null));
     setRemarks(existing?.remarks ?? "");
@@ -1480,6 +1482,19 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
     setError(null);
     try {
       await api.editScore(panel.id, team.id, juror, marks as number[], remarks.trim(), reason.trim());
+      onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+      setPending(false);
+    }
+  }
+
+  /** Super admins: the judge's marks for this team are taken away, e.g. marks given while trying the panel out. */
+  async function remove() {
+    setPending(true);
+    setError(null);
+    try {
+      await api.deleteScore(panel.id, team.id, juror);
       onSaved();
     } catch (err) {
       setError(errorMessage(err));
@@ -1504,6 +1519,11 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
             {total}
             <span className="text-sm text-muted"> / {TOTAL}</span>
           </span>
+          {isSuper && current && (
+            <Button variant="danger" onClick={() => setRemoving(true)} disabled={pending || removing}>
+              Remove these marks
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
@@ -1541,6 +1561,24 @@ function ChangeScoreDialog({ panel, team, onClose, onSaved }: { panel: Panel; te
           >
             <Textarea id="change-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="e.g. The judge wrote 3 instead of 5 for Ease of Use on the paper sheet" />
           </Field>
+        )}
+        {removing && current && (
+          <Notice
+            tone="warning"
+            title="Remove these marks?"
+            action={
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="danger" pending={pending} onClick={remove}>
+                  Remove {current.total} / {TOTAL}
+                </Button>
+                <Button size="sm" variant="secondary" disabled={pending} onClick={() => setRemoving(false)}>
+                  Keep them
+                </Button>
+              </div>
+            }
+          >
+            The team then counts as not marked by this judge, who can mark it afresh. This is recorded in the activity log.
+          </Notice>
         )}
         {error && <Notice tone="error">{error}</Notice>}
       </div>

@@ -358,6 +358,12 @@ def finale_settings(data: FinaleSettingsInput, admin: CurrentAdmin, db: Db) -> F
     return finale.set_settings(db, admin, data)
 
 
+@router.post("/finale/teams/{team_id}/clear-marks")
+def finale_clear_marks(team_id: uuid.UUID, admin: CurrentAdmin, db: Db) -> FinaleOut:
+    """Super admin: removes every Grand Finale mark saved for the team, so it is judged afresh."""
+    return finale.clear_marks(db, admin, team_id)
+
+
 @router.get("/finale/results")
 def finale_results(admin: CurrentAdmin, db: Db) -> FinalePreviewOut:
     """Who wins each section as the marks stand, and whether that is published."""
@@ -719,6 +725,15 @@ def edit_score(
     db: Db,
 ) -> ScoreOut:
     return judging.edit_score(db, admin, panel_id, team_id, juror_email, data)
+
+
+@router.delete("/panels/{panel_id}/teams/{team_id}/scores/{juror_email}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_score(
+    panel_id: uuid.UUID, team_id: uuid.UUID, juror_email: Annotated[str, Path(max_length=320)], admin: CurrentAdmin, db: Db
+) -> Response:
+    """Super admin: removes a judge's saved marks for a team (e.g. marks given while trying the panel out)."""
+    judging.delete_score(db, admin, panel_id, team_id, juror_email)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/panels/{panel_id}/jurors/{juror_email}/unlock")

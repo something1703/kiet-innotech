@@ -480,3 +480,39 @@ def test_a_super_admin_looks_up_downloads_and_resets_every_login_they_made(world
     assert root.delete("/admin/jurors/arun@gmail.com/password").status_code == 204
     gone = {c["email"]: c for c in root.get("/admin/credentials").json()}["arun@gmail.com"]
     assert (gone["password"], gone["has_password"]) == (None, False)
+
+
+def test_try_out_marks_are_removed_by_a_super_admin(judging, settings):  # noqa: F811
+    teams = finale_teams(judging, settings)
+    root, judge = judging["root"], judging["external"]
+    a, b = teams["cse_a"], teams["cse_b"]
+    panel = finale_panel(judging)
+    assert root.post("/admin/judging/final/open").status_code == 200
+    assert score(judge, panel, a, FULL).status_code == 200
+    assert score(judge, panel, b, LOWER).status_code == 200
+    listed = {t["team"]["id"]: t for t in root.get("/admin/finale").json()["teams"]}
+    assert (listed[a["id"]]["scores"], listed[a["id"]]["marked_by"]) == (1, ["expert@kiet.edu"])
+
+    # Clearing one team's Grand Finale marks: only super admins; the other team keeps its marks.
+    assert judging["cse"].post(f"/admin/finale/teams/{a['id']}/clear-marks").status_code == 403
+    cleared = root.post(f"/admin/finale/teams/{a['id']}/clear-marks")
+    assert cleared.status_code == 200, cleared.text
+    after = {t["team"]["id"]: t for t in cleared.json()["teams"]}
+    assert (after[a["id"]]["scores"], after[a["id"]]["marked_by"]) == (0, [])
+    assert after[b["id"]]["marked_by"] == ["expert@kiet.edu"]
+    page = {t["id"]: t for t in judge.get("/judge").json()["panels"][0]["teams"]}
+    assert page[a["id"]]["my_score"] is None and page[b["id"]]["my_score"] is not None
+    # Nothing left to clear is fine; a team outside the Grand Finale is not found.
+    assert root.post(f"/admin/finale/teams/{a['id']}/clear-marks").status_code == 200
+    assert root.post(f"/admin/finale/teams/{teams['cse_c']['id']}/clear-marks").status_code == 404
+
+    # One judge's marks for one team.
+    url = f"/admin/panels/{panel['id']}/teams/{b['id']}/scores/expert@kiet.edu"
+    assert judging["cse"].delete(url).status_code == 403
+    assert root.delete(url).status_code == 204
+    assert root.delete(url).status_code == 404
+    assert {t["team"]["id"]: t for t in root.get("/admin/finale").json()["teams"]}[b["id"]]["scores"] == 0
+    # The judge can mark the team afresh, and every removal is in the activity log.
+    assert score(judge, panel, a, LOWER).status_code == 200
+    removed = [e for e in root.get("/admin/activity").json()["items"] if e["action"] == "judging.score_removed"]
+    assert len(removed) == 2

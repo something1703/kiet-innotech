@@ -1103,6 +1103,8 @@ export type FinaleTeam = {
   panel: string | null;
   judges: number;
   scores: number;
+  /** Every judge with Grand Finale marks saved for the team, also ones no longer on its panel. */
+  markedBy: string[];
   members: number;
   /** Members the registration desk registered, and the ID cards and lunch coupons it handed out. */
   registered: number;

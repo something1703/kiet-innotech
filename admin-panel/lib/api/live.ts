@@ -182,6 +182,8 @@
  *          or, for a registration desk volunteer, the registration desk only.
  *   POST   /admin/admins/{email}/password → { email, name, password } (super admin; desk volunteers only)
  *   GET    /admin/credentials → Credential[]  (super admin; every judge and desk login with its password when kept)
+ *   DELETE /admin/panels/{id}/teams/{team}/scores/{juror_email} → 204  (super admin; removes a judge's marks for the team)
+ *   POST   /admin/finale/teams/{team}/clear-marks → Finale  (super admin; every Grand Finale mark of the team)
  *   POST   /admin/credentials/reset  body { accounts: [{ email, kind: "judge" | "desk" }] } → { credentials, skipped }  (super admin)
  *   POST   /admin/finalists/lock  body { confirm: "LOCK" } → LockFinalistsResult  (super admin, once, after the release)
  *   GET    /desk → Desk;  GET /desk/teams?q= → DeskTeam[];  GET /desk/teams/export → DeskTeam[]   (super admins, desk volunteers)
@@ -464,6 +466,7 @@ export const liveApi: AdminApi = {
   importJurors: async (judges) => (await request<{ judges: JudgeImportRow[] }>("POST", "/admin/jurors/import", { judges })).judges,
   setJurorPassword: (email) => request<JurorPassword>("POST", `/admin/jurors/${id(email)}/password`),
   removeJurorPassword: (email) => request<void>("DELETE", `/admin/jurors/${id(email)}/password`),
+  deleteScore: (panelId, teamId, jurorEmail) => request<void>("DELETE", `/admin/panels/${id(panelId)}/teams/${id(teamId)}/scores/${id(jurorEmail)}`),
   editScore: (panelId, teamId, jurorEmail, marks, remarks, reason) =>
     request<Score>("PUT", `/admin/panels/${id(panelId)}/teams/${id(teamId)}/scores/${id(jurorEmail)}`, { marks, remarks, reason }),
 
@@ -541,6 +544,7 @@ export const liveApi: AdminApi = {
   deskRegister: (teamId, members) => request<DeskTeam>("PUT", `/desk/teams/${id(teamId)}/registration`, { members }),
   finale: () => request<Finale>("GET", "/admin/finale"),
   saveFinaleEntries: (entries) => request<Finale>("PUT", "/admin/finale/entries", { entries }),
+  clearFinaleMarks: (teamId) => request<Finale>("POST", `/admin/finale/teams/${id(teamId)}/clear-marks`),
   previewOctonormImport: (file) => {
     const form = new FormData();
     form.append("file", file);

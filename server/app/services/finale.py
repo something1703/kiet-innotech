@@ -12,6 +12,7 @@ the finale judges' switch, and publishing the results.
 - Students see their octonorm only once the registration desk has registered them (services/desk.py).
 """
 
+import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -98,6 +99,12 @@ def overview(db: Session, admin: Admin) -> FinaleOut:
             .where(Score.round == ROUND, Score.team_id.in_(ids))
         )
     )
+    # Every judge with Grand Finale marks for the team, also ones no longer on its panel (e.g. a try-out).
+    marked_by: dict[uuid.UUID, list[str]] = {}
+    for team_id, email in db.execute(
+        select(Score.team_id, Score.juror_email).where(Score.round == ROUND, Score.team_id.in_(ids)).order_by(Score.juror_email)
+    ):
+        marked_by.setdefault(team_id, []).append(email)
     members = Counter(db.scalars(select(TeamMember.team_id).where(TeamMember.team_id.in_(ids))))
     registered = Counter(
         db.scalars(
@@ -130,6 +137,7 @@ def overview(db: Session, admin: Admin) -> FinaleOut:
                 panel=judging.room_label(panel) if panel else None,
                 judges=judges.get(panel.id, 0) if panel else 0,
                 scores=scores.get(team.id, 0),
+                marked_by=marked_by.get(team.id, []),
                 members=members.get(team.id, 0),
                 registered=registered.get(team.id, 0),
                 id_cards=id_cards.get(team.id, 0),
@@ -396,6 +404,29 @@ def unpublish(db: Session, admin: Admin, data: FinaleUnpublishInput) -> FinalePr
     )
     db.commit()
     return preview(db, admin)
+
+
+def clear_marks(db: Session, admin: Admin, team_id: uuid.UUID) -> FinaleOut:
+    """
+    Removes every Grand Finale mark saved for one team, by any judge (e.g. marks given while trying the panel out), so it
+    is judged afresh. Its department-round marks, octonorm, registration and room stay as they are. Recorded.
+    """
+    _require_super(admin)
+    team = db.scalar(select(Team).where(Team.id == team_id, judging._eligible_condition(ROUND)))
+    if team is None:
+        raise ApiError("This team is not taking part in the Grand Finale.", 404)
+    scores = list(
+        db.scalars(select(Score).where(Score.round == ROUND, Score.team_id == team.id).order_by(Score.juror_email).with_for_update())
+    )
+    if scores:
+        removed = "; ".join(f"{s.juror_email} {s.total}/{rules.RUBRIC_TOTAL}" for s in scores)
+        for score in scores:
+            db.delete(score)
+        audit.record(db, admin.email, "judging.score_removed", team, f"All {len(scores)} Grand Finale marks removed ({removed})")
+        db.flush()
+        sync_awards(db, admin)
+        db.commit()
+    return overview(db, admin)
 
 
 def sync_awards(db: Session, admin: Admin) -> None:

@@ -2004,6 +2004,8 @@ class FinaleTeamOut(BaseModel):
     panel: str | None
     judges: int
     scores: int
+    # Every judge with Grand Finale marks saved for the team, also ones no longer on its panel.
+    marked_by: list[str] = []
     members: int
     # Members the registration desk registered (present), and the ID cards and lunch coupons it handed out.
     registered: int

@@ -423,7 +423,22 @@ export function FinaleTeamsTab({ finale, onSaved, reload }: { finale: Finale; on
         </TableFrame>
       )}
 
-      {editing && <EditDialog team={editing} finale={finale} pending={pending} error={error} onClose={() => (setEditing(null), setError(null))} onSave={(e) => save([e], `${editing.team.name} saved.`)} />}
+      {editing && (
+        <EditDialog
+          team={editing}
+          finale={finale}
+          pending={pending}
+          error={error}
+          onClose={() => (setEditing(null), setError(null))}
+          onSave={(e) => save([e], `${editing.team.name} saved.`)}
+          onCleared={(data) => {
+            onSaved(data);
+            setMessage(`${editing.team.name}: its Grand Finale marks were removed. It will be judged afresh.`);
+            setEditing(null);
+            setError(null);
+          }}
+        />
+      )}
       {bulk === "place" && (
         <PlaceDialog
           count={selected.length}
@@ -504,6 +519,7 @@ function EditDialog({
   error,
   onClose,
   onSave,
+  onCleared,
 }: {
   team: FinaleTeam;
   finale: Finale;
@@ -511,6 +527,7 @@ function EditDialog({
   error: string | null;
   onClose: () => void;
   onSave: (entry: FinaleEntryInput) => void;
+  onCleared: (data: Finale) => void;
 }) {
   const [octonorm, setOctonorm] = useState(team.octonorm ?? "");
   const [building, setBuilding] = useState(team.building);
@@ -554,9 +571,65 @@ function EditDialog({
             ))}
           </Select>
         </Field>
+        <ClearMarks team={team} onCleared={onCleared} />
         {error && <Notice tone="error">{error}</Notice>}
       </div>
     </Dialog>
+  );
+}
+
+/** The team's Grand Finale marks, and removing all of them (e.g. marks given while trying the panel out). */
+function ClearMarks({ team, onCleared }: { team: FinaleTeam; onCleared: (data: Finale) => void }) {
+  const [asking, setAsking] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const count = team.markedBy.length;
+
+  async function clear() {
+    setPending(true);
+    setError(null);
+    try {
+      onCleared(await api.clearFinaleMarks(team.team.id));
+    } catch (err) {
+      setError(errorMessage(err));
+      setPending(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl bg-surface p-4 ring-1 ring-line" aria-label="Grand Finale marks">
+      <h3 className="text-sm font-semibold text-navy-900">Grand Finale marks</h3>
+      {count === 0 ? (
+        <p className="mt-1 text-sm text-muted">No judge has marked this team yet.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-navy-800">
+            {plural(count, "judge")} marked it: <span className="break-all text-muted">{team.markedBy.join(", ")}</span>
+          </p>
+          {!asking ? (
+            <Button size="sm" variant="secondary" className="mt-3" onClick={() => setAsking(true)}>
+              Remove all its Grand Finale marks
+            </Button>
+          ) : (
+            <div className="mt-3 rounded-xl bg-white p-3 ring-1 ring-red-200">
+              <p className="text-sm text-navy-800">
+                Every Grand Finale mark of {team.team.name} is removed, so it is judged afresh. Its department-round marks, octonorm and registration stay. This is recorded in
+                the activity log.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="danger" pending={pending} onClick={clear}>
+                  Remove {plural(count, "mark")}
+                </Button>
+                <Button size="sm" variant="secondary" disabled={pending} onClick={() => setAsking(false)}>
+                  Keep them
+                </Button>
+              </div>
+            </div>
+          )}
+          {error && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{error}</p>}
+        </>
+      )}
+    </section>
   );
 }
 
