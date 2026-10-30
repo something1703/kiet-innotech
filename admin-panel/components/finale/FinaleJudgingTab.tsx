@@ -86,9 +86,9 @@ export function FinaleJudgingTab({ finale, onFinale }: { finale: Finale; onFinal
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Button variant="secondary" onClick={() => (setAllotting(true), setAllotted(null))}>
               <Users aria-hidden="true" className="size-4" />
-              Allot judges by octonorm
+              Allot judges by stall
             </Button>
-            <span className="text-xs text-muted">One judge per panel, octonorms shared out in order.</span>
+            <span className="text-xs text-muted">One judge per panel, stalls shared out in order, one venue per panel.</span>
           </div>
           {allotted && (
             <div className="mb-4">

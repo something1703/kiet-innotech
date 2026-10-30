@@ -444,12 +444,29 @@ def split_evenly[T](items: list[T], parts: int) -> list[list[T]]:
     return runs
 
 
+def share_judges(counts: list[int], judges: int) -> list[int]:
+    """
+    How many judges each venue gets, in proportion to its teams (largest remainder), at least one per venue and never
+    more judges than teams. Needs at least as many judges as venues and as many teams as judges.
+    """
+    total = sum(counts)
+    exact = [judges * c / total for c in counts]
+    shares = [max(1, min(c, int(e))) for c, e in zip(counts, exact, strict=True)]
+    while sum(shares) < judges:
+        open_ = [i for i, c in enumerate(counts) if shares[i] < c]
+        shares[max(open_, key=lambda i: (exact[i] - shares[i], counts[i]))] += 1
+    while sum(shares) > judges:
+        shares[max((i for i in range(len(counts)) if shares[i] > 1), key=lambda i: (shares[i] - exact[i], -counts[i]))] -= 1
+    return shares
+
+
 def allot(db: Session, admin: Admin, data: FinaleAllotInput) -> FinaleAllotOut:
     """
-    Splits the chosen sections' teams, in octonorm order, into one consecutive run per judge (as even as possible: sizes
-    differ by one at most), in the order the judges are given: "Panel 1 · Octonorms 3-12" to the first, and so on. Teams
-    already on a Grand Finale panel and teams without an octonorm are left out (and listed). With `apply`, the panels are
-    made, each with its teams and its judge, all at once or not at all.
+    Splits the chosen sections' teams, in stall (octonorm) order, into one consecutive run per judge, in the order the
+    judges are given. When teams are placed in venues (a building, a floor, the badminton court), a panel never spans two:
+    each venue gets judges in proportion to its teams, and its teams are shared out evenly among them ("G Block · Floor 3 ·
+    Panel 9 · F3-01 to F3-12"). Teams already on a Grand Finale panel and teams without a stall are left out (and listed).
+    With `apply`, the panels are made, each with its teams and its judge, all at once or not at all.
     """
     _require_super(admin)
     emails = [e.strip().lower() for e in data.judges]
@@ -483,21 +500,49 @@ def allot(db: Session, admin: Admin, data: FinaleAllotInput) -> FinaleAllotOut:
     if len(pool) < len(emails):
         raise ApiError(f"Only {len(pool)} teams to share among {len(emails)} judges. Choose fewer judges or more sections.", 422)
 
-    runs = list(zip(emails, split_evenly(pool, len(emails)), strict=True))
+    # Venues in the order of their first stall; teams without a venue form one group of their own.
+    venue_of = dict(
+        db.execute(select(FinaleEntry.team_id, FinaleEntry.building).where(FinaleEntry.team_id.in_([t.id for t in pool]))).tuples().all()
+    )
+    venues: dict[str, list[Team]] = {}
+    for t in pool:
+        venues.setdefault(venue_of.get(t.id) or "", []).append(t)
+    if len(venues) > len(emails):
+        raise ApiError(
+            f"The teams are in {len(venues)} venues but only {len(emails)} judges are listed: a judge sits in one venue only.", 422
+        )
+    blocks = [
+        (venue, run)
+        for (venue, teams_there), share in zip(venues.items(), share_judges([len(v) for v in venues.values()], len(emails)), strict=True)
+        for run in split_evenly(teams_there, share)
+    ]
+    runs = list(zip(emails, blocks, strict=True))
     names = {name.lower() for name in db.scalars(select(Panel.name).where(Panel.round == ROUND))}
     planned = []
-    for number, (email, run) in enumerate(runs, 1):
+    for number, (email, (venue, run)) in enumerate(runs, 1):
         first, last = tents[run[0].id], tents[run[-1].id]
-        name = f"Panel {number} · Octonorms {first}-{last}" if first != last else f"Panel {number} · Octonorm {first}"
+        if venue:
+            name = f"Panel {number} · {first} to {last}" if first != last else f"Panel {number} · {first}"
+        else:
+            name = f"Panel {number} · Octonorms {first}-{last}" if first != last else f"Panel {number} · Octonorm {first}"
         if name.lower() in names:
             raise ApiError(f"A Grand Finale panel called {name!r} exists already. Rename or remove it first.", 409)
         planned.append(
-            FinaleAllotPanelOut(name=name, juror_email=email, juror_name=jurors[email].name, first=first, last=last, teams=len(run))
+            FinaleAllotPanelOut(
+                name=judging.place_label(venue, "") + f" · {name}" if venue else name,
+                venue=venue,
+                juror_email=email,
+                juror_name=jurors[email].name,
+                first=first,
+                last=last,
+                teams=len(run),
+            )
         )
 
     if data.apply:
-        for plan, (email, run) in zip(planned, runs, strict=True):
-            panel = Panel(round=ROUND, building="", name=plan.name, name_key=plan.name.lower(), created_by=admin.email)
+        for plan, (email, (venue, run)) in zip(planned, runs, strict=True):
+            name = plan.name.removeprefix(f"{venue} · ") if venue else plan.name
+            panel = Panel(round=ROUND, building=venue, name=name, name_key=name.lower(), created_by=admin.email)
             db.add(panel)
             db.flush()
             db.add_all(PanelTeam(panel_id=panel.id, team_id=t.id, round=ROUND) for t in run)

@@ -10,6 +10,7 @@ import { categories } from "@/lib/content";
 import { attendanceEnabled } from "@/lib/features";
 import type { EventPass, FinaleCard, ResultCard } from "@/lib/types";
 import { usePortal } from "./PortalProvider";
+import { VenueMap } from "./VenueMap";
 import { ResultReveal, type RevealResult } from "./ResultReveal";
 
 const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
@@ -238,12 +239,13 @@ export function JudgingStatus({ showPassLink = true }: { showPassLink?: boolean 
 }
 
 /**
- * The Grand Finale on the day: register at the desk at the entrance of the ground first (each member in person); once
- * registered, the octonorm number shows here in big letters, with the building and room if the team was moved.
+ * The Grand Finale on the day: register at the desk in the G Block ground-floor lobby first (each member in person); once
+ * registered, the stall shows here in big letters with where it is (floor and table, or room).
  */
 function FinaleOctonorm({ card }: { card: FinaleCard }) {
   if (!card.registered) {
     return (
+      <>
       <section aria-label="Register at the Registration Desk" className="rounded-3xl bg-navy-900 p-5 text-white ring-1 ring-navy-900 sm:p-6">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Grand Finale · 30 October</p>
         <div className="mt-2 flex items-start gap-4">
@@ -253,8 +255,8 @@ function FinaleOctonorm({ card }: { card: FinaleCard }) {
           <div className="min-w-0">
             <h2 className="font-display text-2xl font-bold">Register at the Registration Desk</h2>
             <p className="mt-1 text-sm text-white/85">
-              The Registration Desk is at the entrance of the ground. Every member of your team registers in person; you get your ID card and lunch
-              coupon there. Your octonorm number appears on this page as soon as you are registered.
+              The Registration Desk is in the G Block ground-floor lobby. Every member of your team registers in person; you get your ID card and lunch
+              coupon there. Your stall and where to find it appear on this page as soon as you are registered.
             </p>
             {card.teamMembers > 1 && (
               <p className="mt-3 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
@@ -264,17 +266,20 @@ function FinaleOctonorm({ card }: { card: FinaleCard }) {
           </div>
         </div>
       </section>
+      <VenueMap stall={null} note="The Registration Desk is on the ground floor of G Block, at the main entrance. After registering, this shows the floor with your stall." />
+      </>
     );
   }
   return (
-    <section aria-label="Your octonorm" className="overflow-hidden rounded-3xl bg-gradient-to-br from-accent-500 to-amber-400 p-5 text-white ring-1 ring-amber-300 sm:p-6">
+    <>
+    <section aria-label="Your stall" className="overflow-hidden rounded-3xl bg-gradient-to-br from-accent-500 to-amber-400 p-5 text-white ring-1 ring-amber-300 sm:p-6">
       <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/85">
         <BadgeCheck size={16} aria-hidden="true" />
         Registered for the Grand Finale
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-2">
         <div>
-          <p className="text-sm font-semibold text-white/85">Your octonorm</p>
+          <p className="text-sm font-semibold text-white/85">Your stall</p>
           <p className="font-display text-7xl font-bold leading-none tabular-nums sm:text-8xl">{card.octonorm ?? "—"}</p>
         </div>
         {card.place && (
@@ -286,11 +291,16 @@ function FinaleOctonorm({ card }: { card: FinaleCard }) {
       </div>
       <p className="mt-3 text-sm text-white/90">
         {card.octonorm || card.place
-          ? `Set up your project ${card.place ? `at ${card.place}` : `at octonorm ${card.octonorm}`} and stay there: the judges come to you.`
-          : "Your octonorm is being allotted. Ask at the Registration Desk."}
+          ? `Set up your project ${card.place ? `at ${card.place}` : `at stall ${card.octonorm}`} and stay there: the judges come to you.`
+          : "Your stall is being allotted. Ask at the Registration Desk."}
         {card.registeredAt && ` Registered at ${time.format(new Date(card.registeredAt))}.`}
       </p>
     </section>
+    <VenueMap
+      stall={card.octonorm}
+      note={card.octonorm ? `Find stall ${card.octonorm} on this plan.${card.octonorm.toUpperCase().startsWith("BC-") ? " The Badminton Court holds stalls BC-01 to BC-36." : ""}` : "Your stall will show here once it is allotted."}
+    />
+    </>
   );
 }
 

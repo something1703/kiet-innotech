@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Download, IdCard, RefreshCw, Save, Ticket, UserCheck } from "lucide-react";
+import { BadgeCheck, Download, IdCard, Map as MapIcon, MapPin, RefreshCw, Save, Ticket, UserCheck } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { DeskMember, DeskTeam, RegistrationInput } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
+import { venuePlanUrl } from "@/lib/content";
 import { downloadWorkbook, sheet } from "@/lib/excel";
 import { categoryTitle, formatDateTime, formatTime, plural, typeShortLabels, typeTones } from "@/lib/format";
 import { yearLabel } from "@/lib/rules";
 import { useQuery } from "@/lib/use-query";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClass } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -22,16 +23,16 @@ const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeri
 const octonormOrder = (a: DeskTeam, b: DeskTeam) => (a.tent === null) !== (b.tent === null) ? (a.tent === null ? 1 : -1) : natural(a.tent ?? "", b.tent ?? "") || natural(a.code, b.code);
 
 /** "154 · DPS Team (IT26-0006)" for the team picker. */
-const teamLabel = (t: DeskTeam) => `${t.tent ? `${t.tent} · ` : "No octonorm · "}${t.name} (${t.code})`;
+const teamLabel = (t: DeskTeam) => `${t.tent ? `${t.tent} · ` : "No stall · "}${t.name} (${t.code})`;
 
 /** What a student is told and the desk records: here, ID card, lunch coupon. */
 type Row = { present: boolean; idCard: boolean; coupon: boolean };
 const onRecord = (m: DeskMember): Row => ({ present: m.checkedInAt !== null, idCard: m.idCardAt !== null, coupon: m.couponAt !== null });
 
 /**
- * The Grand Finale registration desk, at the entrance of the ground. Pick the team (every finale team is in the list),
+ * The Grand Finale registration desk, in the G Block ground-floor lobby. Pick the team (every finale team is in the list),
  * tick who of them is here, and record the paper ID card and lunch coupon handed to each. Only a student who is here gets
- * either. Registering is the student's Grand Finale attendance, and it shows them their octonorm on their dashboard.
+ * either. Registering is the student's Grand Finale attendance, and it shows them their stall on their dashboard.
  */
 export function DeskView({ embedded = false }: { embedded?: boolean }) {
   const admin = useAdmin();
@@ -86,7 +87,8 @@ export function DeskView({ embedded = false }: { embedded?: boolean }) {
         sheet(
           "Registration",
           [
-            { header: "Octonorm", width: 10, value: (r: R) => r.team.tent ?? "", text: true },
+            { header: "Stall", width: 10, value: (r: R) => r.team.tent ?? "", text: true },
+            { header: "Where", width: 44, value: (r: R) => r.team.place },
             { header: "Building / room", width: 22, value: (r: R) => r.team.place },
             { header: "Team code", width: 12, value: (r: R) => r.team.code, text: true },
             { header: "Team", width: 28, value: (r: R) => r.team.name },
@@ -116,9 +118,13 @@ export function DeskView({ embedded = false }: { embedded?: boolean }) {
       <PageHeader
         eyebrow={embedded ? undefined : "Grand Finale · 30 October"}
         title="Registration desk"
-        description="Pick the team, tick every student who is here and the ID card and lunch coupon you hand each of them, then save. Only a student who is here gets an ID card and a coupon. Registered students then see their octonorm on their dashboard."
+        description="Pick the team, tick every student who is here and the ID card and lunch coupon you hand each of them, then save. Only a student who is here gets an ID card and a coupon. Registered students then see their stall and its floor plan on their dashboard."
         actions={
           <>
+            <a href={venuePlanUrl} target="_blank" rel="noopener" className={buttonClass("secondary", "sm")}>
+              <MapIcon aria-hidden="true" className="size-3.5" />
+              Venue plan
+            </a>
             <Button
               variant="secondary"
               size="sm"
@@ -155,7 +161,7 @@ export function DeskView({ embedded = false }: { embedded?: boolean }) {
         {!all.data && !all.error && <Loading label="Loading the Grand Finale teams" />}
         {all.data && (
           <div className="grid gap-3 rounded-2xl bg-white p-4 ring-1 ring-line md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-            <Field label="Search" htmlFor="desk-filter" hint="Octonorm, team code or name, a student's name or roll number, or the last 4 digits of a phone">
+            <Field label="Search" htmlFor="desk-filter" hint="Stall (e.g. F3-07), team code or name, a student's name or roll number, or the last 4 digits of a phone">
               <Input id="desk-filter" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="e.g. 154, IT26-0217, Aarav" autoComplete="off" />
             </Field>
             <Field label={`Choose the team${q ? ` (${matching.length} match)` : ""}`} htmlFor="desk-team">
@@ -172,7 +178,7 @@ export function DeskView({ embedded = false }: { embedded?: boolean }) {
           </div>
         )}
         {all.data && q && matching.length === 0 && (
-          <EmptyState title="No Grand Finale team matches">Check the octonorm, code or spelling. Teams not taking part in the Grand Finale are not listed: send them to the help desk.</EmptyState>
+          <EmptyState title="No Grand Finale team matches">Check the stall, code or spelling. Teams not taking part in the Grand Finale are not listed: send them to the help desk.</EmptyState>
         )}
         {team && saved?.teamId === team.id && <Notice tone="success">{saved.text}</Notice>}
         {team && (
@@ -246,7 +252,7 @@ function TeamCard({ team, onUpdated, onChange }: { team: DeskTeam; onUpdated: (t
     <article className="overflow-hidden rounded-2xl bg-white ring-1 ring-line">
       <header className="flex flex-wrap items-start gap-4 border-b border-line p-4 sm:p-5">
         <div className="grid min-w-24 place-items-center rounded-2xl bg-navy-900 px-4 py-3 text-white">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">Octonorm</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">Stall</span>
           <span className="font-display text-4xl font-bold tabular-nums leading-none">{team.tent ?? "—"}</span>
         </div>
         <div className="min-w-0 flex-1">
@@ -258,8 +264,13 @@ function TeamCard({ team, onUpdated, onChange }: { team: DeskTeam; onUpdated: (t
             <Pill tone={typeTones[team.participantType]}>{team.participantType === "kiet" ? `KIET ${team.department ?? ""}` : typeShortLabels[team.participantType]}</Pill>
             {team.participantType !== "kiet" && <span className="text-sm text-navy-800">{team.institution}</span>}
           </div>
-          {team.place && <p className="mt-2 text-sm font-semibold text-accent-600">Exhibits at {team.place}{team.tent ? ` (octonorm ${team.tent})` : ""}</p>}
-          {!team.tent && !team.place && <p className="mt-2 text-sm font-semibold text-accent-600">No octonorm yet: send them to the help desk.</p>}
+          {team.place && (
+            <p className="mt-3 flex items-start gap-2 rounded-xl bg-accent-50 px-3 py-2 text-base font-bold text-accent-600 ring-1 ring-inset ring-accent-100">
+              <MapPin aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+              <span>Send them to: {team.place}</span>
+            </p>
+          )}
+          {!team.tent && !team.place && <p className="mt-2 text-sm font-semibold text-accent-600">No stall yet: send them to the help desk.</p>}
         </div>
       </header>
 

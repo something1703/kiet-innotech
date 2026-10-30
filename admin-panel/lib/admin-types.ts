@@ -1088,7 +1088,7 @@ export type CouponsResult = { team: DeskTeam; given: string[]; already: string[]
 // ---------- Grand Finale section (super admins) ----------
 
 /** One planned (or made) Grand Finale panel: one judge over a run of consecutive octonorms. */
-export type FinaleAllotPanel = { name: string; jurorEmail: string; jurorName: string; first: string; last: string; teams: number };
+export type FinaleAllotPanel = { name: string; venue: string; jurorEmail: string; jurorName: string; first: string; last: string; teams: number };
 export type FinaleAllot = { panels: FinaleAllotPanel[]; applied: boolean; onAPanel: string[]; noOctonorm: string[] };
 
 export type FinaleSection = "category" | "coe" | "club" | "school" | "college" | "startup";

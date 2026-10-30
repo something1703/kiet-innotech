@@ -25,9 +25,9 @@ export function judgeEmails(text: string): string[] {
 }
 
 /**
- * Super admins: one panel per judge over consecutive octonorms, in the order the judges are listed: the first judge gets
- * the lowest numbers ("Panel 1 · Octonorms 3-12"), the next the following ones, and so on, as even as possible. A plan
- * is shown first; nothing is made until "Make the panels".
+ * Super admins: one panel per judge over consecutive stalls, in the order the judges are listed. When teams are placed in
+ * venues (floors, the badminton court), a panel stays in one venue and each venue gets judges in proportion to its teams.
+ * A plan is shown first; nothing is made until "Make the panels".
  */
 export function AllotJudgesDialog({ finale, onClose, onDone }: { finale: Finale; onClose: () => void; onDone: (message: string) => void }) {
   const [text, setText] = useState("");
@@ -47,7 +47,7 @@ export function AllotJudgesDialog({ finale, onClose, onDone }: { finale: Finale;
     setError(null);
     try {
       const result = await api.allotFinale(emails, chosen, apply);
-      if (apply) return onDone(`${plural(result.panels.length, "panel")} made, one judge each, octonorms ${result.panels[0].first} to ${result.panels[result.panels.length - 1].last}.`);
+      if (apply) return onDone(`${plural(result.panels.length, "panel")} made, one judge each, stalls ${result.panels[0].first} to ${result.panels[result.panels.length - 1].last}.`);
       setPlan(result);
     } catch (err) {
       setError(errorMessage(err));
@@ -59,8 +59,8 @@ export function AllotJudgesDialog({ finale, onClose, onDone }: { finale: Finale;
 
   return (
     <Dialog
-      title="Allot judges by octonorm"
-      description="One panel per judge. The teams are taken in octonorm order and shared out evenly: the first judge in the list gets the lowest numbers, the next judge the following ones, and so on."
+      title="Allot judges by stall"
+      description="One panel per judge. The teams are taken in stall order and shared out evenly; a panel never spans two venues (floors, the badminton court), and each venue gets judges in proportion to its teams. The first judge in the list gets the first stalls, and so on."
       onClose={onClose}
       busy={pending}
       size="xl"
@@ -111,8 +111,8 @@ export function AllotJudgesDialog({ finale, onClose, onDone }: { finale: Finale;
         {plan && (
           <>
             {plan.noOctonorm.length > 0 && (
-              <Notice tone="warning" title={`${plural(plan.noOctonorm.length, "team")} without an octonorm left out`}>
-                {plan.noOctonorm.join(", ")}. Give them an octonorm on the Teams &amp; octonorms tab first, or add them to a panel by hand later.
+              <Notice tone="warning" title={`${plural(plan.noOctonorm.length, "team")} without a stall left out`}>
+                {plan.noOctonorm.join(", ")}. Give them a stall on the Teams &amp; octonorms tab first, or add them to a panel by hand later.
               </Notice>
             )}
             {plan.onAPanel.length > 0 && <Notice tone="info">{plural(plan.onAPanel.length, "team")} already on a panel stay where they are.</Notice>}

@@ -2053,7 +2053,9 @@ class FinaleAllotInput(Input):
 
 
 class FinaleAllotPanelOut(BaseModel):
+    # The panel's full name, with its venue: "G Block · Floor 3 · Panel 9 · F3-01 to F3-12".
     name: str
+    venue: str = ""
     juror_email: str
     juror_name: str
     first: str

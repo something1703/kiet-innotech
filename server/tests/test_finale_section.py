@@ -569,3 +569,44 @@ def test_octonorms_are_shared_out_in_order_and_evenly():
     assert [n for r in runs for n in r] == numbers  # every team once, in order
     assert (runs[0][0], runs[0][-1], runs[-1][0], runs[-1][-1]) == (3, 12, 165, 173)
     assert split_evenly([1, 2, 3], 3) == [[1], [2], [3]]
+
+
+def test_judges_are_shared_among_venues_in_proportion_to_their_teams():
+    from app.services.finale import share_judges
+    from app.services.judging import place_label
+
+    # The G Block plan: schools in G-006 (10), Floors 1-5 (20, 18, 23, 23, 25), the badminton court (36), 16 judges.
+    assert share_judges([10, 20, 18, 23, 23, 25, 36], 16) == [1, 2, 2, 2, 2, 3, 4]
+    assert share_judges([5, 1], 2) == [1, 1] and share_judges([3], 3) == [3]
+    assert sum(share_judges([1, 1, 50], 10)) == 10 and share_judges([1, 1, 50], 10)[:2] == [1, 1]
+    assert place_label("G Block · Floor 3", "Corridor, Side A, Table 7") == "G Block · Floor 3 · Corridor, Side A, Table 7"
+    assert place_label("B Block", "204") == "B Block · Room 204" and place_label("Badminton Court", "") == "Badminton Court"
+
+
+def test_a_panel_never_spans_two_venues(judging, settings):  # noqa: F811
+    teams = finale_teams(judging, settings)
+    root = judging["root"]
+    a, b, college, school = (teams[k] for k in ("cse_a", "cse_b", "college", "school"))
+    floor, court = "G Block · Floor 1", "Badminton Court"
+    entries(
+        root,
+        {"team_id": a["id"], "octonorm": "F1-01", "building": floor, "room": "Corridor, Side A, Table 1"},
+        {"team_id": b["id"], "octonorm": "F1-02", "building": floor, "room": "Corridor, Side A, Table 2"},
+        {"team_id": college["id"], "octonorm": "F1-03", "building": floor, "room": "Corridor, Side B, Table 1"},
+        {"team_id": school["id"], "octonorm": "BC-01", "building": court},
+    )
+    judges = [{"name": f"Judge {n}", "email": f"judge{n}@gmail.com", "organisation": "", "phone": ""} for n in (1, 2, 3)]
+    assert root.post("/admin/jurors/import", {"judges": judges}).status_code == 200
+    body = {"judges": [j["email"] for j in judges], "sections": ["category", "school", "college"]}
+    # Three judges: the court (1 team) gets one, Floor 1 (3 teams) two; the court's stall sorts first.
+    plan = root.post("/admin/finale/allot", body).json()["panels"]
+    assert [(p["name"], p["venue"], p["teams"]) for p in plan] == [
+        ("Badminton Court · Panel 1 · BC-01", court, 1),
+        ("G Block · Floor 1 · Panel 2 · F1-01 to F1-02", floor, 2),
+        ("G Block · Floor 1 · Panel 3 · F1-03", floor, 1),
+    ]
+    # Fewer judges than venues: refused (a judge sits in one venue only).
+    assert root.post("/admin/finale/allot", {**body, "judges": body["judges"][:1]}).status_code == 422
+    assert root.post("/admin/finale/allot", {**body, "apply": True}).status_code == 200
+    listed = {t["team"]["id"]: t["panel"] for t in root.get("/admin/finale").json()["teams"]}
+    assert listed[a["id"]] == "G Block · Floor 1 · Panel 2 · F1-01 to F1-02" and listed[school["id"]] == "Badminton Court · Panel 1 · BC-01"

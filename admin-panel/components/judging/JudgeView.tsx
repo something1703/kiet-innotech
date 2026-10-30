@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Crown, Download, FileDown, Lock, LockOpen, MapPin, Pencil, QrCode, RefreshCw, ShieldCheck, UserCheck, Users } from "lucide-react";
+import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Crown, Download, FileDown, Lock, LockOpen, Map as MapIcon, MapPin, Pencil, QrCode, RefreshCw, ShieldCheck, UserCheck, Users } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { AttendanceState, CertificateType, JudgePanel, JudgeTeam, LockResult } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { certificateFileNames, certificateLabels } from "@/lib/certificate-defaults";
 import { saveCertificate } from "@/lib/certificate-download";
-import { judgeManualUrl } from "@/lib/content";
+import { judgeManualUrl, venuePlanUrl } from "@/lib/content";
 import { categoryTitle, formatDateTime, plural, roundLabels } from "@/lib/format";
 import { roomClock, roomLabel, slotLabel, slotState, timeLabel, reasonProblem, MIN_REASON_LENGTH, type RoomClock } from "@/lib/rooms";
 import { attendanceEnabled } from "@/lib/features";
@@ -132,6 +132,12 @@ export function JudgeView() {
               <BookOpen aria-hidden="true" className="size-4" />
               Judge manual
             </a>
+            {view.data?.panels.some((p) => p.round === "final") && (
+              <a href={venuePlanUrl} target="_blank" rel="noopener" className={buttonClass("secondary")}>
+                <MapIcon aria-hidden="true" className="size-4" />
+                Venue plan
+              </a>
+            )}
             <Button variant="secondary" onClick={view.reload} pending={view.loading && !!view.data}>
               <RefreshCw aria-hidden="true" className="size-4" />
               Refresh
@@ -530,7 +536,7 @@ function TeamCard({ team, index, open, locked, onScore }: { team: JudgeTeam; ind
           <p className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-display text-base font-bold text-navy-900">{team.name}</span>
             <span className="font-mono text-xs text-muted">{team.code}</span>
-            {team.tent && <span className="font-mono text-xs font-bold text-accent-600">{team.place ? `Octonorm ${team.tent} · ${team.place}` : `Octonorm ${team.tent}`}</span>}
+            {team.tent && <span className="font-mono text-xs font-bold text-accent-600">{team.place ? `Stall ${team.tent} · ${team.place}` : `Stall ${team.tent}`}</span>}
             {!team.tent && team.place && <span className="text-xs font-bold text-accent-600">{team.place}</span>}
           </p>
           <p className="mt-0.5 line-clamp-2 text-sm text-navy-800">{team.projectTitle}</p>

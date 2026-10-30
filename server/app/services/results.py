@@ -90,10 +90,10 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
     ]
 
 
-# The octonorm number shows on the dashboard once the registration desk has registered the student (services/finale.py).
+# The stall shows on the dashboard once the registration desk has registered the student (services/finale.py).
 REGISTER_FIRST = (
-    "Register at the Registration Desk at the entrance of the ground: every member registers in person, and your octonorm "
-    "number appears on this page once you are registered."
+    "Register at the Registration Desk in the G Block ground-floor lobby: every member registers in person, and your stall "
+    "and where to find it appear on this page once you are registered."
 )
 
 

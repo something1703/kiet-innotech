@@ -441,7 +441,9 @@ def finale_places(db: Session, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, str
 
 
 def place_label(building: str, room: str) -> str:
-    return " · ".join(part for part in (building, f"Room {room}" if room else "") if part)
+    """ "B Block · Room 204", or "G Block · Floor 3 · Corridor, Side A, Table 7" when the room is a description."""
+    room = f"Room {room}" if room[:1].isdigit() else room
+    return " · ".join(part for part in (building, room) if part)
 
 
 def _panels_out(db: Session, panels: list[Panel], viewer: Admin | None = None) -> list[PanelOut]:
