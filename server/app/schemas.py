@@ -1720,6 +1720,16 @@ class JudgeTeamOut(BaseModel):
     # Every member is absent: the team scores 0 and cannot be marked.
     all_absent: bool = False
     my_score: ScoreOut | None
+    # Grand Finale: other judges who saved marks for this team (names only, never their marks), the team's own panel,
+    # and whether that panel is one of this judge's.
+    other_judges: list[str] = []
+    panel: str = ""
+    in_my_panel: bool = True
+    # Grand Finale: its section, e.g. "Technical Clubs" or "Category 3: Automation and Robotics".
+    section: str = ""
+    # For the search: the team's leader, and the club of a COE KIET / technical-club team.
+    leader_name: str = ""
+    club: str = ""
 
 
 class JudgePanelOut(BaseModel):
@@ -1749,6 +1759,15 @@ class JudgePanelOut(BaseModel):
     # Grand Finale: the judge may change marks already saved (a super admin's switch). Always true in the department round.
     edits_allowed: bool = True
     teams: list[JudgeTeamOut]
+
+
+class JudgeFinaleTeamsOut(BaseModel):
+    """Every Grand Finale team, for a Grand Finale judge to find and score one that is not in their room."""
+
+    teams: list[JudgeTeamOut]
+    open: bool
+    locked: bool
+    edits_allowed: bool
 
 
 class JudgeOut(BaseModel):

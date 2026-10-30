@@ -882,7 +882,20 @@ export type JudgeTeam = {
   /** Every student is absent: the team scores 0 and cannot be marked. */
   allAbsent: boolean;
   myScore: Score | null;
+  /** Grand Finale: the other judges who saved marks for this team (names only, never their marks). */
+  otherJudges: string[];
+  /** Grand Finale: the team's own panel (empty when it is on none), and whether that panel is one of this judge's. */
+  panel: string;
+  inMyPanel: boolean;
+  /** Grand Finale: the section it is ranked in, e.g. "Category 3: Automation and Robotics" or "Technical Clubs". */
+  section: string;
+  leaderName: string;
+  /** COE KIET / technical clubs: the club's name. */
+  club: string;
 };
+
+/** Every Grand Finale team, for a Grand Finale judge to find and score one that is not in their room. */
+export type JudgeFinaleTeams = { teams: JudgeTeam[]; open: boolean; locked: boolean; editsAllowed: boolean };
 
 export type JudgePanel = {
   id: string;

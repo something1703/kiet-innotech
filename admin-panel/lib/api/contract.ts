@@ -1,4 +1,4 @@
-import type { CompleteTeamInput, Credential, FinaleAllot, FinaleSection, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, FinaleSection, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -164,6 +164,10 @@ export interface AdminApi {
 
   /** A judge's own panels and scores. */
   judgeView(): Promise<JudgeView>;
+  /** A Grand Finale judge: every Grand Finale team, to find one that is not in their room. */
+  judgeFinaleTeams(): Promise<JudgeFinaleTeams>;
+  /** A Grand Finale judge scores any Grand Finale team, also one that is not in their room. */
+  saveFinaleScore(teamId: string, marks: number[], remarks: string, editReason?: string): Promise<Score>;
   /**
    * Saves a judge's marks for a team. Saved marks can be changed (with a clear `editReason`) until the judge locks
    * them or the room's time runs out.

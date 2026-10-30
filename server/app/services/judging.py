@@ -63,6 +63,7 @@ from ..schemas import (
     BufferInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
+    JudgeFinaleTeamsOut,
     JudgeMemberOut,
     JudgeOut,
     JudgePanelOut,
@@ -1323,6 +1324,9 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
     """
     The average of both judges' totals, ranked with the tie-breakers (innovation, then Query Addressing, then the
     department admin or a super admin). A team gets a place only once every judge of its room has scored it.
+
+    Grand Finale: any Grand Finale judge may score any team (also one not in their room), but one judge only marks a
+    team, so a team gets its place from that one mark, and a team on no panel is ranked too once someone has scored it.
     """
     _check_round(round_)
     if admin_service.is_type_admin(admin):
@@ -1342,6 +1346,13 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
     if department:
         statement = statement.where(Panel.department == department if round_ == "department" else Team.department == department)
     rows = db.execute(statement.order_by(Team.number)).tuples().all()
+    if round_ == "final":
+        # Grand Finale teams on no panel that a judge scored anyway.
+        on_panel = {team.id for team, _ in rows}
+        loose = select(Team).where(_eligible_condition("final"), Team.id.in_(select(Score.team_id).where(Score.round == "final")))
+        if department:
+            loose = loose.where(Team.department == department)
+        rows = [*rows, *((team, None) for team in db.scalars(loose.order_by(Team.number)) if team.id not in on_panel)]
     teams = [team for team, _ in rows]
     panel_of = {team.id: panel for team, panel in rows}
     summaries = {s.id: s for s in admin_service.summaries(db, teams)}
@@ -1349,7 +1360,7 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
         dict(
             db.execute(
                 select(PanelJuror.panel_id, func.count())
-                .where(PanelJuror.panel_id.in_({p.id for p in panel_of.values()}))
+                .where(PanelJuror.panel_id.in_({p.id for p in panel_of.values() if p is not None}))
                 .group_by(PanelJuror.panel_id)
             )
             .tuples()
@@ -1361,12 +1372,13 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
     marks: dict[uuid.UUID, list[list[int]]] = defaultdict(list)
     awards: dict[uuid.UUID, Award] = {}
     if teams:
-        for team_id, team_marks in db.execute(
-            select(Score.team_id, Score.marks)
-            .join(PanelTeam, (PanelTeam.team_id == Score.team_id) & (PanelTeam.round == Score.round))
-            .join(PanelJuror, (PanelJuror.panel_id == PanelTeam.panel_id) & (PanelJuror.juror_email == Score.juror_email))
-            .where(Score.round == round_, Score.team_id.in_([t.id for t in teams]))
-        ).tuples():
+        counted = select(Score.team_id, Score.marks).where(Score.round == round_, Score.team_id.in_([t.id for t in teams]))
+        if round_ == "department":
+            # Department round: only the marks of the team's own room's judges.
+            counted = counted.join(PanelTeam, (PanelTeam.team_id == Score.team_id) & (PanelTeam.round == Score.round)).join(
+                PanelJuror, (PanelJuror.panel_id == PanelTeam.panel_id) & (PanelJuror.juror_email == Score.juror_email)
+            )
+        for team_id, team_marks in db.execute(counted).tuples():
             marks[team_id].append(team_marks)
         awards = {a.team_id: a for a in db.scalars(select(Award).where(Award.round == round_, Award.team_id.in_([t.id for t in teams])))}
 
@@ -1381,7 +1393,11 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
         entries = []
         for team in group:
             scores = marks[team.id]
-            needed = judges.get(panel_of[team.id].id, 0)
+            panel = panel_of[team.id]
+            needed = judges.get(panel.id, 0) if panel is not None else 0
+            if round_ == "final":
+                # One judge marks a Grand Finale team: its one mark is its result.
+                needed = 1
             if team.id in absent:
                 entries.append((team, True, 0.0, 0.0, 0.0))
                 continue
@@ -1410,9 +1426,9 @@ def rankings(db: Session, admin: Admin, round_: str, department: str | None) -> 
                 RankedTeam(
                     position=place if complete and not is_absent else None,
                     team=summaries[team.id],
-                    panel=room_label(panel),
+                    panel=room_label(panel) if panel is not None else "Not in a panel",
                     scores=len(marks[team.id]),
-                    judges=judges.get(panel.id, 0),
+                    judges=1 if round_ == "final" else judges.get(panel.id, 0),
                     average=average,
                     innovation=innovation,
                     query=query,
@@ -1705,6 +1721,8 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
     finale_published = db.get(AppState, _awards_key("final")) is not None
     finale_edits = sections.judges_can_edit(db)
     locked_of = {panel.id: _locked(panel, link, open_rounds, now) or (panel.round == "final" and finale_published) for link, panel in links}
+    final_ids = [team.id for panel_id, team in rows if round_of[panel_id] == "final"]
+    others = _other_judges(db, juror, final_ids)
     for panel_id, team in rows:
         score = mine.get((round_of[panel_id], team.id))
         by_panel[panel_id].append(
@@ -1725,6 +1743,7 @@ def judge_view(db: Session, juror: Juror) -> JudgeOut:
                 members=members[team.id],
                 all_absent=round_of[panel_id] == "department" and presence.is_all_absent(states.get(team.id, [])),
                 my_score=_judge_score_out(score, locked_of[panel_id]) if score else None,
+                other_judges=others.get(team.id, []) if round_of[panel_id] == "final" else [],
             )
         )
     return JudgeOut(
@@ -1837,22 +1856,45 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
         raise ApiError("This team has been withdrawn or disqualified, so it is not scored.", 409)
     if panel.round == "department" and presence.absent_teams(db, [team_id]):
         raise ApiError("Every member of this team is marked absent, so it scores 0. Mark at least one student present to give marks.", 409)
+    return _write_score(db, juror, panel.round, team, data, f"in {room_label(panel)}")
 
+
+ONE_JUDGE = "{team} is already scored by {judge}. A Grand Finale team is marked by one judge only; ask the organisers if it needs changing."
+
+
+def _write_score(db: Session, juror: Juror, round_: str, team: Team, data: JudgeScoreInput, where: str) -> ScoreOut:
+    """
+    Saves a judge's marks for a team (new, or changed with a clear reason) once the caller has checked they may. A Grand
+    Finale team is marked by one judge only: the first to save it; the others are refused (a super admin can still change
+    or remove those marks).
+    """
+    if round_ == "final":
+        # Locks the team, so two judges saving the same team at once cannot both be first.
+        db.scalar(select(Team.id).where(Team.id == team.id).with_for_update())
     current = db.scalar(
         select(Score)
-        .where(Score.round == panel.round, Score.team_id == team_id, Score.juror_email == juror.email)
+        .where(Score.round == round_, Score.team_id == team.id, Score.juror_email == juror.email)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    if round_ == "final" and current is None:
+        # A first mark only: a judge may always correct their own.
+        other = db.scalar(
+            select(Juror.name)
+            .join(Score, Score.juror_email == Juror.email)
+            .where(Score.round == "final", Score.team_id == team.id, Score.juror_email != juror.email)
+        )
+        if other is not None:
+            raise ApiError(ONE_JUDGE.format(team=team.name, judge=other), 409)
     total = sum(data.marks)
     if current is None:
-        current = Score(round=panel.round, team_id=team_id, juror_email=juror.email, marks=data.marks, total=total, remarks=data.remarks)
+        current = Score(round=round_, team_id=team.id, juror_email=juror.email, marks=data.marks, total=total, remarks=data.remarks)
         db.add(current)
-        audit.record(db, juror.email, "judging.scored", team, f"{total}/{rules.RUBRIC_TOTAL} in {room_label(panel)}")
+        audit.record(db, juror.email, "judging.scored", team, f"{total}/{rules.RUBRIC_TOTAL} {where}")
     elif list(current.marks) == data.marks and current.remarks == data.remarks:
         return _judge_score_out(current)
     else:
-        if panel.round == "final" and not sections.judges_can_edit(db):
+        if round_ == "final" and not sections.judges_can_edit(db):
             raise ApiError(FINALE_EDITS_OFF, 409)
         reason = _strong_reason(data.edit_reason)
         was = f"{current.total}/{rules.RUBRIC_TOTAL} {list(current.marks)}"
@@ -1865,7 +1907,7 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
             juror.email,
             "judging.score_edited",
             team,
-            f"{juror.email} in {room_label(panel)}: {total}/{rules.RUBRIC_TOTAL} {data.marks} (was: {was}). Reason: {reason}",
+            f"{juror.email} {where}: {total}/{rules.RUBRIC_TOTAL} {data.marks} (was: {was}). Reason: {reason}",
         )
     try:
         db.commit()
@@ -1875,6 +1917,145 @@ def save_score(db: Session, juror: Juror, panel_id: uuid.UUID, team_id: uuid.UUI
         raise ApiError("These marks were just saved from another window. Reload the page to see them.", 409) from exc
     db.refresh(current)
     return _judge_score_out(current)
+
+
+# ---------- Grand Finale: a team that is not in the judge's room ----------
+
+NOT_A_FINALE_JUDGE = "Only judges on a Grand Finale panel can score Grand Finale teams."
+
+
+def _finale_links(db: Session, juror: Juror, *, lock: bool = False) -> list[tuple[PanelJuror, Panel]]:
+    statement = (
+        select(PanelJuror, Panel)
+        .join(Panel, Panel.id == PanelJuror.panel_id)
+        .where(PanelJuror.juror_email == juror.email, Panel.round == "final")
+        .order_by(Panel.name_key)
+    )
+    if lock:
+        statement = statement.with_for_update(of=PanelJuror).execution_options(populate_existing=True)
+    return list(db.execute(statement).tuples().all())
+
+
+def _other_judges(db: Session, juror: Juror, team_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
+    """Grand Finale: for each team, the names of the other judges who saved marks for it (never the marks)."""
+    out: dict[uuid.UUID, list[str]] = defaultdict(list)
+    if team_ids:
+        for team_id, name in db.execute(
+            select(Score.team_id, Juror.name)
+            .join(Juror, Juror.email == Score.juror_email)
+            .where(Score.round == "final", Score.team_id.in_(team_ids), Score.juror_email != juror.email)
+            .order_by(Juror.name)
+        ).tuples():
+            out[team_id].append(name)
+    return out
+
+
+def _section_label(section: str, category: int) -> str:
+    if section == "category":
+        return f"Category {category}: {rules.CATEGORIES[category].title}"
+    return rules.FINALE_SECTIONS.get(section, section)
+
+
+def finale_teams(db: Session, juror: Juror) -> JudgeFinaleTeamsOut:
+    """
+    Every Grand Finale team, for a Grand Finale judge: so a team that moved, or is not in their room, can still be found
+    (by stall, code, name, project, college or school, department, club, a member's name, category, section or floor) and
+    scored. Each shows its stall and place, its panel, the judge's own marks and which other judges have marked it.
+    """
+    links = _finale_links(db, juror)
+    if not links:
+        raise ApiError(NOT_A_FINALE_JUDGE, 403)
+    teams = list(db.scalars(select(Team).where(_eligible_condition("final")).order_by(Team.number)))
+    ids = [t.id for t in teams]
+    tents = _tents(db, ids)
+    places = finale_places(db, ids)
+    section_of = sections.of_teams(db, teams)
+    clubs = sections.clubs_of(db, teams)
+    leaders = admin_service._leader_names(db, teams)
+    my_panels = {panel.id for _, panel in links}
+    panel_of = dict(db.execute(select(PanelTeam.team_id, PanelTeam.panel_id).where(PanelTeam.round == "final")).tuples().all())
+    panels = {p.id: p for p in db.scalars(select(Panel).where(Panel.round == "final"))}
+    members: dict[uuid.UUID, list[JudgeMemberOut]] = defaultdict(list)
+    for member, profile in db.execute(
+        select(TeamMember, Profile)
+        .join(Profile, Profile.user_id == TeamMember.user_id)
+        .where(TeamMember.team_id.in_(ids))
+        .order_by(TeamMember.role != "leader", Profile.full_name)
+    ).tuples():
+        members[member.team_id].append(
+            JudgeMemberOut(
+                user_id=member.user_id,
+                attendance="not_marked",
+                full_name=profile.full_name,
+                role=member.role,
+                year=profile.year,
+                course=profile.course,
+                department=profile.department,
+            )
+        )
+    mine = {s.team_id: s for s in db.scalars(select(Score).where(Score.round == "final", Score.juror_email == juror.email))}
+    others = _other_judges(db, juror, ids)
+    open_ = round_open(db, "final")
+    locked = db.get(AppState, _awards_key("final")) is not None or not open_ or any(link.locked_at for link, _ in links)
+    out = []
+    for team in teams:
+        panel = panels.get(panel_of.get(team.id))
+        score = mine.get(team.id)
+        out.append(
+            JudgeTeamOut(
+                id=team.id,
+                code=team.code,
+                name=team.name,
+                category=team.category,
+                domain=team.domain,
+                project_title=team.project_title,
+                abstract=team.abstract,
+                participant_type=team.participant_type,
+                institution=team.institution,
+                department=team.department,
+                status=team.status,
+                tent=tents.get(team.id),
+                place=places.get(team.id, ""),
+                members=members[team.id],
+                my_score=_judge_score_out(score, locked) if score else None,
+                other_judges=others.get(team.id, []),
+                panel=room_label(panel) if panel else "",
+                in_my_panel=panel is not None and panel.id in my_panels,
+                section=_section_label(section_of[team.id], team.category),
+                leader_name=leaders.get(team.leader_id, ""),
+                club=clubs.get(team.id, ""),
+            )
+        )
+    return JudgeFinaleTeamsOut(teams=out, open=open_, locked=locked, edits_allowed=sections.judges_can_edit(db))
+
+
+def save_finale_score(db: Session, juror: Juror, team_id: uuid.UUID, data: JudgeScoreInput) -> ScoreOut:
+    """
+    A Grand Finale judge scores any Grand Finale team, also one that is not in their room (it moved, or its judge is
+    busy). The same rules as in their room: judging open, results not published, their marks not locked, changes with a
+    reason and only while the organisers allow them. A team of their own panel is saved as in their room.
+    """
+    own = db.scalar(
+        select(PanelTeam.panel_id)
+        .join(PanelJuror, PanelJuror.panel_id == PanelTeam.panel_id)
+        .where(PanelTeam.team_id == team_id, PanelTeam.round == "final", PanelJuror.juror_email == juror.email)
+    )
+    if own is not None:
+        return save_score(db, juror, own, team_id, data)
+    links = _finale_links(db, juror, lock=True)
+    if not links:
+        raise ApiError(NOT_A_FINALE_JUDGE, 403)
+    if db.get(AppState, _awards_key("final")) is not None:
+        raise ApiError(FINALE_PUBLISHED, 409)
+    _require_scoring_time(db, links[0][1])
+    if any(link.locked_at for link, _ in links):
+        raise ApiError("Your Grand Finale marks are locked. Only a super admin can change them.", 409)
+    team = db.scalar(select(Team).where(Team.id == team_id, _eligible_condition("final")))
+    if team is None:
+        raise ApiError("This team is not taking part in the Grand Finale, or has been withdrawn or disqualified.", 404)
+    panel_id = db.scalar(select(PanelTeam.panel_id).where(PanelTeam.team_id == team.id, PanelTeam.round == "final"))
+    where = f"outside their room (team on {room_label(db.get(Panel, panel_id))})" if panel_id else "outside their room (team on no panel)"
+    return _write_score(db, juror, "final", team, data, where)
 
 
 def lock_scores(db: Session, juror: Juror, panel_id: uuid.UUID) -> LockOut:

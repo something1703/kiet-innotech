@@ -222,7 +222,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { CompleteTeamInput, Credential, FinaleAllot, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -480,6 +480,9 @@ export const liveApi: AdminApi = {
   unmarkPresent: (userId, round, note) => request<void>("POST", "/admin/attendance/unmark", { userId, round, note }),
 
   judgeView: () => request<JudgeView>("GET", "/judge"),
+  judgeFinaleTeams: () => request<JudgeFinaleTeams>("GET", "/judge/finale/teams"),
+  saveFinaleScore: (teamId, marks, remarks, editReason = "") =>
+    request<Score>("PUT", `/judge/finale/teams/${id(teamId)}/score`, { marks, remarks, editReason }),
   saveScore: (panelId, teamId, marks, remarks, editReason = "") =>
     request<Score>("PUT", `/judge/panels/${id(panelId)}/teams/${id(teamId)}/score`, { marks, remarks, editReason }),
   lockMarks: (panelId) => request<LockResult>("POST", `/judge/panels/${id(panelId)}/lock`),

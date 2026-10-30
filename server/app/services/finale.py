@@ -94,15 +94,8 @@ def overview(db: Session, admin: Admin) -> FinaleOut:
     )
     panels = {p.id: p for p in db.scalars(select(Panel).where(Panel.round == ROUND))}
     judges = Counter(db.scalars(select(PanelJuror.panel_id).where(PanelJuror.panel_id.in_(list(panels)))))
-    # Only marks of the team's own panel's judges count, as in the rankings.
-    scores = Counter(
-        db.scalars(
-            select(Score.team_id)
-            .join(PanelTeam, (PanelTeam.team_id == Score.team_id) & (PanelTeam.round == Score.round))
-            .join(PanelJuror, (PanelJuror.panel_id == PanelTeam.panel_id) & (PanelJuror.juror_email == Score.juror_email))
-            .where(Score.round == ROUND, Score.team_id.in_(ids))
-        )
-    )
+    # Every Grand Finale judge's marks count, also a judge's from outside the team's room (as in the rankings).
+    scores = Counter(db.scalars(select(Score.team_id).where(Score.round == ROUND, Score.team_id.in_(ids))))
     # Every judge with Grand Finale marks for the team, also ones no longer on its panel (e.g. a try-out).
     marked_by: dict[uuid.UUID, list[str]] = {}
     for team_id, email in db.execute(

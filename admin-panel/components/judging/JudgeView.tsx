@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Crown, Download, FileDown, Lock, LockOpen, Map as MapIcon, MapPin, Pencil, QrCode, RefreshCw, ShieldCheck, UserCheck, Users } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
-import type { AttendanceState, CertificateType, JudgePanel, JudgeTeam, LockResult } from "@/lib/admin-types";
+import type { AttendanceState, CertificateType, JudgeFinaleTeams, JudgePanel, JudgeTeam, LockResult } from "@/lib/admin-types";
 import { useAdmin } from "@/lib/auth/AuthProvider";
 import { certificateFileNames, certificateLabels } from "@/lib/certificate-defaults";
 import { saveCertificate } from "@/lib/certificate-download";
@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { AttendanceDesk } from "@/components/attendance/AttendanceDesk";
 import { HiddenMarks, RevealButton, useHoldToReveal } from "./HiddenMarks";
+import { NotInMyRoom } from "./NotInMyRoom";
 import { RoomTimer, TimeLeftPopup, type WarningItem } from "./RoomTimer";
 import { PARTS, RubricForm, RubricSummary, rubricFor, TOTAL } from "./RubricForm";
 import { StudentAttendance } from "./StudentAttendance";
@@ -95,8 +96,12 @@ export function JudgeView() {
   // Marks being entered survive closing the sheet by mistake (until the page is reloaded).
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [notice, setNotice] = useState<Banner | null>(null);
+  // Grand Finale: a team found under "Not in your room?", scored from there; and a counter that reloads that list.
+  const [outside, setOutside] = useState<{ team: JudgeTeam; list: JudgeFinaleTeams } | null>(null);
+  const [outsideSaved, setOutsideSaved] = useState<{ text: string; n: number } | null>(null);
 
   const panels = view.data?.panels ?? [];
+  const finalPanel = panels.find((p) => p.round === "final");
   // The "15 minutes left" popup: for each room of this judge whose slot is about to end while they can still save marks.
   const warnings: WarningItem[] = panels.flatMap((panel) => {
     const status = scoringFor(panel, now);
@@ -124,10 +129,10 @@ export function JudgeView() {
       <PageHeader
         eyebrow="Judge"
         title="My judging"
-        description={`Signed in as ${me.name}. You see only the teams of your own rooms. Save marks for each team and change them, with a reason, until you lock them all in one go. Marks stay hidden on screen: hover over or hold the eye button to see them.`}
+        description={`Signed in as ${me.name}. ${finalPanel ? "Your room's teams are below; any other Grand Finale team can be found and scored under \"Not in your room?\"." : "You see only the teams of your own rooms."} Save marks for each team and change them, with a reason, until you lock them all in one go. Marks stay hidden on screen: hover over or hold the eye button to see them.`}
         actions={
-          // w-max: the header would otherwise squeeze the two buttons into a column.
-          <div className="flex w-max gap-2">
+          // Wraps on a phone (three buttons do not fit one line); side by side from a tablet up.
+          <div className="flex flex-wrap gap-2 sm:w-max">
             <a href={judgeManualUrl} target="_blank" rel="noopener" className={buttonClass("secondary")}>
               <BookOpen aria-hidden="true" className="size-4" />
               Judge manual
@@ -145,6 +150,23 @@ export function JudgeView() {
           </div>
         }
       />
+      {finalPanel && (
+        <>
+          {outsideSaved?.text && <Notice tone="success">{outsideSaved.text}</Notice>}
+          <NotInMyRoom
+            refresh={outsideSaved?.n ?? 0}
+            canScore={scoringFor(finalPanel, now).can}
+            onScore={(team, list) => {
+              setOutsideSaved(null);
+              // A team of the judge's own room is scored there, as usual.
+              const room = team.inMyPanel ? panels.find((p) => p.teams.some((t) => t.id === team.id)) : undefined;
+              const own = room?.teams.find((t) => t.id === team.id);
+              if (room && own) setScoring({ panel: room, team: own });
+              else setOutside({ team, list });
+            }}
+          />
+        </>
+      )}
       <JudgeCertificate />
       {view.error && <Notice tone="error">{view.error}</Notice>}
       {!view.data && !view.error && <Loading label="Loading your teams" />}
@@ -203,7 +225,8 @@ export function JudgeView() {
           key={scoring.team.id}
           panel={scoring.panel}
           team={scoring.team}
-          canScore={scoringFor(scoring.panel, now).can}
+          // A Grand Finale team already marked by another judge is theirs: open to read, not to mark.
+          canScore={scoringFor(scoring.panel, now).can && !(scoring.team.otherJudges.length > 0 && !scoring.team.myScore)}
           draft={drafts[`${scoring.panel.id}:${scoring.team.id}`]}
           onDraft={(draft) => setDrafts((all) => ({ ...all, [`${scoring.panel.id}:${scoring.team.id}`]: draft }))}
           onClose={() => setScoring(null)}
@@ -225,6 +248,34 @@ export function JudgeView() {
               next: rest[0] ?? null,
             });
             setScoring(null);
+            view.reload();
+            if (scoring.panel.round === "final") setOutsideSaved((s) => (s ? { ...s, n: s.n + 1 } : { text: "", n: 1 }));
+          }}
+        />
+      )}
+      {outside && finalPanel && (
+        <ScoreSheet
+          key={`outside:${outside.team.id}`}
+          // The team's own panel, not the judge's: what the sheet shows and which rules apply (no attendance from here).
+          panel={{ ...finalPanel, building: "", name: outside.team.panel ? `${outside.team.panel} (not your room)` : "Not in a panel", canMarkAttendance: false, editsAllowed: outside.list.editsAllowed }}
+          team={outside.team}
+          canScore={scoringFor(finalPanel, now).can && !outside.list.locked && !(outside.team.otherJudges.length > 0 && !outside.team.myScore)}
+          draft={drafts[`outside:${outside.team.id}`]}
+          onDraft={(draft) => setDrafts((all) => ({ ...all, [`outside:${outside.team.id}`]: draft }))}
+          onClose={() => setOutside(null)}
+          onAttendance={view.reload}
+          save={(marks, remarks, reason) => api.saveFinaleScore(outside.team.id, marks, remarks, reason)}
+          onSaved={(changed) => {
+            setDrafts((all) => {
+              const rest = { ...all };
+              delete rest[`outside:${outside.team.id}`];
+              return rest;
+            });
+            setOutsideSaved((s) => ({
+              n: (s?.n ?? 0) + 1,
+              text: `${changed ? "Marks changed" : "Marks saved"} for ${outside.team.name}${outside.team.tent ? ` (stall ${outside.team.tent})` : ""}. They count like any other judge's.`,
+            }));
+            setOutside(null);
             view.reload();
           }}
         />
@@ -557,6 +608,12 @@ function TeamCard({ team, index, open, locked, onScore }: { team: JudgeTeam; ind
             <Users aria-hidden="true" className="size-3.5" />
             {leader ? `${leader.fullName} (leader)` : "No leader"} · {plural(team.members.length, "member")}
           </p>
+          {team.otherJudges.length > 0 && (
+            <p className="mt-1 text-xs font-semibold text-accent-600">
+              {team.myScore ? "Also scored by" : "Already scored by"} {team.otherJudges.join(", ")}
+              {!team.myScore && ": one judge marks a team, so it is not yours to mark"}
+            </p>
+          )}
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
@@ -595,6 +652,7 @@ function ScoreSheet({
   onClose,
   onAttendance,
   onSaved,
+  save: saveOutside,
 }: {
   panel: JudgePanel;
   team: JudgeTeam;
@@ -606,6 +664,8 @@ function ScoreSheet({
   onAttendance: () => void;
   /** `changed`: these were saved marks that were changed (not a first save). */
   onSaved: (changed: boolean) => void;
+  /** Grand Finale, a team not in the judge's room: saved this way instead of through the room. */
+  save?: (marks: number[], remarks: string, reason: string) => Promise<unknown>;
 }) {
   const rubric = rubricFor(team.category);
   const scored = team.myScore;
@@ -647,7 +707,8 @@ function ScoreSheet({
     setPending(true);
     setError(null);
     try {
-      await api.saveScore(panel.id, team.id, marks as number[], remarks.trim(), scored ? reason.trim() : "");
+      if (saveOutside) await saveOutside(marks as number[], remarks.trim(), scored ? reason.trim() : "");
+      else await api.saveScore(panel.id, team.id, marks as number[], remarks.trim(), scored ? reason.trim() : "");
       onSaved(!!scored);
     } catch (err) {
       setError(errorMessage(err));
@@ -737,7 +798,14 @@ function ScoreSheet({
           </Notice>
         )}
 
-        {!canScore && !scored && <Notice tone="info">Practice view: read the team and the rubric to get familiar. Marks can be saved once scoring opens for your room.</Notice>}
+        {!scored && team.otherJudges.length > 0 && (
+          <Notice tone="info" title={`Already scored by ${team.otherJudges.join(", ")}`}>
+            A Grand Finale team is marked by one judge only, so you can read it but not mark it. Ask the organisers if it needs changing.
+          </Notice>
+        )}
+        {!canScore && !scored && team.otherJudges.length === 0 && (
+          <Notice tone="info">Practice view: read the team and the rubric to get familiar. Marks can be saved once scoring opens for your room.</Notice>
+        )}
         {canScore && !scored && team.status !== "submitted" && <Notice tone="warning">This team has been {team.status}, so it is not scored.</Notice>}
 
         {scored && !editing ? (

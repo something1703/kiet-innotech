@@ -610,3 +610,77 @@ def test_a_panel_never_spans_two_venues(judging, settings):  # noqa: F811
     assert root.post("/admin/finale/allot", {**body, "apply": True}).status_code == 200
     listed = {t["team"]["id"]: t["panel"] for t in root.get("/admin/finale").json()["teams"]}
     assert listed[a["id"]] == "G Block · Floor 1 · Panel 2 · F1-01 to F1-02" and listed[school["id"]] == "Badminton Court · Panel 1 · BC-01"
+
+
+def test_a_judge_scores_a_team_that_is_not_in_their_room(judging, settings):  # noqa: F811
+    teams = finale_teams(judging, settings)
+    root, judge, other = judging["root"], judging["external"], judging["cse_prof"]
+    a, b, college, school = (teams[k] for k in ("cse_a", "cse_b", "college", "school"))
+    entries(root, {"team_id": college["id"], "octonorm": "F3-21", "building": "G Block · Floor 3", "room": "Corridor, Side B, Table 2"})
+    room_a = finale_panel(judging, keys=("cse_a", "cse_b"))  # the external judge
+    room_b = root.post("/admin/panels", {"round": "final", "name": "Panel B"}).json()
+    assert root.put(f"/admin/panels/{room_b['id']}/teams", {"team_ids": [college["id"]]}).status_code == 200
+    assert root.put(f"/admin/panels/{room_b['id']}/jurors", {"jurors": [{"email": "cse.prof@kiet.edu"}]}).status_code == 200
+    # (the school is on no panel at all)
+
+    # Every Grand Finale team, for Grand Finale judges only, with its stall, place, panel and section.
+    assert judging["it_prof"].get("/judge/finale/teams").status_code == 403
+    listed = judge.get("/judge/finale/teams").json()
+    found = {t["id"]: t for t in listed["teams"]}
+    assert set(found) == {a["id"], b["id"], college["id"], school["id"]} and listed["open"] is False
+    assert found[a["id"]]["in_my_panel"] is True and found[college["id"]]["in_my_panel"] is False
+    assert (found[college["id"]]["tent"], found[college["id"]]["place"], found[college["id"]]["panel"]) == (
+        "F3-21",
+        "G Block · Floor 3 · Corridor, Side B, Table 2",
+        "Panel B",
+    )
+    assert found[school["id"]]["panel"] == "" and found[school["id"]]["section"] == "Innovation at School"
+    assert found[a["id"]]["section"].startswith("Category 1:") and found[a["id"]]["leader_name"]
+
+    url = lambda team: f"/judge/finale/teams/{team['id']}/score"  # noqa: E731
+    assert judge.put(url(college), {"marks": FULL, "remarks": ""}).status_code == 423  # judging not open yet
+    assert root.post("/admin/judging/final/open").status_code == 200
+    assert judge.put(url(college), {"marks": FULL, "remarks": ""}).status_code == 200
+    assert judge.put(url(school), {"marks": LOWER, "remarks": ""}).status_code == 200
+    assert judge.put(url(a), {"marks": FULL, "remarks": ""}).status_code == 200  # own room: saved as in the room
+    assert judge.get("/judge").json()["panels"][0]["teams"][0]["my_score"]["total"] == 50
+
+    # The room's own judge sees that someone else marked their team (names only, never the marks).
+    seen = {t["id"]: t for t in other.get("/judge").json()["panels"][0]["teams"]}
+    assert seen[college["id"]]["other_judges"] == ["Industry Judge"]
+    # Rankings count every judge: the college and the school (on no panel) are ranked with one mark each.
+    groups = {g["label"]: g for g in root.get("/admin/finale/results").json()["groups"]}
+    assert [(w["team_code"]) for w in groups["Innovation at Other Colleges"]["winners"]] == [college["code"]]
+    assert [w["team_code"] for w in groups["Best School Project"]["winners"]] == [school["code"]]
+    # One judge marks a Grand Finale team: the room's own judge is now refused, from the room or from the search.
+    refused = other.put(f"/judge/panels/{room_b['id']}/teams/{college['id']}/score", {"marks": LOWER, "remarks": ""})
+    assert refused.status_code == 409 and "already scored by Industry Judge" in refused.json()["detail"]
+    assert other.put(url(college), {"marks": LOWER, "remarks": ""}).status_code == 409
+    assert other.put(url(school), {"marks": LOWER, "remarks": ""}).status_code == 409
+    college_row = next(
+        t for g in root.get("/admin/judging/final/rankings").json()["groups"] for t in g["teams"] if t["team"]["id"] == college["id"]
+    )
+    assert (college_row["scores"], college_row["judges"], college_row["average"], college_row["complete"]) == (1, 1, 50.0, True)
+    overview = {t["team"]["id"]: t for t in root.get("/admin/finale").json()["teams"]}
+    assert overview[college["id"]]["scores"] == 1 and overview[college["id"]]["marked_by"] == ["expert@kiet.edu"]
+    # A super admin can still change any mark (here: enter the room judge's, which replaces nothing of the first judge's).
+    assert (
+        root.put(
+            f"/admin/panels/{room_b['id']}/teams/{college['id']}/scores/cse.prof@kiet.edu", {"marks": LOWER, "remarks": "", "reason": ""}
+        ).status_code
+        == 200
+    )
+
+    # The same rules as in the room: changes need a reason and the organisers' switch; a locked judge cannot score.
+    change = {"marks": LOWER, "remarks": "", "edit_reason": "I misread the rubric for ease of use"}
+    assert judge.put(url(college), {"marks": LOWER, "remarks": ""}).status_code == 422  # no reason
+    assert judge.put(url(college), change).status_code == 200
+    assert root.put("/admin/finale/settings", {"judges_can_edit": False}).status_code == 200
+    assert judge.put(url(college), {**change, "marks": FULL}).status_code == 409
+    assert root.put("/admin/finale/settings", {"judges_can_edit": True}).status_code == 200
+    assert judge.post(f"/judge/panels/{room_a['id']}/lock").status_code == 200
+    assert judge.put(url(school), {**change, "marks": FULL}).status_code == 409
+    assert judge.get("/judge/finale/teams").json()["locked"] is True
+    # Every mark is in the activity log, saying it came from outside the judge's room.
+    details = [e["detail"] for e in root.get("/admin/activity").json()["items"] if e["action"] == "judging.scored"]
+    assert any("outside their room (team on Panel B)" in d for d in details) and any("team on no panel" in d for d in details)

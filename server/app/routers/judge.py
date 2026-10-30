@@ -9,7 +9,17 @@ from sqlalchemy.orm import Session
 from ..auth import CurrentJuror
 from ..config import Settings, get_settings
 from ..db import get_db
-from ..schemas import AttendanceSheet, CertificatesOut, JudgeOut, JudgeScoreInput, LockOut, PresenceInput, ScoreOut, TeamPresenceOut
+from ..schemas import (
+    AttendanceSheet,
+    CertificatesOut,
+    JudgeFinaleTeamsOut,
+    JudgeOut,
+    JudgeScoreInput,
+    LockOut,
+    PresenceInput,
+    ScoreOut,
+    TeamPresenceOut,
+)
 from ..services import attendance, certificates, judging
 
 router = APIRouter(prefix="/judge", tags=["judge"])
@@ -21,6 +31,18 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 @router.get("")
 def my_panels(juror: CurrentJuror, db: Db) -> JudgeOut:
     return judging.judge_view(db, juror)
+
+
+@router.get("/finale/teams")
+def finale_teams(juror: CurrentJuror, db: Db) -> JudgeFinaleTeamsOut:
+    """Every Grand Finale team, to find and score one that is not in this judge's room."""
+    return judging.finale_teams(db, juror)
+
+
+@router.put("/finale/teams/{team_id}/score")
+def save_finale_score(team_id: uuid.UUID, data: JudgeScoreInput, juror: CurrentJuror, db: Db) -> ScoreOut:
+    """A Grand Finale judge scores any Grand Finale team, also one that is not in their room."""
+    return judging.save_finale_score(db, juror, team_id, data)
 
 
 @router.put("/panels/{panel_id}/teams/{team_id}/score")
