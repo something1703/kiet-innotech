@@ -95,8 +95,9 @@ def test_admin_team_rules(world, student):  # noqa: F811
     assert create(cse, "n1@kiet.edu", ["nobody@kiet.edu"]).status_code == 422
     assert create(cse, "n1@kiet.edu", ["n1@kiet.edu"]).status_code == 422
     assert create(cse, "n1@kiet.edu", ["a@kiet.edu"]).status_code == 409
-    # Another institution, category eligibility, too small to submit, name taken.
-    assert create(world["root"], "x@gmail.com", ["y@gmail.com"]).status_code == 422
+    # A super admin may join differently written colleges (other organisers may not: test_super_edits).
+    assert create(world["root"], "x@gmail.com", ["y@gmail.com"], name="Two Colleges").status_code == 201
+    # Category eligibility, too small to submit, name taken.
     assert create(cse, "n1@kiet.edu", ["first@kiet.edu"], category=6).status_code == 422
     assert create(cse, "n1@kiet.edu", submit=True).status_code == 422
     assert create(cse, "n1@kiet.edu", name="CSE Alpha").status_code == 409

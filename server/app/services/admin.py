@@ -546,7 +546,9 @@ def _apply_status(
 def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Settings, *, wildcard: bool = False) -> AdminTeamOut:
     """
     An organiser builds a team from registered students, whether or not registration is open (e.g. for help-desk
-    cases). The team rules still apply: same college or school, category eligibility, team size, unique name.
+    cases). The team rules still apply: same college or school, category eligibility, team size, unique name. A super
+    admin can put students of differently written colleges or schools together (only the kind must match): the same
+    school is often typed in many ways.
     """
     from .students import ALREADY_IN_TEAM, CODE_TAKEN, NAME_TAKEN, _commit, _decline_pending_invitations
 
@@ -592,7 +594,7 @@ def create_team(db: Session, admin: Admin, data: AdminTeamInput, settings: Setti
     for email in data.member_emails:
         _, profile = found[email]
         same = profile.participant_type == leader.participant_type and (
-            leader.participant_type == "kiet" or profile.institution_key == leader.institution_key
+            leader.participant_type == "kiet" or admin.role == "super_admin" or profile.institution_key == leader.institution_key
         )
         if not same:
             raise ApiError(f"{email} is not from the same college or school as the leader.", 422)
@@ -832,11 +834,15 @@ def edit_student(db: Session, admin: Admin, user_id: uuid.UUID, data: StudentEdi
     key = rules.institution_key(data.participant_type, data.institution, data.city)
     _, team = _lock_membership(db, user_id)
     if team is not None:
-        if data.participant_type != profile.participant_type or key != profile.institution_key:
+        # A super admin may correct how a team member's college or school is written; the kind stays.
+        if data.participant_type != profile.participant_type or (key != profile.institution_key and admin.role != "super_admin"):
             raise ApiError(
                 f"{profile.full_name} is in team {team.code}, so their college or school cannot change. Remove them from the team first.",
                 409,
             )
+        # The team's college or school is its leader's: a corrected name follows.
+        if team.leader_id == user_id and key != profile.institution_key:
+            team.institution, team.institution_key = data.institution, key
         # A team follows its leader's department (and route), so only the leader's department is tied to the team; a
         # member of a department team who chose the wrong department (e.g. COE) can simply be corrected.
         if team.leader_id == user_id and data.department != profile.department:
@@ -952,9 +958,9 @@ def add_team_member(db: Session, admin: Admin, team_id: uuid.UUID, data: TeamMem
     members = _member_years(db, [team.id]).get(team.id, [])
     if len(members) + 1 > high:
         raise ApiError("A startup entry has one member." if high == 1 else f"A team can have at most {high} members.", 422)
-    if profile.participant_type != team.participant_type or (
-        team.participant_type != "kiet" and profile.institution_key != team.institution_key
-    ):
+    other_institution = team.participant_type != "kiet" and profile.institution_key != team.institution_key
+    # A super admin may add a student whose college or school is written differently (only the kind must match).
+    if profile.participant_type != team.participant_type or (other_institution and admin.role != "super_admin"):
         raise ApiError(f"{data.email} is not from the same college or school as the team.", 422)
     if error := rules.category_error(team.category, team.participant_type, [year for _, year in members] + [profile.year]):
         raise ApiError(error, 422)
@@ -962,7 +968,8 @@ def add_team_member(db: Session, admin: Admin, team_id: uuid.UUID, data: TeamMem
     _decline_pending_invitations(db, user.email)
     db.flush()
     _check_team_valid_after(db, team)
-    audit.record(db, admin.email, "team.member_added", team, f"{data.email} added by an organiser. Reason: {data.reason}")
+    note = f" (from {profile.institution!r}, the team is {team.institution!r})" if other_institution else ""
+    audit.record(db, admin.email, "team.member_added", team, f"{data.email} added by an organiser{note}. Reason: {data.reason}")
     _commit(db, dict([ALREADY_IN_TEAM]))
     return admin_teams(db, [team])[0]
 

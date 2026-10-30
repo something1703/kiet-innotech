@@ -634,7 +634,8 @@ function TeamView({ id }: { id: string }) {
           description={
             <>
               Adds a registered student to <strong className="text-navy-900">{t.name}</strong>. They must have completed their profile and not be in another team. The
-              team rules (same college or school, category, size) still apply.
+              team rules (category, size{isSuper ? "" : ", same college or school"}) still apply.
+              {isSuper && " As a super admin you can add a student whose college or school is written differently (a school student to a school team, a college student to a college team)."}
             </>
           }
           confirmLabel="Add member"

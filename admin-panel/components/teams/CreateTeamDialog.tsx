@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Crown, Search, UserPlus, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminStudent, AdminTeam } from "@/lib/admin-types";
+import { useAdmin } from "@/lib/auth/AuthProvider";
 import { categories, departmentLabel, domains } from "@/lib/content";
 import { typeShortLabels } from "@/lib/format";
 import { categoryEligibility, limits, normaliseInstitution, TEAM_MAX_SIZE, TEAM_MIN_SIZE, teamSizeLimits, yearLabel } from "@/lib/rules";
@@ -87,6 +88,7 @@ type Errors = Partial<Record<"name" | "projectTitle" | "abstract" | "members" | 
  * The server applies the team rules again; this form checks them early so mistakes are clear.
  */
 export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (team: AdminTeam) => void }) {
+  const isSuper = useAdmin().role === "super_admin";
   const [people, setPeople] = useState<AdminStudent[]>([]);
   const [name, setName] = useState("");
   const [category, setCategory] = useState(1);
@@ -102,9 +104,10 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
   // A startup is a single entry; every other team has 2 to 5 members.
   const [minSize, maxSize] = leader ? teamSizeLimits(leader.participantType) : [TEAM_MIN_SIZE, TEAM_MAX_SIZE];
   const eligibility = leader ? categoryEligibility(category, leader.participantType, people.map((p) => p.year)) : null;
-  const mismatch = leader
-    ? people.slice(1).find((p) => p.participantType !== leader.participantType || (leader.participantType !== "kiet" && normaliseInstitution(p.institution) !== normaliseInstitution(leader.institution)))
-    : undefined;
+  const otherInstitution = (p: AdminStudent) => leader !== undefined && leader.participantType !== "kiet" && normaliseInstitution(p.institution) !== normaliseInstitution(leader.institution);
+  // A super admin may join students whose college or school is written differently; only the kind must match.
+  const mismatch = leader ? people.slice(1).find((p) => p.participantType !== leader.participantType || (!isSuper && otherInstitution(p))) : undefined;
+  const spelledDifferently = isSuper && leader ? people.slice(1).filter((p) => p.participantType === leader.participantType && otherInstitution(p)) : [];
 
   function add(student: AdminStudent) {
     if (people.length >= maxSize) return;
@@ -200,6 +203,12 @@ export function CreateTeamDialog({ onClose, onCreated }: { onClose: () => void; 
           )}
           {people.length < maxSize && <StudentFinder exclude={people.map((p) => p.email.toLowerCase())} onPick={add} />}
           {errors.members && <p className="text-xs font-medium text-red-700">{errors.members}</p>}
+          {spelledDifferently.length > 0 && (
+            <p className="text-xs text-muted">
+              {spelledDifferently.map((p) => p.fullName).join(", ")}: the college or school is written differently from the leader&rsquo;s ({leader?.institution}). Allowed for a
+              super admin; the team keeps the leader&rsquo;s name.
+            </p>
+          )}
         </section>
 
         <div className="grid gap-4 sm:grid-cols-2">

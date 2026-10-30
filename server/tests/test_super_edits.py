@@ -153,3 +153,41 @@ def test_member_rules_are_enforced(as_user, student, team_of):
         assert root.post(f"/admin/teams/{team['id']}/members", {"email": f"extra{i}@kiet.edu", **REASON}).status_code == 200
     student("sixth@kiet.edu")
     assert root.post(f"/admin/teams/{team['id']}/members", {"email": "sixth@kiet.edu", **REASON}).status_code == 422
+
+
+def test_a_super_admin_may_join_differently_written_schools(as_user, student, team_of):
+    from conftest import school_profile
+
+    root = as_user("root@kiet.edu")
+    lead = student("lead@gmail.com", school_profile("Delhi Public School"))
+    team = team_of(lead, [student("mate@gmail.com", school_profile("Delhi Public School"))])
+    student("other@gmail.com", {**school_profile("D.P.S. Ghaziabad"), "phone": "9811122244"})
+    student("third@gmail.com", {**school_profile("DPS Ghaziabad"), "phone": "9811122255"})
+    student("college@gmail.com", college_profile())
+    url = f"/admin/teams/{team['id']}/members"
+
+    # The super admin may add a student whose school is written differently (the same school is typed in many ways).
+    added = root.post(url, {"email": "other@gmail.com", **REASON})
+    assert added.status_code == 200, added.text
+    assert "D.P.S. Ghaziabad" in next(
+        e["detail"] for e in root.get("/admin/activity").json()["items"] if e["action"] == "team.member_added"
+    )
+    # The kind must still match: a college student does not join a school team.
+    assert root.post(url, {"email": "college@gmail.com", **REASON}).status_code == 422
+
+    # A super admin builds a team of differently written schools too.
+    student("a@gmail.com", {**school_profile("St. Mary's School"), "phone": "9811122266"})
+    student("b@gmail.com", {**school_profile("St Marys Sr Sec School"), "phone": "9811122277"})
+    body = {**team_input(name="Mixed Spelling"), "leader_email": "a@gmail.com", "member_emails": ["b@gmail.com"]}
+    # Other organisers still need the same school.
+    assert root.post("/admin/admins", {"email": "school.admin@kiet.edu", "name": "Schools", "role": "school_admin"}).status_code == 201
+    refused = as_user("school.admin@kiet.edu").post("/admin/teams", body)
+    assert refused.status_code == 422 and "same college or school" in refused.json()["detail"]
+    made = root.post("/admin/teams", body)
+    assert made.status_code == 201, made.text
+
+    # Correcting how the leader's school is written: allowed for a super admin, and the team follows.
+    uid = student_id(root, "lead@gmail.com")
+    fixed = root.put(f"/admin/students/{uid}", {**school_profile("Delhi Public School, Ghaziabad"), **REASON})
+    assert fixed.status_code == 200, fixed.text
+    assert root.get(f"/admin/teams/{team['id']}").json()["institution"] == "Delhi Public School, Ghaziabad"
