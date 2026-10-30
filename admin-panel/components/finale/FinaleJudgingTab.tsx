@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users } from "lucide-react";
+import { FileDown, Users } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import type { Finale } from "@/lib/admin-types";
 import { useQuery } from "@/lib/use-query";
@@ -9,6 +9,8 @@ import { JurorsTab } from "@/components/judging/JurorsTab";
 import { RoundBar } from "@/components/judging/JudgingView";
 import { PanelsTab } from "@/components/judging/PanelsTab";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Field";
+import { downloadJudgingSheets } from "@/lib/judging-sheets";
 import { AllotJudgesDialog } from "./AllotJudgesDialog";
 import { Loading, Notice } from "@/components/ui/Notice";
 import { SectionTitle } from "@/components/ui/PageHeader";
@@ -26,6 +28,22 @@ export function FinaleJudgingTab({ finale, onFinale }: { finale: Finale; onFinal
   const [error, setError] = useState<string | null>(null);
   const [allotting, setAllotting] = useState(false);
   const [allotted, setAllotted] = useState<string | null>(null);
+  const [sheetFor, setSheetFor] = useState<string>("all");
+  const [printing, setPrinting] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+
+  async function sheets() {
+    if (!judging.data) return;
+    setPrinting(true);
+    setSheetError(null);
+    try {
+      await downloadJudgingSheets(judging.data.panels, finale, sheetFor);
+    } catch (err) {
+      setSheetError(errorMessage(err));
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   async function setEdits(on: boolean) {
     setPending(true);
@@ -89,6 +107,27 @@ export function FinaleJudgingTab({ finale, onFinale }: { finale: Finale; onFinal
               Allot judges by stall
             </Button>
             <span className="text-xs text-muted">One judge per panel, stalls shared out in order, one venue per panel.</span>
+          </div>
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 ring-1 ring-line">
+            <span className="mr-auto text-sm font-semibold text-navy-900">
+              Judging sheets to print <span className="font-normal text-muted">· A4 landscape, every parameter, a row per team</span>
+            </span>
+            <Select aria-label="Which panel's judging sheet" value={sheetFor} onChange={(e) => setSheetFor(e.target.value)} className="h-9 w-auto max-w-full">
+              <option value="all">Every panel (one PDF)</option>
+              {[...judging.data.panels]
+                .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {[p.building, p.name].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              {finale.teams.some((t) => !t.panelId) && <option value="none">Teams on no panel</option>}
+            </Select>
+            <Button size="sm" variant="secondary" onClick={sheets} pending={printing}>
+              {!printing && <FileDown aria-hidden="true" className="size-4" />}
+              Download PDF
+            </Button>
+            {sheetError && <p role="alert" className="basis-full text-sm font-medium text-red-700">{sheetError}</p>}
           </div>
           {allotted && (
             <div className="mb-4">

@@ -338,6 +338,22 @@ function RoomSection({
   const state = slotState(panel.slotStart, panel.slotEnd, now);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const me = useAdmin();
+  const [printing, setPrinting] = useState(false);
+
+  /** Grand Finale: this panel's judging sheet to print, every parameter for every team. */
+  async function printSheet() {
+    setPrinting(true);
+    setError(null);
+    try {
+      const { downloadMyJudgingSheet } = await import("@/lib/judging-sheets");
+      await downloadMyJudgingSheet(panel, me.name);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   async function downloadSheet() {
     setDownloading(true);
@@ -436,6 +452,17 @@ function RoomSection({
                 {downloading ? "Preparing…" : "Attendance sheet"}
               </button>
             </>
+          )}
+          {panel.round === "final" && panel.teams.length > 0 && (
+            <button
+              type="button"
+              onClick={printSheet}
+              disabled={printing}
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-navy-900 transition hover:bg-brand-50 disabled:opacity-60"
+            >
+              <FileDown aria-hidden="true" className="size-4" />
+              {printing ? "Preparing…" : "Judging sheet (PDF)"}
+            </button>
           )}
         </div>
         {error && <p role="alert" className="mt-2 text-sm font-medium text-red-200">{error}</p>}
