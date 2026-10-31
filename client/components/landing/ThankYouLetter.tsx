@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
-import { Award, CheckCircle2, Heart, MessageSquareHeart, Star } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Award, CheckCircle2, Heart, MailOpen, MessageSquareHeart, Star, X } from "lucide-react";
 import { getSession, useSession } from "@/lib/auth/session";
 import { portalClosesLabel } from "@/lib/content";
 import { sendFeedback, type FeedbackRole } from "@/lib/feedback";
@@ -36,13 +37,20 @@ const SPARKLES = [
  */
 export function ThankYouLetter() {
   const [open, setOpen] = useState(false);
-  const [writing, setWriting] = useState(false);
+  const [reading, setReading] = useState(false);
+
+  function breakSeal() {
+    setOpen(true);
+    // The flap opens and the card rises first; then the letter itself pops up.
+    const reduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.setTimeout(() => setReading(true), reduced ? 0 : 1300);
+  }
 
   return (
-    <section id="thank-you" aria-labelledby="thank-you-title" className="relative overflow-hidden bg-gradient-to-b from-navy-950 via-navy-900 to-navy-800 py-14 text-white sm:py-20">
+    <section id="thank-you" aria-labelledby="thank-you-title" className="relative overflow-hidden bg-gradient-to-b from-navy-950 via-navy-900 to-navy-800 py-12 text-white sm:py-20">
       <div className="pointer-events-none absolute inset-0 opacity-30 [background:radial-gradient(circle_at_20%_20%,rgb(232_85_36/0.35),transparent_45%),radial-gradient(circle_at_80%_70%,rgb(251_191_36/0.25),transparent_40%)]" aria-hidden="true" />
       <div className="relative mx-auto max-w-4xl px-4 sm:px-6">
-        <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-amber-300">InnoTech&apos;26 · Grand Finale · 30 October 2026</p>
+        <p className="text-center text-[11px] font-bold uppercase tracking-[0.28em] text-amber-300 sm:text-xs">InnoTech&apos;26 · Grand Finale · 30 October 2026</p>
         <h2 id="thank-you-title" className="mt-3 text-center font-display text-3xl font-bold sm:text-5xl">
           A letter for you
         </h2>
@@ -70,20 +78,20 @@ export function ThankYouLetter() {
             <div className="relative aspect-[3/2] w-full">
               {/* Back of the envelope */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#f6e7cf] to-[#e9d1ad] shadow-2xl shadow-black/40" />
-              {/* The letter inside: rises out when opened */}
+              {/* The card inside: rises out when opened */}
               <div
                 className={`absolute inset-x-[6%] top-[40%] z-10 h-[56%] rounded-xl bg-white shadow-lg transition-transform duration-[900ms] ease-out ${
                   open ? "-translate-y-[92%] delay-300" : "translate-y-0"
                 }`}
                 aria-hidden="true"
               >
-                <div className="p-4 text-center sm:p-6">
-                  <p className="font-display text-2xl font-bold text-accent-600 sm:text-4xl">Thank you!</p>
-                  <p className="mt-1 text-xs font-semibold text-navy-800 sm:text-sm">for making InnoTech&apos;26 a grand success</p>
-                  <div className="mx-auto mt-3 h-1.5 w-1/3 rounded-full bg-amber-300" />
+                <div className="flex h-full flex-col items-center justify-center p-3 text-center sm:p-5">
+                  <Emblem className="size-10 sm:size-14" />
+                  <p className="mt-1.5 font-display text-xl font-bold text-accent-600 sm:text-3xl">Thank you!</p>
+                  <p className="text-[11px] font-semibold text-navy-800 sm:text-sm">for making InnoTech&apos;26 a grand success</p>
                 </div>
               </div>
-              {/* Side flaps: with the pocket they hide the letter until it rises out */}
+              {/* Side flaps: with the pocket they hide the card until it rises out */}
               <div className="absolute inset-0 z-20 rounded-2xl bg-gradient-to-r from-[#efd6ae] to-[#e6c9a0] [clip-path:polygon(0_0,54%_56%,0_100%)]" />
               <div className="absolute inset-0 z-20 rounded-2xl bg-gradient-to-l from-[#efd6ae] to-[#e6c9a0] [clip-path:polygon(100%_0,46%_56%,100%_100%)]" />
               {/* Front pocket of the envelope */}
@@ -97,17 +105,17 @@ export function ThankYouLetter() {
               >
                 <div className="h-full w-full rounded-t-2xl bg-gradient-to-b from-[#ecd2a8] to-[#dfbd8a] [clip-path:polygon(0_0,100%_0,50%_100%)]" />
               </div>
-              {/* The wax seal */}
+              {/* The wax seal, with the InnoTech emblem pressed into it */}
               <button
                 type="button"
-                onClick={() => setOpen(true)}
+                onClick={breakSeal}
                 disabled={open}
                 aria-label="Open the letter"
-                className={`absolute left-1/2 top-[56%] z-30 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-gradient-to-br from-accent-500 to-[#a8321a] font-display text-sm font-bold tracking-wider text-white shadow-xl ring-4 ring-[#a8321a]/40 transition duration-500 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-amber-300 sm:size-24 sm:text-base ${
+                className={`absolute left-1/2 top-[56%] z-30 grid size-[4.5rem] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-gradient-to-br from-accent-500 to-[#a8321a] shadow-xl ring-4 ring-[#a8321a]/40 transition duration-500 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-amber-300 sm:size-24 ${
                   open ? "scale-0 rotate-45 opacity-0" : "motion-safe:animate-pulse-ring hover:scale-110"
                 }`}
               >
-                KIET
+                <Emblem className="size-12 sm:size-16" />
               </button>
               {/* Confetti when it opens */}
               {open && (
@@ -135,62 +143,146 @@ export function ThankYouLetter() {
             </div>
           </div>
           {!open && <p className="mt-5 text-center text-sm font-semibold text-amber-200 motion-safe:animate-pulse">Tap the seal</p>}
+          {open && !reading && (
+            <div className="mt-6 text-center">
+              <button
+                type="button"
+                onClick={() => setReading(true)}
+                className="inline-flex items-center gap-2 rounded-full bg-amber-300 px-6 py-3 text-sm font-bold text-navy-900 shadow-lg transition hover:bg-amber-200"
+              >
+                <MailOpen aria-hidden="true" className="size-4" />
+                Read the letter
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {reading && <LetterPopup onClose={() => setReading(false)} />}
+    </section>
+  );
+}
+
+/** The InnoTech emblem in a white circle: on the wax seal, on the card and at the top of the letter. */
+function Emblem({ className = "" }: { className?: string }) {
+  return (
+    <span className={`grid place-items-center overflow-hidden rounded-full bg-white p-1 shadow-inner ring-2 ring-amber-200 ${className}`}>
+      <Image src="/images/brand/innotech-emblem.png" alt="" width={219} height={219} className="h-full w-full object-contain" />
+    </span>
+  );
+}
+
+/**
+ * The letter, as a pop-up: on a phone a full-height sheet that slides up (the actions stay at the bottom within reach of a
+ * thumb), on a larger screen a centred card. It scrolls inside; Escape, the close button or a tap outside closes it.
+ */
+function LetterPopup({ onClose }: { onClose: () => void }) {
+  const [writing, setWriting] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (writing) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [writing]);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-6" role="presentation">
+      <button type="button" aria-label="Close the letter" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-navy-950/75 backdrop-blur-sm motion-safe:animate-fade-in" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="letter-title"
+        className="relative flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-[#fffaf2] text-ink shadow-2xl ring-1 ring-amber-200 motion-safe:animate-sheet-up sm:h-auto sm:max-h-[88vh] sm:max-w-2xl sm:rounded-3xl"
+      >
+        {/* Top: the emblem, the sender and the close button (stays put while the letter scrolls) */}
+        <div className="border-b border-amber-200/80 bg-[#fff6e6] px-4 pb-3 pt-2 sm:px-6 sm:pt-4">
+          <span className="mx-auto mb-2 block h-1 w-10 rounded-full bg-navy-900/15 sm:hidden" aria-hidden="true" />
+          <div className="flex items-center gap-3">
+            <Emblem className="size-12 shrink-0 sm:size-14" />
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-accent-600">With gratitude</p>
+              <p className="truncate text-xs font-semibold text-muted">KIET · Dept. of IT & CSE (CS)</p>
+            </div>
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Close the letter"
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-navy-900 ring-1 ring-line transition hover:bg-surface"
+            >
+              <X aria-hidden="true" className="size-5" />
+            </button>
+          </div>
         </div>
 
-        {/* The letter itself */}
-        {open && (
-          <article className="motion-safe:animate-fade-up relative mx-auto -mt-2 max-w-3xl rounded-3xl bg-[#fffaf2] p-6 text-ink shadow-2xl ring-1 ring-amber-200 sm:p-10">
-            <p className="font-display text-xs font-bold uppercase tracking-[0.25em] text-accent-600">With gratitude</p>
-            <h3 className="mt-2 font-display text-2xl font-bold sm:text-3xl">Dear innovators, mentors, judges and friends,</h3>
-            <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-navy-800 sm:text-base">
-              <p>
-                Thank you for making <strong>InnoTech&apos;26</strong> a grand success. On 30 October the Grand Finale filled G Block and the
-                badminton court with ideas: teams from every department of KIET, other colleges, schools, centres of excellence, technical
-                clubs and start-ups showed what they had built, and our judges spent the day listening, asking and encouraging.
-              </p>
-              <p>
-                Even the rain could not stop us. Everyone moved indoors with a smile, set up again and kept going. That spirit of building
-                together is exactly what InnoTech is about.
-              </p>
-              <p>
-                To every team: whether you took home a prize or not, you built something real and shared it with the world. We are proud of
-                you. To the judges, faculty, volunteers and the registration desk: thank you for your time and care. To our sponsors and
-                guests: thank you for believing in our students.
-              </p>
-              <p>We were very happy to host you. See you at InnoTech&apos;27!</p>
-            </div>
-            <p className="mt-6 font-display text-base font-bold text-ink">
-              Department of Information Technology
-              <br />
-              Department of Computer Science and Engineering (Cyber Security)
-              <span className="mt-1 block text-sm font-semibold text-muted">KIET Deemed to be University, Delhi-NCR, Ghaziabad</span>
+        {/* The letter: scrolls */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-6 pt-2 sm:px-8">
+          <h3 id="letter-title" className="font-display text-[1.6rem] font-bold leading-tight sm:text-3xl">
+            Dear innovators, mentors, judges and friends,
+          </h3>
+          <div className="mt-4 space-y-4 text-[15.5px] leading-[1.7] text-navy-800 sm:text-base">
+            <p>
+              Thank you for making <strong>InnoTech&apos;26</strong> a grand success. On 30 October the Grand Finale filled G Block and the
+              badminton court with ideas: teams from every department of KIET, other colleges, schools, centres of excellence, technical clubs
+              and start-ups showed what they had built, and our judges spent the day listening, asking and encouraging.
             </p>
-
-            <div className="mt-7 rounded-2xl bg-white p-4 ring-1 ring-amber-200 sm:p-5">
-              <p className="flex items-start gap-2 text-sm font-semibold text-ink">
-                <Award aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-accent-600" />
-                The InnoTech&apos;26 portal stays open until {portalClosesLabel}. Download your certificates before it closes.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link href="/certificates" className="inline-flex items-center gap-2 rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-accent-600">
-                  <Award aria-hidden="true" className="size-4" />
-                  Get my certificate
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setWriting(true)}
-                  className="inline-flex items-center gap-2 rounded-full bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800"
-                >
-                  <MessageSquareHeart aria-hidden="true" className="size-4" />
-                  Share your feedback
-                </button>
-              </div>
-            </div>
+            <p>
+              Even the rain could not stop us. Everyone moved indoors with a smile, set up again and kept going. That spirit of building together
+              is exactly what InnoTech is about.
+            </p>
+            <p>
+              To every team: whether you took home a prize or not, you built something real and shared it with the world. We are proud of you.
+              To the judges, faculty, volunteers and the registration desk: thank you for your time and care. To our sponsors and guests: thank
+              you for believing in our students.
+            </p>
+            <p className="font-semibold text-ink">We were very happy to host you. See you at InnoTech&apos;27!</p>
+          </div>
+          <p className="mt-6 border-l-4 border-accent-500 pl-3 font-display text-[15px] font-bold leading-snug text-ink sm:text-base">
+            Department of Information Technology
+            <br />
+            Department of Computer Science and Engineering (Cyber Security)
+            <span className="mt-1 block font-sans text-sm font-semibold text-muted">KIET Deemed to be University, Delhi-NCR, Ghaziabad</span>
+          </p>
+          <p className="mt-6 flex items-start gap-2 rounded-2xl bg-amber-50 p-3.5 text-sm font-semibold text-ink ring-1 ring-amber-200">
+            <Award aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-accent-600" />
+            The InnoTech&apos;26 portal stays open until {portalClosesLabel}. Download your certificates before it closes.
+          </p>
+          <div ref={formRef} className="scroll-mt-4">
             {writing && <FeedbackForm />}
-          </article>
-        )}
+          </div>
+        </div>
+
+        {/* Bottom: the two things to do, always within reach */}
+        <div className="grid grid-cols-2 gap-2 border-t border-amber-200/80 bg-white/90 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:flex sm:justify-end sm:px-6">
+          <Link
+            href="/certificates"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-accent-600 sm:px-5 sm:py-2.5"
+          >
+            <Award aria-hidden="true" className="size-4" />
+            My certificate
+          </Link>
+          <button
+            type="button"
+            onClick={() => setWriting(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-navy-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 sm:px-5 sm:py-2.5"
+          >
+            <MessageSquareHeart aria-hidden="true" className="size-4" />
+            Give feedback
+          </button>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 

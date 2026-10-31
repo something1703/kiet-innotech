@@ -39,6 +39,8 @@
   --animate-twinkle: twinkle 3.2s ease-in-out infinite;
   --animate-tada: tada 6s ease-in-out infinite;
   --animate-confetti: confetti 2.3s cubic-bezier(0.15, 0.7, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-sheet-up: sheet-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 @keyframes marquee {
@@ -56,6 +58,15 @@
   100% { box-shadow: 0 0 0 14px rgb(232 85 36 / 0); }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* The letter's pop-up: slides up from the bottom (a sheet on a phone), settling into place. */
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(60px); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: none; }
