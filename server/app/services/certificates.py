@@ -122,11 +122,65 @@ def student_certificate_status(db: Session, user: User) -> tuple[str | None, str
     return kind, None
 
 
+# ---------- Grand Finale (institute level) ----------
+
+FINALE_NOT_PUBLISHED = "Grand Finale certificates appear here once the organisers publish the Grand Finale results."
+FINALE_NOT_REGISTERED = (
+    "Grand Finale certificates go to the students who registered at the Grand Finale desk on 30 October. If you were there "
+    "and are not registered, please tell the organisers."
+)
+
+
+def _finale_published(db: Session) -> bool:
+    from ..models import AppState
+
+    return db.get(AppState, judging._awards_key("final")) is not None
+
+
+def _finale_award(db: Session, team: Team) -> Award | None:
+    """The team's announced Grand Finale place (categories and schools), once the results are published."""
+    if not _finale_published(db):
+        return None
+    award = db.scalar(select(Award).where(Award.team_id == team.id, Award.round == "final", Award.place >= 1))
+    return award if award and award.group_key.rsplit("-", 1)[0] in rules.FINALE_ANNOUNCED_SECTIONS else None
+
+
+def finale_certificate_status(db: Session, user: User) -> tuple[str | None, str | None]:
+    """
+    A student registered at the Grand Finale desk with their team: the winner certificate when the team won a place, the
+    participation one otherwise, once the results are published and the design is ready. (type, None) or (None, why).
+    """
+    team = _student_team(db, user)
+    if (
+        team is None
+        or user.banned_at is not None
+        or db.scalar(select(Team.id).where(Team.id == team.id, judging._eligible_condition("final"))) is None
+    ):
+        return None, None
+    if not _finale_published(db):
+        return None, FINALE_NOT_PUBLISHED
+    registered = db.scalar(
+        select(Attendance.user_id).where(
+            Attendance.user_id == user.id, Attendance.round == "final", Attendance.status == "present", Attendance.team_id == team.id
+        )
+    )
+    if registered is None:
+        return None, FINALE_NOT_REGISTERED
+    kind = "institute_winner" if _finale_award(db, team) is not None else "institute_participation"
+    if not _published(db, kind):
+        return None, NOT_READY
+    return kind, None
+
+
 def get_student_certificates(db: Session, user: User) -> tuple[list, str | None]:
-    kind, message = student_certificate_status(db, user)
-    if kind is None:
-        return [], message
-    return [{"type": kind, "available": True, "reason": None}], None
+    """Every certificate this student can download: the department round's and the Grand Finale's."""
+    dept, dept_message = student_certificate_status(db, user)
+    final, final_message = finale_certificate_status(db, user)
+    items = [{"type": kind, "available": True, "reason": None} for kind in (dept, final) if kind]
+    if items:
+        return items, None
+    # Nothing yet: the Grand Finale's reason says more to a finalist (or a team that went straight to the finale).
+    return [], final_message or dept_message
 
 
 def judge_certificate_status(db: Session, juror: Juror) -> tuple[bool, str | None]:
@@ -141,9 +195,27 @@ def judge_certificate_status(db: Session, juror: Juror) -> tuple[bool, str | Non
     return True, None
 
 
+def finale_judge_status(db: Session, juror: Juror) -> tuple[bool, str | None]:
+    """A judge who marked Grand Finale teams, once the results are published and the design is ready."""
+    if not _finale_published(db):
+        return False, None
+    if not db.scalar(select(Score.id).where(Score.round == "final", Score.juror_email == juror.email)):
+        return False, None
+    if not _published(db, "institute_judge"):
+        return False, NOT_READY
+    return True, None
+
+
 def get_judge_certificates(db: Session, juror: Juror) -> list:
     ok, reason = judge_certificate_status(db, juror)
-    return [{"type": "dept_judge", "available": ok, "reason": reason}]
+    final_ok, final_reason = finale_judge_status(db, juror)
+    out = [{"type": "dept_judge", "available": ok, "reason": reason}]
+    if final_ok or final_reason:
+        out.append({"type": "institute_judge", "available": final_ok, "reason": final_reason})
+    # A Grand Finale judge who did not judge the department round: the finale's certificate is the one that matters.
+    if final_ok and not ok:
+        out[0]["reason"] = None
+    return out
 
 
 def unprintable_names(db: Session) -> list[str]:
@@ -369,6 +441,20 @@ def generate_preview_png(pdf_data: bytes, dpi: int = 150) -> tuple[bytes, float,
 
 
 def student_certificate_data(db: Session, user: User, cert_type: str) -> dict:
+    if cert_type.startswith("institute_"):
+        kind, _ = finale_certificate_status(db, user)
+        if kind is None or kind != cert_type:
+            raise ApiError("Certificate not available.", 404)
+        team = _student_team(db, user)
+        assert team is not None
+        award = _finale_award(db, team) if kind == "institute_winner" else None
+        data = _build_student_data(db, user, team, award)
+        # A school or college team: its institution where a KIET team shows its department.
+        if team.participant_type != "kiet":
+            data["department"] = team.institution
+        if award is not None and award.group_key.startswith("school"):
+            data["category"] = "Best School Project"
+        return data
     kind, _ = student_certificate_status(db, user)
     if kind is None or kind != cert_type:
         raise ApiError("Certificate not available.", 404)
@@ -378,6 +464,10 @@ def student_certificate_data(db: Session, user: User, cert_type: str) -> dict:
 
 
 def judge_certificate_data(db: Session, juror: Juror, cert_type: str) -> dict:
+    if cert_type == "institute_judge":
+        if not finale_judge_status(db, juror)[0]:
+            raise ApiError("Certificate not available.", 404)
+        return _build_judge_data(juror)
     ok, _ = judge_certificate_status(db, juror)
     if cert_type != "dept_judge" or not ok:
         raise ApiError("Certificate not available.", 404)

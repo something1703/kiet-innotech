@@ -7,10 +7,8 @@ import type { ReactNode } from "react";
 import { LogOut, RefreshCw } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth/session";
 import { isPath, isUnder } from "@/lib/paths";
-import { longDate, longDateTime } from "@/lib/format";
-import { event } from "@/lib/content";
+import { event, portalClosesLabel } from "@/lib/content";
 import { attendanceEnabled } from "@/lib/features";
-import { useExtendedNote, useRegistrationDates, useRegistrationState } from "@/lib/registration";
 import { Button, Notice } from "@/components/ui/form";
 import { MailLink } from "@/components/ui/MailLink";
 import { PortalProvider } from "./PortalProvider";
@@ -29,15 +27,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const session = useSession();
-  const registration = useRegistrationState();
-  const { opens, closes } = useRegistrationDates();
-  const extended = useExtendedNote();
-  const note = extended ? ` ${extended}` : "";
-  const registrationMessages = {
-    upcoming: `Registration opens on ${longDate(opens)} and closes on ${longDate(closes)}.${note}`,
-    open: `Registration is open until ${longDateTime(closes)}.${note}`,
-    closed: `Registration closed on ${longDate(closes)}. Teams are now locked.${note}`,
-  };
   const onboarding = isPath(pathname, "/onboarding");
 
   return (
@@ -99,12 +88,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      {registration && (
-        <p className="bg-navy-900 px-4 py-2.5 text-center text-xs font-semibold text-slate-200 sm:text-sm">
-          <span className={`mr-2 inline-block h-2 w-2 rounded-full align-middle ${registration === "open" ? "bg-emerald-400" : "bg-accent-500"}`} aria-hidden="true" />
-          {registrationMessages[registration]}
-        </p>
-      )}
+      {/* After the event: what matters now is the certificates, and how long the portal stays open. */}
+      <p className="bg-navy-900 px-4 py-2.5 text-center text-xs font-semibold text-slate-200 sm:text-sm">
+        <span className="mr-2 inline-block h-2 w-2 rounded-full bg-amber-400 align-middle" aria-hidden="true" />
+        Thank you for being part of InnoTech&apos;26! The portal is open until {portalClosesLabel}: download your certificates before it closes.
+      </p>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
         <PortalProvider loading={<PortalLoading />} failed={(message, retry) => <PortalFailed message={message} retry={retry} />}>

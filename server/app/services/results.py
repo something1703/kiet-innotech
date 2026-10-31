@@ -53,7 +53,7 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
             ResultCard(
                 round="final",
                 status="winner",
-                title=f"{_place(award.place)} place at the Grand Finale",
+                title=f"Winners! {_place(award.place)} place at the Grand Finale",
                 message=_finale_win(award),
                 place=award.place,
                 amount=award.amount,
@@ -66,8 +66,8 @@ def _other_institution_cards(db: Session, team: Team, awards: dict, published: d
             ResultCard(
                 round="final",
                 status="participated",
-                title="Grand Finale results are out",
-                message="Better luck next time! Thank you for taking part in the Grand Finale.",
+                title="Thank you for taking part in the Grand Finale",
+                message=THANK_YOU,
             )
         ]
     if not accepted:
@@ -98,9 +98,30 @@ REGISTER_FIRST = (
 
 
 def _finale_win(award: Award) -> str:
-    if award.amount:
-        return f"Congratulations! Your team wins {_rupees(award.amount)}. The organisers will share how the prize is handed over."
-    return "Congratulations on your win! The organisers will share the details."
+    where = _award_group(award)
+    prize = f" Your team wins {_rupees(award.amount)}; the organisers will share how the prize is handed over." if award.amount else ""
+    return (
+        f"Congratulations, champions! Your team has won {_place(award.place)} place{where} at the InnoTech'26 Grand Finale. "
+        f"Out of every team in KIET and beyond, the judges chose yours: be proud of what you built together.{prize} "
+        "Students who registered at the Grand Finale desk find their winner's certificate on the Certificates tab."
+    )
+
+
+def _award_group(award: Award) -> str:
+    """ " in Category 3: Automation and Robotics", " for the Best School Project"."""
+    key = award.group_key
+    if key.startswith("category-"):
+        number = int(key.rsplit("-", 1)[1])
+        return f" in Category {number}: {rules.CATEGORIES[number].title}" if number in rules.CATEGORIES else ""
+    return " for the Best School Project" if key.startswith("school") else ""
+
+
+# After the Grand Finale: no marks are shown to anyone; every team that is not among the winners gets the same thank-you.
+THANK_YOU = (
+    "Better luck next time! Thank you for bringing your idea to the InnoTech'26 Grand Finale. Reaching the finale is an "
+    "achievement in itself, and the judges and visitors loved seeing what you built. Keep building: we hope to see you again "
+    "next year. If you registered at the Grand Finale desk, your certificate is on the Certificates tab."
+)
 
 
 def _finalist_card(db: Session, team: Team) -> ResultCard:
@@ -143,7 +164,7 @@ def my_results(db: Session, user: User) -> ResultsOut:
                 ResultCard(
                     round="final",
                     status="winner",
-                    title=f"{_place(award.place)} place at the Grand Finale",
+                    title=f"Winners! {_place(award.place)} place at the Grand Finale",
                     message=_finale_win(award),
                     place=award.place,
                     amount=award.amount,
@@ -154,8 +175,8 @@ def my_results(db: Session, user: User) -> ResultsOut:
                 ResultCard(
                     round="final",
                     status="participated",
-                    title="Grand Finale results are out",
-                    message="Better luck next time! Thank you for taking part in the Grand Finale.",
+                    title="Thank you for taking part in the Grand Finale",
+                    message=THANK_YOU,
                 )
             )
         else:

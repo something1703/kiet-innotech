@@ -31,7 +31,7 @@ export function useRegistrationSentence(): string {
 }
 
 /** The ticker, with its first line following the live registration window. */
+/** The ticker under the header. After the event it carries the thank-you and the certificate dates, not the registration window. */
 export function useLiveUpdates(): string[] {
-  const sentence = useRegistrationSentence();
-  return liveUpdates.map((item, index) => (index === 0 ? sentence.replace("Registration open until", "Registrations are open until").replace("Registration opens on", "Registrations open on") : item));
+  return liveUpdates;
 }

@@ -1,4 +1,4 @@
-import type { JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, FinaleSection, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
+import type { FeedbackList, JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, FinaleSection, CredentialRef, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleEntryInput, FinaleResults, OctonormImport, RegistrationInput, JudgeImportItem, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, AttendanceState, CertificateAvailability, CertificateFieldInput, CertificateFont, CertificateTemplate, CertificateType, Leaderboard, MarkStudentsResult, RollCall, RollCallQuery, BulkAction, BulkResult, ActivityQuery, AdminInput, TeamPresence, AdminStudent, AdminStudentInput, AdminTeam, AdminTeamInput, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, JudgingRound, Juror, JurorInput, LockResult, NominationInput, Page, Panel, PanelInput, PanelPlace, PublishResult, QuotaCell, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentEditInput, StudentQuery, TeamEditInput, TeamQuery, Timetable } from "../admin-types";
 
 /** Everything the admin panel needs from the backend. The mock and live implementations both satisfy it. */
 export interface AdminApi {
@@ -90,6 +90,8 @@ export interface AdminApi {
   addAdmin(input: AdminInput): Promise<AdminUser>;
   /** Super admin: every judge and registration desk login, with the password when it is kept. */
   credentials(): Promise<Credential[]>;
+  /** Super admin: the feedback from the thank-you letter, newest first. */
+  feedback(): Promise<FeedbackList>;
   /** Super admin: new sign-in passwords for the chosen accounts (the old ones stop working). */
   resetCredentials(accounts: CredentialRef[]): Promise<CredentialReset>;
   /** Super admin: a new sign-in password for a registration desk volunteer (the old one stops working). */

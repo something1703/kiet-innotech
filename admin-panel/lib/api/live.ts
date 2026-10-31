@@ -222,7 +222,7 @@
  *                  member.removed | invitation.sent | invitation.cancelled | invitation.declined.
  *          Unknown future actions render with their raw action string.
  */
-import type { JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
+import type { FeedbackList, JudgeFinaleTeams, CompleteTeamInput, Credential, FinaleAllot, CredentialReset, CouponsResult, Desk, DeskTeam, Finale, FinaleResults, OctonormImport, JudgeImportRow, JurorPassword, LockFinalistsResult, MealExtra, AcceptResult, ReleaseReadiness, ReleaseResult, Leaderboard, BulkResult, AdminInput, CertificateAvailability, CertificateFont, CertificateTemplate, MarkStudentsResult, RollCall, TeamPresence, AdminStudent, AdminTeam, AdminUser, ArchiveResult, AttendanceSheet, AuditEntry, FinalistBoard, FinalistSummary, JudgeView, Judging, Juror, LockResult, Page, Panel, PublishResult, Rankings, Readiness, RoundState, ScanResult, Schedule, ScheduleInput, Score, Stats, StudentQuery, TeamQuery, Timetable } from "../admin-types";
 import { getSession } from "../auth/session";
 import { ApiError, type AdminApi } from "./contract";
 
@@ -429,6 +429,7 @@ export const liveApi: AdminApi = {
   listAdmins: () => request<AdminUser[]>("GET", "/admin/admins"),
   addAdmin: (input: AdminInput) => request<AdminUser>("POST", "/admin/admins", input),
   credentials: () => request<Credential[]>("GET", "/admin/credentials"),
+  feedback: () => request<FeedbackList>("GET", "/admin/feedback"),
   resetCredentials: (accounts) => request<CredentialReset>("POST", "/admin/credentials/reset", { accounts }),
   setDeskPassword: (email) => request<JurorPassword>("POST", `/admin/admins/${id(email)}/password`),
   removeAdmin: (email) => request<void>("DELETE", `/admin/admins/${id(email)}`),

@@ -552,3 +552,29 @@ class FinaleHandout(Base):
     id_card_by: Mapped[str | None] = mapped_column(String(320))
     coupon_at: Mapped[datetime | None] = mapped_column(Timestamp)
     coupon_by: Mapped[str | None] = mapped_column(String(320))
+
+
+class Feedback(Base):
+    """
+    What a visitor, student, judge or guest thought of InnoTech'26, from the thank-you letter on the home page. A signed-in
+    student's account, profile name and team are linked; anyone else gives their name and email. Super admins read it.
+    """
+
+    __tablename__ = "feedback"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="rating"),
+        CheckConstraint("role IN ('student', 'judge', 'faculty', 'parent', 'guest', 'other')", name="role"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, default=utcnow, index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(320))
+    phone: Mapped[str] = mapped_column(String(20), default="")
+    role: Mapped[str] = mapped_column(String(10))
+    institution: Mapped[str] = mapped_column(String(200), default="")
+    team_code: Mapped[str] = mapped_column(String(20), default="")
+    rating: Mapped[int] = mapped_column(Integer)
+    liked: Mapped[str] = mapped_column(Text, default="")
+    improve: Mapped[str] = mapped_column(Text, default="")

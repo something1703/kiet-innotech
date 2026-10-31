@@ -298,6 +298,9 @@ FINALE_SECTIONS: dict[str, str] = {
 }
 # The places named at the Grand Finale in every section: 1st and 2nd (the event document's prizes).
 FINALE_PLACES = 2
+# Sections whose winners are announced and published. The others (Centres of Excellence, technical clubs, other colleges,
+# start-ups) take part without named places or prizes.
+FINALE_ANNOUNCED_SECTIONS = ("category", "school")
 
 
 def finale_prize(section: str, category: int, place: int) -> int | None:

@@ -45,6 +45,7 @@ from ..schemas import (
     DeleteTeamInput,
     ExtendRoomsInput,
     ExtendRoomsOut,
+    FeedbackListOut,
     FinaleAllotInput,
     FinaleAllotOut,
     FinaleEntriesInput,
@@ -124,6 +125,7 @@ from ..services import (
     rollcall,
     schedule,
 )
+from ..services import feedback as feedback_service
 from ..services.admin import ActivityFilters, StudentFilters, TeamFilters
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -465,6 +467,12 @@ def list_admins(admin: CurrentAdmin, db: Db, settings: AppSettings) -> list[Admi
 @router.post("/admins", status_code=status.HTTP_201_CREATED)
 def add_admin(data: AdminInput, admin: CurrentAdmin, db: Db, settings: AppSettings) -> AdminOut:
     return service.add_admin(db, admin, data, settings)
+
+
+@router.get("/feedback")
+def feedback_list(admin: CurrentAdmin, db: Db) -> FeedbackListOut:
+    """Super admin: every piece of feedback from the thank-you letter, newest first, with the sender's details."""
+    return feedback_service.listing(db, admin)
 
 
 @router.get("/credentials")

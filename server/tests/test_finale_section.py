@@ -106,7 +106,8 @@ def test_judging_switches_and_publishing(judging, settings, as_user):  # noqa: F
     groups = {g["label"]: g for g in root.get("/admin/finale/results").json()["groups"]}
     category = groups["Category 1: Smart Solutions, Smarter Society"]
     assert [(w["place"], w["team_code"], w["amount"]) for w in category["winners"]] == [(1, a["code"], 8000), (2, b["code"], 5000)]
-    assert [(w["team_code"], w["amount"]) for w in groups["Innovation at Other Colleges"]["winners"]] == [(college["code"], 0)]
+    # Winners are announced for the categories and the schools only: other colleges (and CoE, clubs) take part without places.
+    assert "Innovation at Other Colleges" not in groups
     assert groups["Best School Project"]["winners"] == [] and groups["Best School Project"]["not_ranked"] == 1
 
     # Publishing: typed phrase, super admins only; judging locks and judges can no longer change anything.
@@ -120,8 +121,10 @@ def test_judging_switches_and_publishing(judging, settings, as_user):  # noqa: F
     assert late.status_code == 409 and "published" in late.json()["detail"]
     winner = next(c for c in as_user("a@kiet.edu").get("/me/results").json()["cards"] if c["round"] == "final")
     assert (winner["status"], winner["place"], winner["amount"]) == ("winner", 1, 8000)
+    # The college team gets the thank-you, never marks or a place.
     college_card = as_user("r@gmail.com").get("/me/results").json()["cards"][0]
-    assert college_card["status"] == "winner" and "₹" not in college_card["message"]
+    assert college_card["status"] == "participated" and "Better luck next time" in college_card["message"]
+    assert "50" not in college_card["message"] and "₹" not in college_card["message"]
 
     # Only a super admin changes marks now, with no reason asked, and the winners follow at once.
     edited = root.put(f"/admin/panels/{panel['id']}/teams/{b['id']}/scores/expert@kiet.edu", {"marks": FULL, "remarks": "", "reason": ""})
@@ -260,7 +263,7 @@ def test_level_teams_are_flagged_and_decided_by_hand_even_without_a_cash_prize(j
     category = preview["Category 1: Smart Solutions, Smarter Society"]
     assert category["declared_by_hand"] is True
     assert [(w["place"], w["team_code"], w["amount"]) for w in category["winners"]] == [(1, b["code"], 8000), (2, a["code"], 5000)]
-    assert [(w["team_code"], w["amount"]) for w in preview["Innovation at Other Colleges"]["winners"]] == [(college["code"], 0)]
+    assert "Innovation at Other Colleges" not in preview
     # The school had no hand-declared places, so publishing named its winner from the marks.
     assert [w["team_code"] for w in preview["Best School Project"]["winners"]] == [school["code"]]
 
@@ -650,8 +653,11 @@ def test_a_judge_scores_a_team_that_is_not_in_their_room(judging, settings):  # 
     assert seen[college["id"]]["other_judges"] == ["Industry Judge"]
     # Rankings count every judge: the college and the school (on no panel) are ranked with one mark each.
     groups = {g["label"]: g for g in root.get("/admin/finale/results").json()["groups"]}
-    assert [(w["team_code"]) for w in groups["Innovation at Other Colleges"]["winners"]] == [college["code"]]
     assert [w["team_code"] for w in groups["Best School Project"]["winners"]] == [school["code"]]
+    college_row = next(
+        t for g in root.get("/admin/judging/final/rankings").json()["groups"] for t in g["teams"] if t["team"]["id"] == college["id"]
+    )
+    assert college_row["complete"] is True
     # The organisers see the outside mark on the team's own panel, flagged, and a super admin can change it there.
     rooms = {p["id"]: p for p in root.get("/admin/judging/final").json()["panels"]}
     on_b = next(t for t in rooms[room_b["id"]]["teams"] if t["id"] == college["id"])

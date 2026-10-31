@@ -14,6 +14,7 @@ import { Participants } from "@/components/landing/Participants";
 import { Prizes } from "@/components/landing/Prizes";
 import { Rules } from "@/components/landing/Rules";
 import { Stats } from "@/components/landing/Stats";
+import { ThankYouLetter } from "@/components/landing/ThankYouLetter";
 import { Timeline } from "@/components/landing/Timeline";
 
 export default function HomePage() {
@@ -22,6 +23,7 @@ export default function HomePage() {
       <SiteHeader />
       <LiveUpdates />
       <main>
+        <ThankYouLetter />
         <Hero />
         <Stats />
         <About />

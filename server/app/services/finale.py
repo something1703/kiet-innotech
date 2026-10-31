@@ -276,6 +276,8 @@ def _plan(db: Session, admin: Admin) -> list[_Group]:
     taking_part = {t.id for t in _finale_teams(db)}
     plan = []
     for group in ranked.groups:
+        if _section_of_key(group.key) not in rules.FINALE_ANNOUNCED_SECTIONS:
+            continue  # winners are announced for the categories and the schools only
         teams = [t for t in group.teams if t.team.id in taking_part]
         g = _Group(group.key, group.label, teams=len(teams), not_ranked=sum(1 for t in teams if not t.complete))
         by_hand = [t for t in teams if t.award is not None and not t.award.declared_by.startswith(FINALE_MARK)]

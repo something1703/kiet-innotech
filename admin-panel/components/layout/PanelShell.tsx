@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Award, CalendarClock, ClipboardCheck, GraduationCap, Inbox, KeyRound, LayoutDashboard, LogOut, Medal, Menu, QrCode, Scale, ShieldCheck, Ticket, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
+import { Activity, Award, CalendarClock, ClipboardCheck, GraduationCap, Inbox, KeyRound, LayoutDashboard, LogOut, Medal, MessageSquareHeart, Menu, QrCode, Scale, ShieldCheck, Ticket, Trophy, UserCheck, Users, X, type LucideIcon } from "lucide-react";
 import { clubDepartment } from "@/lib/content";
 import type { AdminUser } from "@/lib/admin-types";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -27,6 +27,7 @@ const nav: { title: string; items: NavItem[] }[] = [
       { href: "/", label: "Overview", Icon: LayoutDashboard, roles: ORGANISERS },
       { href: "/submissions", label: "Submissions", Icon: Inbox, roles: ORGANISERS },
       { href: "/activity", label: "Activity", Icon: Activity, roles: ["super_admin"] },
+      { href: "/feedback", label: "Feedback", Icon: MessageSquareHeart, roles: ["super_admin"] },
     ],
   },
   {

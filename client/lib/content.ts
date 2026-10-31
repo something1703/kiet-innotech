@@ -51,11 +51,15 @@ export const registrationDisplay = {
 /** One sentence for everywhere visitors read the closing date: everyone but the KIET departments has longer. */
 export const extendedNote = "Students of other colleges and schools can register until 21 October 2026.";
 
+/** The portal closes after the event: certificates can be downloaded until then. */
+export const portalClosesLabel = "Tuesday, 3 November 2026";
+
 export const liveUpdates = [
-  "Registrations are open until 15 October 2026",
-  "Students of other colleges and schools can register until 21 October 2026",
-  "No registration fee for any participant",
-  "Grand Finale on 30 October 2026 at KIET",
+  "Thank you for making InnoTech'26 a grand success!",
+  "Grand Finale results are out: congratulations to every winner",
+  `Download your certificates: the portal is open until ${portalClosesLabel}`,
+  "Share your feedback in the letter on this page",
+  "See you at InnoTech'27!",
 ];
 
 export const stats = [

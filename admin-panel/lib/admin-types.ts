@@ -1186,3 +1186,22 @@ export type OctonormImportRow = {
 };
 
 export type OctonormImport = { rows: OctonormImportRow[]; notInSheet: OctonormCandidate[] };
+
+/** Feedback from the thank-you letter on the home page (super admins). */
+export type FeedbackItem = {
+  id: string;
+  createdAt: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: "student" | "judge" | "faculty" | "parent" | "guest" | "other";
+  institution: string;
+  teamCode: string;
+  teamName: string;
+  /** Sent from a signed-in student account: the details come from it. */
+  signedIn: boolean;
+  rating: number;
+  liked: string;
+  improve: string;
+};
+export type FeedbackList = { items: FeedbackItem[]; average: number | null; ratings: Record<string, number> };

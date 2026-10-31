@@ -2179,3 +2179,44 @@ class OctonormImportOut(BaseModel):
     rows: list[OctonormImportRowOut]
     # Grand Finale teams the sheet does not name (with their octonorm now).
     not_in_sheet: list[OctonormCandidateOut]
+
+
+# ---------- Feedback (the thank-you letter on the home page) ----------
+
+FeedbackRole = Literal["student", "judge", "faculty", "parent", "guest", "other"]
+
+
+class FeedbackInput(Input):
+    # Taken from the account when a student is signed in; asked otherwise.
+    name: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=320)
+    phone: str = Field(default="", max_length=20)
+    role: FeedbackRole = "guest"
+    institution: str = Field(default="", max_length=200)
+    rating: int = Field(ge=1, le=5)
+    liked: str = Field(default="", max_length=2000)
+    improve: str = Field(default="", max_length=2000)
+
+
+class FeedbackOut(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    name: str
+    email: str
+    phone: str
+    role: str
+    institution: str
+    team_code: str
+    team_name: str = ""
+    # Whether a signed-in student account sent it (its details then come from the account).
+    signed_in: bool
+    rating: int
+    liked: str
+    improve: str
+
+
+class FeedbackListOut(BaseModel):
+    items: list[FeedbackOut]
+    average: float | None
+    # How many gave each rating, 1 to 5.
+    ratings: dict[int, int]
